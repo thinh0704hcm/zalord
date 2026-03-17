@@ -1,6 +1,5 @@
 # giano
-
-
+A simple messaging app demonstrating a software product's lifecycle.
 
 ## Getting started
 
