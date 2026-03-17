@@ -4,7 +4,7 @@ stages:
   - deploy
 
 variables:
-  POSTGRES_DB: zalord_test
+  POSTGRES_DB: giano_test
   POSTGRES_USER: test
   POSTGRES_PASSWORD: test
   POSTGRES_HOST_AUTH_METHOD: trust
@@ -17,37 +17,37 @@ backend:test:
     - postgres:16-alpine
     - redis:7-alpine
   variables:
-    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/zalord_test
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/giano_test
     SPRING_DATASOURCE_USERNAME: test
     SPRING_DATASOURCE_PASSWORD: test
     SPRING_DATA_REDIS_HOST: redis
   script:
-    - cd zalord-backend
+    - cd backend
     - ./mvnw test
   artifacts:
     when: always
     reports:
-      junit: zalord-backend/target/surefire-reports/TEST-*.xml
+      junit: backend/target/surefire-reports/TEST-*.xml
     paths:
-      - zalord-backend/target/site/jacoco/
+      - backend/target/site/jacoco/
     expire_in: 1 week
   cache:
     key: backend-$CI_COMMIT_REF_SLUG
     paths:
-      - zalord-backend/.m2/repository/
+      - backend/.m2/repository/
 
 # ── Frontend build ───────────────────────────────────────────
 frontend:build:
   stage: test
   image: node:20-alpine
   script:
-    - cd zalord-frontend
+    - cd frontend
     - npm ci
     - npm run build
   cache:
     key: frontend-$CI_COMMIT_REF_SLUG
     paths:
-      - zalord-frontend/node_modules/
+      - frontend/node_modules/
 
 # ── Docker image build ───────────────────────────────────────
 docker:build:
@@ -61,7 +61,7 @@ docker:build:
     IMAGE: $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build -t $IMAGE ./zalord-backend
+    - docker build -t $IMAGE ./backend
     - docker push $IMAGE
     - docker tag $IMAGE $CI_REGISTRY_IMAGE/backend:latest
     - docker push $CI_REGISTRY_IMAGE/backend:latest
@@ -85,6 +85,6 @@ deploy:production:
     - ssh deploy@$SSH_HOST "
         docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY &&
         docker pull $CI_REGISTRY_IMAGE/backend:latest &&
-        cd /opt/zalord &&
+        cd /opt/giano &&
         docker compose -f docker-compose.prod.yml up -d --no-deps app
       "

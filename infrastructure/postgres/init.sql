@@ -1,0 +1,1 @@
+GRANT pg_monitor TO giano_user;

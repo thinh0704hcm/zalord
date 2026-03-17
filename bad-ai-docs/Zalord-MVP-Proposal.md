@@ -1,4 +1,4 @@
-# Zalord — MVP Stage 1 Proposal
+# giano — MVP Stage 1 Proposal
 ## Real-Time Messaging Platform (School Project — Trio Team)
 
 > A modular monolith real-time chat application built with Spring Boot, WebSocket, Redis, and PostgreSQL.
@@ -9,7 +9,7 @@
 
 ## Project Overview
 
-**Zalord MVP** is a real-time chat platform where users can:
+**giano MVP** is a real-time chat platform where users can:
 - Register and log in securely (JWT-based auth)
 - Create or join chat rooms
 - Send and receive messages in real-time (WebSocket)
@@ -583,8 +583,8 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: zalord
-      POSTGRES_USER: zalord_user
+      POSTGRES_DB: giano
+      POSTGRES_USER: giano_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -603,9 +603,9 @@ services:
     image: edoburu/pgbouncer:1.21
     environment:
       DB_HOST: postgres
-      DB_USER: zalord_user
+      DB_USER: giano_user
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: zalord
+      DB_NAME: giano
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 25
@@ -617,8 +617,8 @@ services:
   app:
     build: .
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:6432/zalord
-      SPRING_DATASOURCE_USERNAME: zalord_user
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:6432/giano
+      SPRING_DATASOURCE_USERNAME: giano_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
@@ -657,7 +657,7 @@ volumes:
 
 **Frontend Folder Structure:**
 ```
-zalord-frontend/
+frontend/
 ├── src/
 │   ├── components/
 │   │   ├── Auth/
@@ -914,7 +914,7 @@ zalord-frontend/
 ```bash
 # Clone repo
 git clone <repo-url>
-cd zalord
+cd giano
 
 # Start backend infrastructure
 docker-compose up -d
@@ -923,17 +923,17 @@ docker-compose up -d
 sleep 30
 
 # Build and run backend
-cd zalord-backend
+cd backend
 ./mvnw spring-boot:run
 
 # In another terminal, start frontend
-cd zalord-frontend
+cd frontend
 npm install
 npm run dev
 # Open http://localhost:5173 in browser
 
 # Run tests
-cd zalord-backend
+cd backend
 ./mvnw test
 
 # View logs

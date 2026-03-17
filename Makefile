@@ -1,4 +1,4 @@
-.PHONY: dev dev-down dev-logs test build
+.PHONY: dev dev-down dev-logs dev-reset test test-coverage backend frontend install prod-up prod-down prod-logs
 
 # ── Local dev ─────────────────────────────────────────────────────────────────
 dev:
@@ -15,21 +15,21 @@ dev-reset:
 	docker compose up -d
 
 # ── Backend ───────────────────────────────────────────────────────────────────
+backend:
+	@cd backend && export $(shell grep -v '^#' .env | xargs) && ./mvnw spring-boot:run
+
 test:
-	cd zalord-backend && ./mvnw test
+	@cd backend && export $(shell grep -v '^#' .env | xargs) && ./mvnw test
 
 test-coverage:
-	cd zalord-backend && ./mvnw test jacoco:report
-
-backend:
-	cd zalord-backend && ./mvnw spring-boot:run
+	@cd backend && export $(shell grep -v '^#' .env | xargs) && ./mvnw test jacoco:report
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 frontend:
-	cd zalord-frontend && npm run dev
+	cd frontend && npm run dev
 
 install:
-	cd zalord-frontend && npm ci
+	cd frontend && npm ci
 
 # ── Prod ──────────────────────────────────────────────────────────────────────
 prod-up:
