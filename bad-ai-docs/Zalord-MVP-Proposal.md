@@ -1,568 +1,225 @@
-# giano — MVP Stage 1 Proposal
-## Real-Time Messaging Platform (School Project — Trio Team)
+# giano — Architecture Comparison Study
+## Modular Monolith vs. Microservices (School Project — Trio Team)
 
-> A modular monolith real-time chat application built with Spring Boot, WebSocket, Redis, and PostgreSQL.
-> This proposal outlines a simplified, production-ready foundation for a team of three developers over 8–12 weeks.
-> Focus: Core messaging logic, clean module boundaries, deliverable & testable.
-> **Primary goal: establish a credible comparison baseline before microservices extraction.**
-
----
-
-## Project Overview
-
-**giano MVP** is a real-time chat platform where users can:
-- Register and log in securely (JWT-based auth)
-- Create or join chat rooms
-- Send and receive messages in real-time (WebSocket)
-- Reconnect and recover missed messages (sequence_id + DB catch-up)
-- See who's online and typing (presence + activity indicators)
-
-**Technology Stack:**
-- Backend: Spring Boot 3.x + Spring Modulith (modular monolith)
-- Real-time: WebSocket (STOMP), Redis Pub/Sub
-- Database: PostgreSQL 16 + PgBouncer (transaction pooling — already configured)
-- Frontend: Vite + React 18 + TypeScript + Tailwind CSS
-- Infrastructure: Docker Compose (local dev + production)
-- CI/CD: GitLab CI (test → build → deploy — already configured)
-- Testing: JUnit 5, Testcontainers, Postman collection
-
-**Team Structure (Trio):**
-| Role | Responsibilities |
-|------|------------------|
-| **Backend (WebSocket & Messaging)** | WS server, Redis Pub/Sub routing, message persistence, sequence tracking |
-| **Auth & User Module** | JWT auth, user profiles, session management |
-| **DevOps & Frontend** | Docker Compose, GitLab CI, Vite frontend scaffold, integration testing, documentation |
-
-**Scope Boundary:**
-- ✅ Single-instance monolith (no multi-instance fleet scaling)
-- ✅ PostgreSQL with PgBouncer in transaction pooling mode (already configured)
-- ✅ WebSocket messaging flow (no external message brokers)
-- ✅ Catch-up via DB query on reconnect
-- ✅ Manual testing + JUnit + Testcontainers
-- ❌ No email flows (verification and password reset are stubs only)
-- ❌ No social login
-- ❌ No multi-region, distributed consensus, or advanced chaos testing
-- ❌ No paid features, analytics dashboards, or mobile apps
-
-**Success Criteria:**
-- 10 concurrent users chatting in one or multiple rooms with zero message loss
-- JWT auth + login/signup fully functional
-- Reconnect + catch-up working (users can refresh browser and see history)
-- Full Docker Compose environment reproducible on any laptop
-- Postman + JUnit tests covering happy path + key error cases
-- Working Vite frontend with integrated WS client
-- GitLab CI pipeline green on `main`
+> A real-time chat application built twice — first as a modular monolith, then extracted into
+> microservices — to produce a quantitative, reproducible comparison across four dimensions:
+> developer complexity, operational complexity, performance, and resilience.
+> Team of 3 · 12 weeks · AI-assisted development.
 
 ---
 
-## Architecture Rule — Module Boundaries
+## Purpose & Research Questions
 
-**This is the most important constraint in the entire project.**
+This project exists to answer four concrete questions with measured evidence, not opinion:
 
-All cross-module communication must go through Spring application events — never direct `@Autowired` service injection across module boundaries. This maps the monolith's inter-module calls directly to the async messages (Kafka/RabbitMQ) that will carry the same payloads in the microservices version. The extraction then becomes a transport change, not a logic rewrite.
+| # | Question | Measured By |
+|---|----------|-------------|
+| Q1 | How much more complex is the microservices codebase to build and understand? | LOC, coupling metrics, build time, `ApplicationModuleTest` violations |
+| Q2 | How much harder is the microservices system to operate? | Docker Compose service count, deployment steps, config surface area, time-to-first-healthy |
+| Q3 | Does the architecture change observable performance at this scale? | p50/p95/p99 latency, throughput (msg/s), WS connection time under load |
+| Q4 | How do the two architectures fail differently? | Behaviour when one service/module is killed; message loss, error rates, recovery time |
 
-```java
-// ❌ WRONG — direct cross-module injection, kills the baseline value
-@Service
-class MessagingService {
-    @Autowired
-    private UserService userService; // cross-module!
-}
+Both implementations run the same functional application on the same infrastructure so that only the architecture changes between measurements. The frontend is shared and switches between backends via a single environment variable.
 
-// ✅ CORRECT — event-driven, maps to Kafka topic in microservices version
-@Service
-class MessagingService {
-    @Autowired
-    private ApplicationEventPublisher events;
+---
 
-    public void sendMessage(...) {
-        events.publishEvent(new MessageSentEvent(roomId, userId, text));
+## Scope
+
+### What is built
+- A real-time group chat application (auth, rooms, messaging, presence)
+- Stage 1: modular monolith with Spring Modulith
+- Stage 2: four independent microservices extracted from Stage 1
+- Instrumentation layer (Micrometer + Prometheus + Grafana) present in both stages
+- k6 load test suite run identically against both stages
+- Final comparison report with raw data, charts, and analysis
+
+### What is explicitly not built
+- Email flows (verification, password reset) — auto-verified stub only
+- Social login
+- Message edit / delete / pagination
+- File sharing, @mentions, read receipts
+- Mobile app
+- Multi-region or Kubernetes deployment
+
+### Frontend scope
+The frontend is functional but minimal. It exists to drive realistic WebSocket load and to demo the comparison scenarios — not to be a polished product. Tailwind + React, no design system, no animations.
+
+---
+
+## Architecture Overview
+
+### Stage 1 — Modular Monolith
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  giano (Spring Boot)                 │
+│                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
+│  │   auth   │  │   room   │  │     messaging     │  │
+│  └────┬─────┘  └────┬─────┘  └────────┬──────────┘  │
+│       │             │                 │              │
+│       └─────────────┴────── events ───┘              │
+│                                       │              │
+│                              ┌────────┴──────────┐   │
+│                              │     presence      │   │
+│                              └───────────────────┘   │
+└─────────────────────────────────────────────────────┘
+         │                          │
+    PostgreSQL                    Redis
+   (single DB)               (Pub/Sub + presence)
+```
+
+All inter-module communication uses `ApplicationEventPublisher` / `@ApplicationModuleListener`. No direct `@Autowired` cross-module service injection. This is enforced by `ApplicationModuleTest` in CI from Week 1.
+
+### Stage 2 — Microservices
+
+```
+                        ┌───────────────┐
+   Browser / k6  ──────▶│  Nginx Gateway│
+                        └───────┬───────┘
+                                │
+          ┌─────────────────────┼──────────────────────┐
+          │                     │                      │
+   ┌──────▼──────┐    ┌─────────▼───────┐    ┌────────▼──────┐
+   │ auth-service│    │  room-service   │    │  msg-service  │
+   │  :8081      │    │     :8082       │    │    :8083      │
+   └──────┬──────┘    └─────────┬───────┘    └────────┬──────┘
+          │                     │                     │
+     auth_db               room_db                msg_db
+    (Postgres)             (Postgres)            (Postgres)
+                                                      │
+                                          ┌───────────▼───────────┐
+                                          │   presence-service    │
+                                          │        :8084          │
+                                          └───────────┬───────────┘
+                                                      │
+                                   ┌──────────────────┴──────────┐
+                                   │         RabbitMQ            │
+                                   │  (replaces Redis Pub/Sub    │
+                                   │   for inter-service events) │
+                                   └─────────────────────────────┘
+                                                      │
+                                                    Redis
+                                               (presence only)
+```
+
+The monolith's `ApplicationEventPublisher` events map directly to RabbitMQ exchanges in Stage 2. The event payloads are identical — only the transport changes.
+
+### Module → Service Mapping
+
+| Module (Stage 1) | Service (Stage 2) | Own DB | Listens to (RabbitMQ) | Publishes to (RabbitMQ) |
+|-----------------|-------------------|--------|----------------------|------------------------|
+| `auth` | `auth-service` | `auth_db` | — | `user.registered` |
+| `room` | `room-service` | `room_db` | `user.registered` | `room.joined`, `room.left` |
+| `messaging` | `msg-service` | `msg_db` | `room.joined`, `room.left` | `message.sent` |
+| `presence` | `presence-service` | — (Redis only) | `message.sent`, `room.joined`, `room.left` | — |
+
+---
+
+## Instrumentation Design
+
+> Instrumentation is not an afterthought — it is built into the monolith in Week 5 and mirrored exactly in the microservices in Week 10. Without identical instrumentation in both stages, the comparison produces no usable data.
+
+### Metrics collected (Micrometer → Prometheus → Grafana)
+
+**Performance:**
+```
+giano_message_e2e_latency_ms        # Time from WS send to all subscribers received
+giano_ws_connect_duration_ms        # WS handshake + STOMP CONNECT time
+giano_http_request_duration_ms      # Per-endpoint latency histogram (p50/p95/p99)
+giano_messages_per_second           # Throughput counter per room
+```
+
+**Operational:**
+```
+giano_db_query_duration_ms          # Per-query timing
+giano_event_publish_duration_ms     # Time to publish inter-module/service event
+giano_event_consume_lag_ms          # Stage 2 only: RabbitMQ consumer lag
+```
+
+**Resilience:**
+```
+giano_circuit_open_total            # Stage 2 only: circuit breaker open events
+giano_message_loss_total            # Messages published but never confirmed received
+giano_reconnect_duration_ms         # Client reconnect time after disconnect
+giano_service_recovery_ms           # Stage 2 only: time from service restart to healthy
+```
+
+### Prometheus scrape config (both stages)
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'giano'
+    static_configs:
+      - targets:
+          # Stage 1: single app
+          - 'app:8080'
+          # Stage 2: replace with individual services
+          # - 'auth-service:8081'
+          # - 'room-service:8082'
+          # - 'msg-service:8083'
+          # - 'presence-service:8084'
+    metrics_path: '/actuator/prometheus'
+```
+
+### k6 Load Test Scenarios (identical on both stages)
+
+Three scenarios run in sequence. Results are saved as JSON and committed to the repo.
+
+**Scenario A — Baseline (10 concurrent users, 5 min):**
+```javascript
+// k6/scenarios/baseline.js
+export const options = {
+  scenarios: {
+    chat_load: {
+      executor: 'constant-vus',
+      vus: 10,
+      duration: '5m',
     }
-}
-
-@ApplicationModuleListener
-class PresenceEventHandler {
-    void on(MessageSentEvent event) { ... }
-}
+  },
+  thresholds: {
+    'giano_message_e2e_latency_ms{quantile:"0.95"}': ['value<200'],
+    'http_req_failed': ['rate<0.01'],
+  }
+};
 ```
 
-Add an `ApplicationModuleTest` in Phase 1 that runs `ApplicationModules.of(GianoApplication.class).verify()`. This test will **fail CI** if any cross-module dependency violations are introduced, protecting the baseline automatically.
+**Scenario B — Ramp (1 → 50 users over 10 min):**
+```javascript
+export const options = {
+  stages: [
+    { duration: '2m', target: 10 },
+    { duration: '4m', target: 30 },
+    { duration: '2m', target: 50 },
+    { duration: '2m', target: 0 },
+  ]
+};
+```
 
-**Module event map:**
-
-| Module | Owns | Publishes | Listens To |
-|--------|------|-----------|------------|
-| `auth` | JWT issuance, refresh tokens, bcrypt | `UserRegisteredEvent` | — |
-| `user` | User profiles, email verification stub | `UserUpdatedEvent` | `UserRegisteredEvent` |
-| `room` | Room CRUD, membership | `UserJoinedRoomEvent`, `UserLeftRoomEvent` | `UserRegisteredEvent` |
-| `messaging` | Message persistence, sequence_id, WS routing | `MessageSentEvent` | `UserJoinedRoomEvent`, `UserLeftRoomEvent` |
-| `presence` | Online state in Redis, typing indicators | — | `MessageSentEvent`, `UserJoinedRoomEvent`, `UserLeftRoomEvent` |
+**Scenario C — Resilience (kill one service/module mid-run):**
+```bash
+# Stage 1: kill messaging module handler via feature flag
+# Stage 2: docker compose stop msg-service
+# Record: message loss count, error rate spike, recovery time
+```
 
 ---
 
-## Core Features
-
-### 1. Authentication & User Management
-
-**Goal:**
-Enable users to register, log in securely, and maintain authenticated sessions for the entire chat experience.
-
-> **Scope note:** Email verification and password reset are **stubs only** in this version. Email verification auto-confirms on signup (dev mode flag). Password reset returns HTTP 200 with no actual email sent. Social login is deferred entirely.
-
-**User Stories:**
-- As a new user, I want to sign up with email and password so I can create an account and start chatting.
-- As a returning user, I want to log in with my credentials to access my chats.
-- As a logged-in user, I want to see and update my profile (name, avatar, status).
-- As a user, I want to be automatically logged out after my session expires or when I log out manually.
-
-**Flow/UX:**
-
-**Sign Up Flow:**
-```
-User opens app
-  → "Sign Up" button
-  → Enter email, password, display name
-  → Validation: email format, password strength, name not empty
-  → Backend creates user record (hashed password with bcrypt)
-  → email_verified = true immediately (dev stub — no email sent)
-  → User redirected to login
-  → User logs in with email + password
-  → Backend generates JWT (exp: 15 min), refresh token (exp: 7 days)
-  → Client stores both in localStorage
-  → User redirected to room list / main chat page
-```
-
-**Login Flow:**
-```
-User enters email + password
-  → Backend validates credentials
-  → If valid: issue JWT + refresh token, return to client
-  → Client stores tokens and redirects to dashboard
-  → On every API/WS request, include JWT in Authorization header
-  → If JWT expired but refresh token valid, silently refresh (no UX interruption)
-  → If both expired: redirect to login page
-```
-
-**Profile Update:**
-```
-User opens profile page
-  → Display current name, avatar, status (online/away/offline)
-  → User edits fields (name, status, avatar upload)
-  → Client sends PATCH /api/users/{id} with new data + JWT
-  → Backend validates and updates DB
-  → Return updated user object to client
-  → UI updates immediately (optimistic update or refresh from response)
-```
-
-**Logout:**
-```
-User clicks "Logout"
-  → Client clears localStorage (JWT + refresh token)
-  → POST /api/auth/logout to backend (invalidate refresh token in DB)
-  → Redirect to login page
-  → WS connection closes on token validation failure
-```
-
-**Permission & Security:**
-- All passwords stored with bcrypt (minimum 12 rounds), salted.
-- JWT signed with HS256 (secret stored in environment variable, never in code).
-- Refresh tokens stored in DB with user_id foreign key; invalidated on logout.
-- All API endpoints require valid JWT except `/auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/reset-password`.
-- WebSocket connection upgrade validated with JWT (sent as query param or header).
-
-**Must-have:**
-- Email/password registration with validation (email format, password: min 8 chars, at least 1 upper, 1 digit, 1 special).
-- Secure login endpoint with JWT generation (access token: 15 min, refresh token: 7 days).
-- Password hashing with bcrypt (min 12 rounds).
-- Email verification stub: `email_verified = true` on signup, no email sent.
-- Session/token management (refresh endpoint to issue new JWT without re-login).
-- Basic profile management: display name, avatar (URL or simple emoji).
-- Logout endpoint that invalidates refresh token.
-- JWT validation middleware on all protected endpoints.
-- WebSocket upgrade requires valid JWT.
-
-**Should-have:**
-- Account deactivation option (soft delete; can reactivate by logging in again).
-- Session timeout notification (warn user 1 min before session expires).
-- User presence status (online/away/offline) synced across rooms.
-
-**Good-to-have:**
-- Login attempt rate limiting (max 5 failed attempts per IP per 15 min, then cooldown).
-- Password strength indicator on signup form.
-- Remember-me checkbox (longer-lived refresh token for trusted devices).
-
-**Deferred (out of scope):**
-- ~~Email verification link~~ — stubbed; auto-verified on signup
-- ~~Password reset via email~~ — stub endpoint, HTTP 200, no email
-- ~~Social login (Google OAuth)~~ — deferred
-- ~~CAPTCHA on sign-up~~ — deferred
-
-**Edge Cases:**
-- Duplicate Email: Show "Email already registered" and suggest login.
-- Expired Refresh Token: Redirect to login page.
-- Logout from All Devices: Invalidate all refresh tokens for that user at once.
-- Session During Disconnect: WS reconnects automatically, uses refresh token if access token expired.
-
----
-
-### 2. Chat Rooms & Room Management
-
-**Goal:**
-Enable users to create or discover chat rooms, join rooms, and see room metadata.
-
-**User Stories:**
-- As a user, I want to see a list of available rooms so I can join conversations I'm interested in.
-- As a user, I want to create a new room with a name and description.
-- As a user, I want to join a room by browsing the list or via invite link.
-- As a room admin, I want to see members and remove disruptive users.
-- As a user, I want to leave a room whenever I choose.
-
-**Flow/UX:**
-
-**Room Discovery & Join:**
-```
-User lands on dashboard
-  → Show "My Rooms" sidebar (list of joined rooms)
-  → Show "Browse Rooms" section with all public rooms
-  → For each room: name, description, member count, last message preview
-  → User clicks "Join" → backend adds user to room_members table
-  → Room appears in sidebar; user can now send messages
-```
-
-**Create Room:**
-```
-User clicks "Create Room" button
-  → Modal: enter room name (required), description (optional)
-  → Backend validates: name not empty, name < 100 chars
-  → Backend creates room record, adds creator as admin member
-  → Return room ID + name to client
-  → Open newly created room in chat view
-```
-
-**Leave Room:**
-```
-User clicks "Leave" on room in sidebar
-  → Confirmation dialog
-  → POST /api/rooms/{roomId}/leave
-  → Backend removes user from room_members
-  → Room disappears from sidebar
-```
-
-**Permission & Security:**
-- All rooms are public; anyone can join without approval.
-- Room admin (creator): can remove members and delete room.
-- Regular members: can send messages and see room history.
-- All endpoints require JWT; room access validated (user must be a member or room is public).
-
-**Must-have:**
-- Create room with name and optional description.
-- List all public rooms (sorted by last activity).
-- Join public room (add user to room_members, idempotent).
-- Leave room (remove user from room_members).
-- View list of rooms user is a member of (in sidebar).
-- View members in a room (list of user names/avatars with online status).
-
-**Should-have:**
-- Room admin can remove members.
-- Room admin can change room name or description.
-- Room admin can delete room (soft delete; preserve message history).
-- Search/filter rooms by name.
-- Invite link to room (shareable URL that auto-joins).
-
-**Good-to-have:**
-- Room avatar/icon.
-- Room archival.
-
-**Edge Cases:**
-- Non-existent Room: Show "Room not found" error.
-- Member Removed Mid-Chat: WS connection closes; user sees "You have been removed" message.
-- Room Permissions Race: Backend validates membership on message receipt; rejects if user was removed.
-
----
-
-### 3. Real-Time Messaging (WebSocket)
-
-**Goal:**
-Enable users to send and receive messages instantly via WebSocket, with delivery to all room members.
-
-**User Stories:**
-- As a user, I want to type a message and send it; it should appear instantly for me and all others in the room.
-- As a user, I want to see when other users are typing.
-- As a user, I want to see messages in chronological order with sender name, timestamp, and content.
-- As a user joining a room, I want to see recent message history (last 50 messages).
-- As a user, if my internet drops, I want my connection to automatically reconnect and catch up on missed messages.
-
-**Flow/UX:**
-
-**Sending a Message:**
-```
-User types in message input field
-  → User clicks Send or presses Enter
-  → Client sends message via WS: { text, roomId, sequence_id, timestamp }
-  → Backend receives message, validates:
-     - User is member of roomId
-     - Message text not empty and ≤ 5000 chars
-     - Timestamp within 1 min of server time
-  → Backend stores message: INSERT INTO messages (room_id, user_id, text, sequence_id, created_at)
-  → Backend publishes to Redis Pub/Sub: "room:{roomId}"
-  → All WS clients subscribed to that channel receive message in real-time
-  → Client appends message to chat view with sender name, timestamp, avatar
-```
-
-**Message History (Catch-Up):**
-```
-User joins room or reconnects
-  → Client requests: GET /api/rooms/{roomId}/messages?after_sequence_id=X&limit=50
-  → Backend queries: SELECT * FROM messages WHERE room_id=roomId AND sequence_id > X
-                     ORDER BY sequence_id DESC LIMIT 50
-  → Return list of messages
-  → Client sorts by sequence_id before rendering
-  → Client updates lastSeqId = max(sequence_id) from response
-```
-
-**Real-Time Delivery (Single Server):**
-```
-User A → WS Server → @MessageMapping("/room/{roomId}/send")
-  → Validate + persist to DB
-  → Publish to Redis Pub/Sub "room:{roomId}"
-  → Redis listener delivers to all connected WS clients in that room
-```
-
-**Typing Indicator:**
-```
-User starts typing (keydown, debounced 300ms)
-  → Client sends WS message: { type: "typing", roomId }
-  → Backend publishes to Redis: "room:{roomId}:typing"
-  → All clients show "User X is typing..."
-  → After 2 seconds of inactivity, client sends "stop typing"
-  → Clients clear the indicator for that user
-```
-
-**Redis Pub/Sub Channels:**
-| Channel | Carries |
-|---------|---------|
-| `room:{roomId}` | Live message payloads |
-| `room:{roomId}:typing` | Typing start/stop events |
-| `room:{roomId}:events` | User joined/left system events |
-
-**Permissions & Security:**
-- Only room members can send/receive messages.
-- WS connection validated with JWT; invalid/expired tokens rejected.
-- Message validation: non-empty, ≤ 5000 chars, parameterized queries only.
-- All messages stored in DB; immutable after creation.
-
-**Must-have:**
-- WebSocket server (Spring Boot + STOMP).
-- Send message to room (broadcast to all members).
-- Store messages in DB (`messages` table: room_id, user_id, text, sequence_id, created_at).
-- `sequence_id` tracking (per room; `UNIQUE(room_id, sequence_id)` constraint for deduplication).
-- Catch-up on reconnect (fetch messages after last known sequence_id).
-- Message validation (non-empty, ≤ 5000 chars, membership check).
-- Display sender name, avatar, and timestamp.
-- Typing indicators.
-
-**Should-have:**
-- Last-read message tracking.
-- Message pagination (load older messages on scroll-up).
-- Emoji support.
-
-**Good-to-have:**
-- Message editing (shows "edited" indicator).
-- Message deletion (shows "[deleted]").
-- Image/file sharing.
-- Search messages.
-
-**Edge Cases:**
-- Message Sent While Offline: Client queues message; sends on reconnect.
-- Duplicate Message: `UNIQUE(room_id, sequence_id)` constraint rejects re-inserts.
-- Message Order Collision: Client sorts by sequence_id before rendering.
-- User Removed Mid-Message: Backend validates membership on receipt; rejects with "not a member".
-- Redis Pub/Sub Loss: At-most-once delivery accepted for live path; catch-up API covers gaps on reconnect.
-- Very Long Message: Backend rejects with 400 "Message too long (max 5000 chars)".
-
----
-
-### 4. Online Presence & Activity
-
-**Goal:**
-Show users who is currently online in a room and update presence in real-time.
-
-**User Stories:**
-- As a user, I want to see who is currently online in a room.
-- As a user, I want my status to automatically update to "online" when I connect and "offline" when I disconnect.
-- As a user, I want to see when someone joins or leaves a room.
-
-**Flow/UX:**
-
-**Presence On Join:**
-```
-User connects WS to a room
-  → Backend: HSET room:{roomId}:members {userId: timestamp}
-  → Backend publishes "user_joined" event to "room:{roomId}:events"
-  → All clients update member list (add user, mark online)
-  → System message in chat: "User X joined"
-```
-
-**Presence On Disconnect:**
-```
-User closes browser
-  → Server-side onDisconnect hook fires
-  → Backend: HDEL room:{roomId}:members {userId}
-  → Backend publishes "user_left" event
-  → Clients update member list (remove user, mark offline)
-  → System message in chat: "User X left"
-```
-
-**Heartbeat:**
-```
-Server PINGs all WS clients every 30s
-  → Client responds with PONG (framework handles automatically)
-  → No PONG after 2 missed cycles (~60s): mark client disconnected
-```
-
-**Permissions & Security:**
-- Presence data is public within a room (all members can see who is online).
-- Presence data is ephemeral (stored in Redis; loss on restart is acceptable).
-- Each user's presence is scoped to rooms they're a member of.
-- Deduplication: same user connecting from two tabs is recorded once.
-
-**Must-have:**
-- Track online users per room (Redis Hash).
-- Show online user list with avatars and status indicator.
-- Add user to presence on WS connect; remove on WS disconnect.
-- Broadcast presence changes to room subscribers.
-- System messages for join/leave (gray, smaller text).
-
-**Should-have:**
-- Typing indicators (who is typing; clear after 2s inactivity).
-- User status: online, idle (away for >5 min), offline.
-- Last activity timestamp.
-
-**Good-to-have:**
-- Custom status message ("In a meeting", etc.).
-
-**Edge Cases:**
-- Ghost User: Tab closed without clean disconnect; shows online for ~60s until heartbeat timeout.
-- Duplicate Online Entries: Deduplicate by checking if userId already in hash before adding.
-- Stale Presence After Crash: Resolved by heartbeat timeout or client re-announce on reconnect.
-
----
-
-### 5. Error Handling & Reconnection
-
-**Goal:**
-Handle network failures gracefully, auto-reconnect on disconnect, and show meaningful error messages.
-
-**User Stories:**
-- As a user, if my internet drops, I want the app to reconnect automatically without a page reload.
-- As a user, if a message fails to send, I want to see an error and be able to retry.
-- As a user, I want helpful error messages when something goes wrong.
-
-**Flow/UX:**
-
-**Auto-Reconnect:**
-```
-WS connection drops
-  → Client detects disconnect (WS onclose event)
-  → Show banner: "Reconnecting..."
-  → Attempt reconnect with exponential backoff + ±20% jitter:
-    1s → 2s → 4s → 8s → 16s → 30s (cap)
-  → On success:
-    - Re-subscribe to room channels
-    - Fetch catch-up messages (after lastSeqId)
-    - Update presence (user back online)
-    - Hide reconnection banner
-  → After 10 failed attempts:
-    - Show: "Connection lost. Please refresh the page or check your connection."
-    - Show manual refresh button
-```
-
-**Send Failure & Retry:**
-```
-User sends message but WS not connected
-  → Message added to local queue; shown as "Pending..." in gray
-  → On reconnect: flush queue in order
-  → On success: message confirmed
-  → On failure after flush: show "Failed to send. Retry?" with retry button
-```
-
-**Error Messages:**
-
-| Situation | Message shown |
-|-----------|---------------|
-| Network error | "Network error: check your connection" |
-| WS disconnect | "Connection lost. Reconnecting..." |
-| 5xx response | "Server error: please try again" |
-| Message too long | "Message too long (max 5000 chars)" |
-| Not a room member | "You are not a member of this room" |
-| Room not found | "Room not found" |
-| 429 rate limit | "Server busy. Please try again in a moment." |
-| 401 auth error | Redirect to login |
-
-**Permissions & Security:**
-- Auth errors (401): redirect to login.
-- All errors logged server-side for debugging.
-
-**Must-have:**
-- Detect WS disconnection (client-side `onclose`).
-- Auto-reconnect with exponential backoff + jitter (max 30s delay).
-- Show reconnection status to user (banner).
-- Fetch missed messages after reconnect.
-- Queue messages during disconnect; send when reconnected.
-- User-friendly error messages (toast, banner, or inline).
-- Handle 401 by redirecting to login.
-
-**Should-have:**
-- Retry button on failed messages.
-- Max retry limit with persistent error banner after N attempts.
-- Distinguish network errors from app errors.
-
-**Good-to-have:**
-- Fallback UI mode (message history available, no real-time).
-- Diagnostic indicator (connection status, last error, retry count).
-
-**Edge Cases:**
-- Continuous Network Failures: Retry indefinitely up to max; user can manually reload.
-- Stale Message Cache: Catch-up API covers gaps; older messages load on page refresh.
-- User Removed During Reconnect: Membership check fails on reconnect; redirect to room list.
-
----
-
-## Technical Architecture
-
-### Backend Stack
-
-**Framework & Language:**
-- Spring Boot 3.x (latest LTS)
-- Spring Modulith (modular monolith — module boundary enforcement)
-- Java 21 (LTS)
-
-**Core Libraries:**
-- Spring WebSocket + STOMP
-- Spring Data JPA + Hibernate
-- Spring Security + JWT (`jjwt` library)
-- Redis (`spring-data-redis`) for Pub/Sub and presence
-- PostgreSQL JDBC driver
-- Lombok
-- MapStruct
-
-**Database:**
-- **PostgreSQL 16** (primary storage)
-- **PgBouncer** in transaction pooling mode (already configured — keep as-is)
-  - HikariCP `maximum-pool-size` should be set ≤ `DEFAULT_POOL_SIZE` (25)
-  - Avoid nested transactions and DDL inside transactions (transaction pooling limitation)
-
-**Cache & Pub/Sub (Redis):**
-| Key | Type | Purpose |
-|-----|------|---------|
-| `room:{roomId}:members` | Hash | Online users: userId → login timestamp |
-| (Pub/Sub) `room:{roomId}` | Channel | Live messages |
-| (Pub/Sub) `room:{roomId}:typing` | Channel | Typing indicators |
-| (Pub/Sub) `room:{roomId}:events` | Channel | Join/leave events |
-
-> **Note:** Redis message cache (`messages:{roomId}`) is removed from this version. Catch-up is handled by a DB query with `sequence_id`. This simplifies the architecture and is sufficient for the 10-user target load.
-
-### Infrastructure (Docker Compose)
+## Stage 1 — Modular Monolith (Weeks 1–6)
+
+### Tech Stack
+
+| Layer | Choice |
+|-------|--------|
+| Backend | Spring Boot 3.x + Spring Modulith + Java 21 |
+| Real-time | WebSocket + STOMP + Redis Pub/Sub |
+| Database | PostgreSQL 16 via PgBouncer (transaction pool) |
+| Cache / Presence | Redis 7 |
+| Frontend | Vite + React 18 + TypeScript + Tailwind |
+| Build | Maven |
+| CI | GitLab CI |
+
+### Infrastructure (Docker Compose — Stage 1)
 
 ```yaml
 services:
@@ -623,20 +280,705 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRY_MINUTES: 15
-      JWT_REFRESH_EXPIRY_DAYS: 7
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
 
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./infrastructure/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+
 volumes:
   postgres_data:
   redis_data:
 ```
 
-### CI/CD Pipeline (GitLab CI)
+### Data Model
+
+```sql
+-- users
+CREATE TABLE users (
+  id             BIGSERIAL PRIMARY KEY,
+  email          VARCHAR(255) UNIQUE NOT NULL,
+  password_hash  VARCHAR(255) NOT NULL,
+  display_name   VARCHAR(100),
+  avatar_url     TEXT,
+  email_verified BOOLEAN DEFAULT TRUE,  -- stub: auto-verified
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  deleted_at     TIMESTAMP NULL
+);
+
+-- rooms
+CREATE TABLE rooms (
+  id          BIGSERIAL PRIMARY KEY,
+  name        VARCHAR(255) NOT NULL,
+  description TEXT,
+  created_by  BIGINT NOT NULL REFERENCES users(id),
+  is_public   BOOLEAN DEFAULT TRUE,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  deleted_at  TIMESTAMP NULL
+);
+
+-- room_members
+CREATE TABLE room_members (
+  id        BIGSERIAL PRIMARY KEY,
+  room_id   BIGINT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id   BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role      VARCHAR(20) NOT NULL DEFAULT 'member',
+  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(room_id, user_id)
+);
+
+-- messages
+CREATE TABLE messages (
+  id          BIGSERIAL PRIMARY KEY,
+  room_id     BIGINT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text        TEXT NOT NULL,
+  sequence_id BIGINT NOT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(room_id, sequence_id)
+);
+
+-- refresh_tokens
+CREATE TABLE refresh_tokens (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) NOT NULL UNIQUE,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Critical indexes
+CREATE INDEX idx_messages_room_seq     ON messages(room_id, sequence_id DESC);
+CREATE INDEX idx_room_members_room     ON room_members(room_id);
+CREATE INDEX idx_room_members_user     ON room_members(user_id);
+CREATE INDEX idx_refresh_tokens_expiry ON refresh_tokens(expires_at);
+```
+
+### Features (Minimum Viable for Comparison)
+
+All features serve the comparison — nothing more.
+
+**Auth:**
+- Email + password signup (bcrypt, 12 rounds). Auto-verified.
+- JWT login (15 min access, 7 day refresh). Stored in localStorage.
+- Silent refresh on 401. Redirect to login on expired refresh.
+- WebSocket upgrade validated with JWT.
+
+**Rooms:**
+- Create room, list public rooms, join, leave.
+- Membership check on every message send.
+
+**Messaging:**
+- Send via STOMP `/app/room/{roomId}/send`.
+- Persist to DB with per-room `sequence_id` (`UNIQUE(room_id, sequence_id)`).
+- Broadcast via Redis Pub/Sub `room:{roomId}`.
+- Catch-up on reconnect: `GET /api/rooms/{id}/messages?after={seq}&limit=50`.
+- Client-side message queue during disconnect; flush on reconnect.
+
+**Presence:**
+- Redis Hash `room:{roomId}:members` — set on WS connect, removed on disconnect.
+- Typing indicator via `/app/room/{roomId}/typing` (debounced 300ms, clear after 2s).
+- System messages on join/leave.
+
+**Reconnection:**
+- Exponential backoff (1s → 2s → 4s → max 30s) with ±20% jitter.
+- "Reconnecting..." banner; "Connection lost" after 10 attempts.
+
+**Instrumentation (added in Week 5 — not optional):**
+- Micrometer with Prometheus registry on all four metric groups above.
+- `/actuator/prometheus` endpoint enabled.
+- Grafana dashboard provisioned from JSON in repo.
+
+---
+
+## Stage 2 — Microservices (Weeks 7–11)
+
+### What changes, what stays the same
+
+| Component | Stage 1 | Stage 2 |
+|-----------|---------|---------|
+| Frontend | React app → `localhost:8080` | React app → `localhost:80` (Nginx gateway) |
+| Auth logic | `auth` module | `auth-service` (:8081) — code copied, not rewritten |
+| Room logic | `room` module | `room-service` (:8082) |
+| Messaging logic | `messaging` module | `msg-service` (:8083) |
+| Presence logic | `presence` module | `presence-service` (:8084) |
+| Inter-module events | `ApplicationEventPublisher` | RabbitMQ exchanges (same payload DTOs) |
+| Database | Single PostgreSQL | 4 independent PostgreSQL schemas |
+| WS routing | Spring in-process | `msg-service` owns WS; others notified via RabbitMQ |
+| Redis | Pub/Sub + presence | Presence only (`presence-service`) |
+| Gateway | None | Nginx reverse proxy |
+| Instrumentation | Micrometer on `app` | Micrometer on all 4 services (identical metrics) |
+
+### Infrastructure (Docker Compose — Stage 2)
+
+```yaml
+services:
+  # ── Databases (one per service) ─────────────────────────────
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: giano_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/auth-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U giano_user -d auth_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  room-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: room_db
+      POSTGRES_USER: giano_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - room_db_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/room-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U giano_user -d room_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  msg-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: msg_db
+      POSTGRES_USER: giano_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - msg_db_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/msg-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U giano_user -d msg_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Message broker ──────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: giano
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (presence only) ───────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # ── Services ────────────────────────────────────────────────
+  auth-service:
+    build: ./services/auth-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  room-service:
+    build: ./services/room-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://room-db:5432/room_db
+      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
+    depends_on:
+      room-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  msg-service:
+    build: ./services/msg-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://msg-db:5432/msg_db
+      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ROOM_SERVICE_URL: http://room-service:8082
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
+    depends_on:
+      msg-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  presence-service:
+    build: ./services/presence-service
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  # ── API Gateway ─────────────────────────────────────────────
+  gateway:
+    image: nginx:alpine
+    volumes:
+      - ./infrastructure/nginx/gateway.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - auth-service
+      - room-service
+      - msg-service
+      - presence-service
+
+  # ── Observability (same as Stage 1) ────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infrastructure/prometheus/prometheus-ms.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./infrastructure/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+
+volumes:
+  auth_db_data:
+  room_db_data:
+  msg_db_data:
+  redis_data:
+```
+
+### Nginx Gateway Config
+
+```nginx
+# infrastructure/nginx/gateway.conf
+events { worker_connections 1024; }
+http {
+  upstream auth    { server auth-service:8081; }
+  upstream room    { server room-service:8082; }
+  upstream msg     { server msg-service:8083; }
+  upstream presence { server presence-service:8084; }
+
+  server {
+    listen 80;
+
+    location /api/auth/    { proxy_pass http://auth/; }
+    location /api/rooms/   { proxy_pass http://room/; }
+    location /api/messages/{ proxy_pass http://msg/; }
+    location /ws/          {
+      proxy_pass http://msg/;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    }
+    location /api/presence/{ proxy_pass http://presence/; }
+  }
+}
+```
+
+### Service Boundaries — What Each Service Owns
+
+**auth-service** owns: `users` table, `refresh_tokens` table, JWT issuance and validation.
+Other services validate tokens by calling `GET /internal/auth/validate` — a lightweight in-process check, not a DB hit on every request.
+
+**room-service** owns: `rooms` table, `room_members` table. Calls `auth-service` for token validation. Publishes `room.joined` and `room.left` to RabbitMQ when membership changes.
+
+**msg-service** owns: `messages` table, WebSocket server, STOMP routing. Validates membership by calling `room-service`. Publishes `message.sent` to RabbitMQ after each persisted message.
+
+**presence-service** owns: Redis Hash presence state only (no DB). Consumes `room.joined`, `room.left`, `message.sent` from RabbitMQ. Handles typing indicator subscriptions via its own WebSocket endpoint.
+
+---
+
+## Phase Plan (12 Weeks)
+
+### Week 1 — Foundation
+
+**Goal:** Both CI and local dev environment running before writing any feature code.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| Verify Docker Compose (Postgres, Redis, PgBouncer) end-to-end | DevOps | No |
+| Write `init.sql` (all tables + indexes) | Backend | High |
+| Spring Boot project with all dependencies declared | Backend | High |
+| Add `ApplicationModuleTest` — must pass CI from this point forward | Backend | Low |
+| Vite + React + Tailwind scaffold, Vite proxy to `:8080` | Frontend | High |
+| GitLab CI: `backend:test`, `frontend:build` stages green | DevOps | Medium |
+| Prometheus + Grafana containers in Compose; `/actuator/health` reachable | DevOps | Medium |
+| Repo structure: `backend/`, `frontend/`, `infrastructure/`, `k6/`, `comparison/` | All | — |
+
+**Done when:** `docker compose up -d` starts all services healthy; `ApplicationModuleTest` passes CI; Vite dev server proxies to Spring Boot successfully.
+
+---
+
+### Week 2 — Auth + Rooms (parallel, AI-heavy)
+
+**Goal:** Authenticated users can create and join rooms. Both features are CRUD-heavy and compress well with AI assistance.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| Auth module: signup, login, refresh, logout endpoints | Backend | High |
+| JWT filter, bcrypt, `UserRegisteredEvent` published | Backend | High |
+| Room module: CRUD + membership endpoints, `UserJoinedRoomEvent` / `UserLeftRoomEvent` | Backend | High |
+| Axios interceptor (JWT header + silent refresh on 401) | Frontend | High |
+| Login/signup forms, protected route wrapper | Frontend | High |
+| Room list sidebar, create-room modal, join/leave buttons | Frontend | High |
+| Postman collection: auth + room endpoints | All | Medium |
+
+**Done when:** User A signs up, creates a room; User B signs up, joins that room; both appear in the member list.
+
+---
+
+### Week 3 — Messaging Core
+
+**Goal:** Real-time message delivery working end-to-end.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| Spring WebSocket + STOMP configuration | Backend | Medium |
+| `@MessageMapping` handlers: `/app/room/{id}/send`, `/app/room/{id}/typing` | Backend | Medium |
+| Message service: validate → persist → publish to Redis Pub/Sub → emit `MessageSentEvent` | Backend | Medium |
+| `sequence_id` generation (DB sequence per room) | Backend | Medium |
+| Catch-up API: `GET /api/rooms/{id}/messages?after={seq}&limit=50` | Backend | High |
+| `websocketService.ts`: StompClient wrapper (connect, subscribe, send, reconnect) | Frontend | Medium |
+| `ChatWindow`: message list, input field, auto-scroll | Frontend | High |
+| Reconnect logic: exponential backoff + jitter, message queue, banner | Frontend | Medium |
+
+**Done when:** Two browser tabs exchange messages in real-time; kill network on one tab; reconnect; catch-up messages appear in correct order.
+
+---
+
+### Week 4 — Presence, Typing, Polish
+
+**Goal:** Presence and typing indicators complete. Frontend functionally complete for comparison purposes.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| Redis presence: `HSET`/`HDEL` on WS connect/disconnect | Backend | High |
+| Typing indicator: publish/subscribe via Redis Pub/Sub | Backend | High |
+| System messages (join/leave) | Backend | Medium |
+| Heartbeat: server PING every 30s; stale client removal | Backend | Medium |
+| `@ControllerAdvice` exception handler (consistent JSON error body) | Backend | High |
+| Member list UI with online indicators | Frontend | High |
+| Typing indicator UI (debounced, auto-clear) | Frontend | High |
+| Error toasts: 401 → login, 429 → retry notice, 5xx → generic | Frontend | High |
+
+**Done when:** QA script (see Testing section) passes end-to-end manually.
+
+---
+
+### Week 5 — Tests + Baseline Instrumentation
+
+**Goal:** Monolith is locked. All measurement infrastructure is in place and producing real data before Stage 2 begins.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| JUnit 5: `AuthService`, `RoomService`, `MessageService` unit tests | Backend | High |
+| Testcontainers integration tests (Postgres + Redis) | Backend | Medium |
+| Test edge cases: duplicate sequence_id, invalid JWT, non-member send | Backend | Medium |
+| `ApplicationModuleTest` still passing (regression check) | Backend | Low |
+| Add Micrometer metrics: all four metric groups (performance, operational, resilience) | Backend | Medium |
+| Grafana dashboard: provision from JSON, verify all panels populate | DevOps | Medium |
+| k6 Scenario A (baseline, 10 VUs, 5 min) against monolith — save results to `comparison/stage1/` | All | Low |
+| k6 Scenario B (ramp 1→50) against monolith — save results | All | Low |
+
+**Done when:** All three k6 scenarios produce saved JSON results; Grafana shows all metric panels populated; JUnit suite >80% service-layer coverage.
+
+---
+
+### Week 6 — Resilience Test + Stage 1 Freeze
+
+**Goal:** Run Scenario C (kill messaging handler mid-run), record results, freeze the monolith codebase. No feature changes after this week.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| k6 Scenario C: disable messaging handler via feature flag mid-run; record message loss, error rate, recovery time | All | Low |
+| Document Stage 1 baseline numbers in `comparison/stage1/results.md` | All | Low |
+| Record dev complexity metrics: LOC per module, build time, time-to-first-healthy | All | Low |
+| Tag git commit: `v1.0-monolith` | All | — |
+| Begin Stage 2 repo structure: `services/` directory, shared `common/` library for event DTOs | Backend | Medium |
+
+**Stage 1 baseline numbers to record:**
+```
+- Total LOC (backend)
+- LOC per module (auth / room / messaging / presence)
+- Build time (./mvnw package, cold cache)
+- docker compose up → all healthy: N seconds
+- Service count in Compose
+- Compose config lines
+- k6 Scenario A: p50 / p95 / p99 latency, throughput msg/s
+- k6 Scenario B: latency at 50 VUs, error rate
+- k6 Scenario C: message loss count, error rate spike, recovery time (ms)
+```
+
+---
+
+### Week 7 — Microservices Infrastructure
+
+**Goal:** All four service skeletons running with independent DBs, RabbitMQ wired, Nginx gateway serving traffic.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| Create 4 Spring Boot projects under `services/` (copy from monolith, strip cross-module code) | Backend | High |
+| Per-service `init.sql` files (split from monolith schema) | Backend | High |
+| RabbitMQ container + exchange/queue declarations | DevOps | Medium |
+| Stage 2 `docker-compose.yml` (full file above) | DevOps | Medium |
+| Nginx gateway config (routing table above) | DevOps | Medium |
+| `common/` shared library: event DTO classes (identical to monolith event payloads) | Backend | High |
+| Frontend `.env` switch: `VITE_API_URL=http://localhost:80` | Frontend | — |
+| Verify: `docker compose up -d` (Stage 2) — all 4 services + RabbitMQ + Nginx healthy | All | — |
+
+**Done when:** `GET http://localhost/api/auth/health` returns 200 through Nginx; RabbitMQ management UI shows exchanges declared.
+
+---
+
+### Week 8 — Service Extraction: Auth + Room
+
+**Goal:** `auth-service` and `room-service` fully functional against their own DBs.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| `auth-service`: copy auth module logic, wire to `auth_db`, publish `user.registered` to RabbitMQ | Backend | High |
+| `auth-service`: expose `GET /internal/auth/validate` for inter-service JWT checks | Backend | High |
+| `room-service`: copy room module logic, wire to `room_db` | Backend | High |
+| `room-service`: consume `user.registered` from RabbitMQ; publish `room.joined` / `room.left` | Backend | Medium |
+| `room-service`: call `auth-service /internal/auth/validate` instead of local JWT filter | Backend | Medium |
+| Frontend: verify room list and create-room flow through Nginx gateway | Frontend | Low |
+
+**Done when:** User can sign up (hits `auth-service`), create a room (hits `room-service`), and see it in the list — all through the Nginx gateway.
+
+---
+
+### Week 9 — Service Extraction: Messaging + Presence
+
+**Goal:** Full message flow working through the distributed system.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| `msg-service`: copy messaging module, wire to `msg_db` | Backend | High |
+| `msg-service`: validate membership via `room-service` HTTP call before persisting message | Backend | Medium |
+| `msg-service`: publish `message.sent` to RabbitMQ after persist (replaces Redis Pub/Sub for events) | Backend | Medium |
+| `msg-service`: keep Redis Pub/Sub for WS broadcast within the service (internal fan-out) | Backend | Medium |
+| `presence-service`: consume `room.joined`, `room.left`, `message.sent` from RabbitMQ | Backend | High |
+| `presence-service`: Redis presence hash (identical logic to monolith) | Backend | High |
+| End-to-end test: two browser tabs through Nginx, send/receive messages, verify presence updates | All | Low |
+
+**Done when:** Full QA script passes against Stage 2 — same user flows, different architecture underneath.
+
+---
+
+### Week 10 — Instrumentation + Resilience Wiring
+
+**Goal:** All four services instrumented identically to Stage 1. Circuit breakers in place for resilience test.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| Mirror all Micrometer metrics on all 4 services (same metric names, same tags) | Backend | High |
+| Add `giano_event_consume_lag_ms` and `giano_service_recovery_ms` (Stage 2-only metrics) | Backend | Medium |
+| Update Prometheus scrape config to Stage 2 targets | DevOps | Low |
+| Verify Grafana dashboard shows all services' panels (no empty panels) | DevOps | Low |
+| Add Resilience4j circuit breaker on `msg-service → room-service` membership check | Backend | Medium |
+| Add Resilience4j circuit breaker on `room-service → auth-service` token validate | Backend | Medium |
+| Reconnect + catch-up verified end-to-end in Stage 2 | All | Low |
+
+**Done when:** Grafana shows all four services' metrics; circuit breakers visible in `/actuator/health`.
+
+---
+
+### Week 11 — Load Tests + Resilience Tests (Stage 2)
+
+**Goal:** Run identical k6 scenarios against Stage 2. Run Scenario C by killing `msg-service` mid-run. Record everything.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| k6 Scenario A against Stage 2 — save results to `comparison/stage2/` | All | Low |
+| k6 Scenario B against Stage 2 — save results | All | Low |
+| k6 Scenario C: `docker compose stop msg-service` mid-run; record loss, spike, recovery | All | Low |
+| Record Stage 2 complexity metrics: LOC per service, build times (per service + total), time-to-healthy | All | Low |
+| Count Compose config lines, service count, env var surface area | All | Low |
+| Document all numbers in `comparison/stage2/results.md` | All | Low |
+
+**Stage 2 numbers to record (mirror of Stage 1 list):**
+```
+- Total LOC (all services combined)
+- LOC per service
+- Build time per service (parallel) + total wall time
+- docker compose up → all healthy: N seconds
+- Service count in Compose
+- Compose config lines
+- k6 Scenario A: p50 / p95 / p99 latency, throughput msg/s
+- k6 Scenario B: latency at 50 VUs, error rate
+- k6 Scenario C: message loss count, error rate spike, recovery time (ms)
+- RabbitMQ consumer lag under load (p95)
+- Circuit breaker open events during Scenario C
+```
+
+---
+
+### Week 12 — Comparison Report + Demo
+
+**Goal:** Produce the final comparison document with raw data, analysis, and honest conclusions. Record demo video.
+
+| Task | Owner | Notes |
+|------|-------|-------|
+| Populate comparison tables (see Comparison Report section below) | All | Raw data only, no editorializing |
+| Write analysis: what the numbers actually show for each dimension | All | Acknowledge limitations |
+| Generate charts from k6 JSON output (latency histograms, throughput over time) | DevOps | k6 has built-in HTML report |
+| Write "lessons learned" section — things that surprised the team | All | Honest, not promotional |
+| Presentation slides (15 min: background → architecture → methodology → results → conclusions) | All | |
+| Demo video: same user flow run against both stages back-to-back | All | Screen recording |
+| Final README update: how to reproduce all results from scratch | All | |
+
+---
+
+## Comparison Report Structure
+
+The final report lives at `comparison/REPORT.md`. Template:
+
+```markdown
+# giano Architecture Comparison Report
+
+## Methodology
+- Hardware: [specs]
+- Network: localhost Docker bridge
+- Load tool: k6 vX.X
+- Metrics: Micrometer → Prometheus → Grafana
+- Both stages run on identical Docker Compose host
+
+## Q1 — Developer Complexity
+
+| Metric                        | Monolith | Microservices | Delta |
+|-------------------------------|----------|---------------|-------|
+| Total backend LOC             |          |               |       |
+| LOC: auth                     |          |               |       |
+| LOC: room                     |          |               |       |
+| LOC: messaging                |          |               |       |
+| LOC: presence                 |          |               |       |
+| Build time (cold)             |          |               |       |
+| Cross-module violations (CI)  |          |               |       |
+| Shared event DTO classes      |   0      |               |       |
+
+Analysis: [what the numbers show]
+
+## Q2 — Operational Complexity
+
+| Metric                          | Monolith | Microservices | Delta |
+|---------------------------------|----------|---------------|-------|
+| Docker Compose services         |          |               |       |
+| Compose config lines            |          |               |       |
+| Environment variables (total)   |          |               |       |
+| docker compose up → healthy (s) |          |               |       |
+| Deployment steps (VPS)          |          |               |       |
+| Databases                       | 1        | 4             | +3    |
+| Message brokers                 | 0        | 1 (RabbitMQ)  | +1    |
+
+Analysis: [what the numbers show]
+
+## Q3 — Performance (10 VUs steady, Scenario A)
+
+| Metric             | Monolith | Microservices | Delta |
+|--------------------|----------|---------------|-------|
+| p50 latency (ms)   |          |               |       |
+| p95 latency (ms)   |          |               |       |
+| p99 latency (ms)   |          |               |       |
+| Throughput (msg/s) |          |               |       |
+| Error rate         |          |               |       |
+
+Performance (50 VUs ramp, Scenario B):
+
+| Metric             | Monolith | Microservices | Delta |
+|--------------------|----------|---------------|-------|
+| p95 latency at peak|          |               |       |
+| Error rate at peak |          |               |       |
+| RabbitMQ consumer lag p95 | N/A |             |       |
+
+Analysis: [what the numbers show]
+
+## Q4 — Resilience (Scenario C: kill messaging component mid-run)
+
+| Metric                     | Monolith | Microservices | Notes |
+|----------------------------|----------|---------------|-------|
+| Messages lost              |          |               |       |
+| Error rate spike (%)       |          |               |       |
+| Time to detect failure (ms)|          |               |       |
+| Recovery time (ms)         |          |               |       |
+| Circuit breaker events     | N/A      |               |       |
+| Affected components        | All      | msg-service only |    |
+
+Analysis: [what the numbers show]
+
+## Conclusions
+
+[3–5 bullet honest conclusions drawn directly from the data]
+
+## Limitations
+
+[What this study cannot claim — single host, small scale, simplified app, etc.]
+
+## Lessons Learned
+
+[Things that surprised the team during extraction]
+```
+
+---
+
+## CI/CD Pipeline
 
 ```yaml
 stages:
@@ -650,7 +992,6 @@ variables:
   POSTGRES_PASSWORD: test
   POSTGRES_HOST_AUTH_METHOD: trust
 
-# ── Backend tests ────────────────────────────────────────────
 backend:test:
   stage: test
   image: eclipse-temurin:21-jdk-alpine
@@ -680,7 +1021,6 @@ backend:test:
     paths:
       - backend/.m2/repository/
 
-# ── Frontend build ───────────────────────────────────────────
 frontend:build:
   stage: test
   image: node:20-alpine
@@ -696,7 +1036,6 @@ frontend:build:
     paths:
       - frontend/node_modules/
 
-# ── Docker image build ───────────────────────────────────────
 docker:build:
   stage: build
   image: docker:24
@@ -713,7 +1052,6 @@ docker:build:
     - docker tag $IMAGE $CI_REGISTRY_IMAGE/backend:latest
     - docker push $CI_REGISTRY_IMAGE/backend:latest
 
-# ── Deploy to VPS ─────────────────────────────────────────────
 deploy:production:
   stage: deploy
   image: alpine:latest
@@ -725,8 +1063,7 @@ deploy:production:
     - eval $(ssh-agent -s)
     - chmod 400 "$SSH_PRIVATE_KEY"
     - ssh-add "$SSH_PRIVATE_KEY"
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
   script:
@@ -738,508 +1075,109 @@ deploy:production:
       "
 ```
 
-**Required CI/CD variables (set in GitLab → Settings → CI/CD → Variables):**
+**Required CI/CD variables:**
+
 | Variable | Type | Notes |
 |----------|------|-------|
-| `DB_PASSWORD` | Variable | PostgreSQL + PgBouncer password |
-| `JWT_SECRET` | Variable (masked) | Min 32-char random string |
-| `SSH_PRIVATE_KEY` | File | Deploy key; 400 permissions |
+| `DB_PASSWORD` | Variable | Shared across all services |
+| `JWT_SECRET` | Variable (masked) | Min 32 chars |
+| `RABBITMQ_PASSWORD` | Variable (masked) | Stage 2 only |
+| `GRAFANA_PASSWORD` | Variable (masked) | |
+| `SSH_PRIVATE_KEY` | File | 400 permissions |
 | `SSH_KNOWN_HOSTS` | File | VPS fingerprint |
 | `SSH_HOST` | Variable | VPS IP or hostname |
 
-### Frontend Stack
+---
 
-**Framework & Build Tool:**
-- Vite + React 18 + TypeScript
-- Tailwind CSS
+## Repository Structure
 
-**Real-Time Communication:**
-- STOMP over WebSocket (`@stomp/stompjs`)
-
-**State Management:**
-- Zustand (lightweight, avoids Redux boilerplate)
-
-**HTTP Client:**
-- Axios with interceptor for JWT header + silent refresh
-
-**Frontend Folder Structure:**
 ```
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── Auth/
-│   │   │   ├── LoginForm.tsx
-│   │   │   ├── SignUpForm.tsx
-│   │   │   └── ProfileCard.tsx
-│   │   ├── Chat/
-│   │   │   ├── ChatWindow.tsx
-│   │   │   ├── MessageList.tsx
-│   │   │   ├── MessageInput.tsx
-│   │   │   ├── RoomList.tsx
-│   │   │   └── MemberList.tsx
-│   │   └── Common/
-│   │       ├── Navbar.tsx
-│   │       ├── Toast.tsx
-│   │       └── LoadingSpinner.tsx
-│   ├── hooks/
-│   │   ├── useAuth.ts
-│   │   ├── useWebSocket.ts
-│   │   ├── useRoom.ts
-│   │   └── useMessages.ts
-│   ├── services/
-│   │   ├── api.ts
-│   │   ├── authService.ts
-│   │   ├── roomService.ts
-│   │   └── websocketService.ts
-│   ├── store/
-│   │   ├── authStore.ts
-│   │   ├── roomStore.ts
-│   │   └── messageStore.ts
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css
-├── vite.config.ts
-├── package.json
-└── .env.local
+giano/
+├── backend/                        # Stage 1 — modular monolith
+│   └── src/main/java/io/giano/
+│       ├── auth/
+│       ├── room/
+│       ├── messaging/
+│       ├── presence/
+│       └── GianoApplication.java
+├── services/                       # Stage 2 — microservices
+│   ├── common/                     # Shared event DTOs
+│   ├── auth-service/
+│   ├── room-service/
+│   ├── msg-service/
+│   └── presence-service/
+├── frontend/                       # Shared — switches via .env
+├── infrastructure/
+│   ├── postgres/
+│   │   ├── init.sql                # Stage 1 schema
+│   │   ├── auth-init.sql           # Stage 2 per-service schemas
+│   │   ├── room-init.sql
+│   │   └── msg-init.sql
+│   ├── nginx/
+│   │   └── gateway.conf
+│   ├── prometheus/
+│   │   ├── prometheus.yml          # Stage 1 scrape config
+│   │   └── prometheus-ms.yml       # Stage 2 scrape config
+│   └── grafana/
+│       └── dashboards/
+├── k6/
+│   └── scenarios/
+│       ├── baseline.js             # Scenario A
+│       ├── ramp.js                 # Scenario B
+│       └── resilience.js           # Scenario C
+├── comparison/
+│   ├── stage1/
+│   │   └── results.md              # Raw numbers from Week 5–6
+│   ├── stage2/
+│   │   └── results.md              # Raw numbers from Week 11
+│   └── REPORT.md                   # Final comparison document
+├── docker-compose.yml              # Stage 1
+├── docker-compose.ms.yml           # Stage 2
+└── .env.example
 ```
 
 ---
 
-## Phase Breakdown & Milestones
+## Risk Register
 
-### Phase 1: Setup & Infrastructure (Week 1–2)
-
-**Deliverables:**
-- Docker Compose environment fully verified locally.
-- Database schema (`init.sql`) with all tables and indexes.
-- Spring Boot project with Spring Modulith, WebSocket, and `ApplicationModuleTest` verifying module boundaries.
-- Vite frontend scaffold (React/TS, Tailwind, folder structure, Vite proxy).
-- GitLab repo with README and branch strategy.
-
-**Tasks:**
-- `[Backend]` Initialize Spring Boot project (Modulith, WebSocket, Security, Data JPA, Redis, jjwt).
-- `[Backend]` Create entities and JPA repositories for users, rooms, messages.
-- `[Backend]` Add `ApplicationModuleTest` — must pass CI from day one.
-- `[DevOps]` Verify existing `docker-compose.yml` works end-to-end; add `app` service.
-- `[DevOps]` Write `init.sql` with all tables and indexes (see Data Model section).
-- `[DevOps]` Set CI/CD variables in GitLab; verify `backend:test` and `frontend:build` stages pass.
-- `[Frontend]` `npm create vite`, install deps (react, axios, zustand, stompjs, tailwind).
-- `[Frontend]` Set up Vite proxy for `/api` and `/ws` to `http://localhost:8080`.
-- `[All]` Set up branch strategy: `main` (protected), `dev`, feature branches.
-
-### Phase 2: Authentication (Week 2–4)
-
-**Deliverables:**
-- Signup/login/refresh/logout endpoints with JWT.
-- Email verification stub (auto-verify; no email).
-- JWT validation middleware.
-- React login/signup forms with auth hooks.
-- Postman collection for auth endpoints.
-
-**Tasks:**
-- `[Backend]` Implement JWT generation/validation (HS256, 15 min access, 7 day refresh).
-- `[Backend]` Create `/auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout` endpoints.
-- `[Backend]` Publish `UserRegisteredEvent` from auth module on signup.
-- `[Backend]` BCrypt password hashing (Spring Security `PasswordEncoder`).
-- `[Backend]` JWT validation filter on all protected endpoints.
-- `[Frontend]` `LoginForm`, `SignUpForm` components.
-- `[Frontend]` `useAuth` hook (JWT in localStorage, auto-refresh on 401).
-- `[Frontend]` Axios interceptor for `Authorization` header.
-- `[Frontend]` Protected route wrapper (redirect to login if not authenticated).
-
-### Phase 3: WebSocket & Real-Time Messaging (Week 4–7)
-
-**Deliverables:**
-- WS server with STOMP endpoint and message routing.
-- Message persistence with sequence_id.
-- Redis Pub/Sub per room.
-- Catch-up API.
-- Frontend WS client with reconnect logic.
-- Manual e2e test: two browser tabs exchanging messages.
-
-**Tasks:**
-- `[Backend]` Configure Spring WebSocket + STOMP.
-- `[Backend]` `@MessageMapping` handlers: `/app/room/{roomId}/send`, `/app/room/{roomId}/typing`.
-- `[Backend]` Message service: validate → persist → publish to Redis → emit `MessageSentEvent`.
-- `[Backend]` Sequence_id generation (DB sequence or `SELECT MAX(sequence_id) + 1` with row lock).
-- `[Backend]` Redis Pub/Sub listeners (dedicated thread pool).
-- `[Backend]` `GET /api/rooms/{id}/messages?after_sequence_id=X&limit=50`.
-- `[Frontend]` `websocketService.ts` (StompClient wrapper: connect, disconnect, subscribe, send, reconnect).
-- `[Frontend]` `ChatWindow` (message list, input field, auto-scroll).
-- `[Frontend]` `useMessages` hook (message state, catch-up trigger on reconnect).
-- `[Frontend]` Reconnect logic (exponential backoff + jitter, message queue, banner).
-- `[Testing]` Manual test: two tabs, one room, send/receive, kill network, reconnect, verify catch-up.
-
-### Phase 4: Room Management (Week 7–8)
-
-**Deliverables:**
-- Room CRUD and membership endpoints.
-- Frontend room list sidebar, create-room form, member panel.
-
-**Tasks:**
-- `[Backend]` `RoomService`: create, list, join (idempotent), leave, get members. Publishes `UserJoinedRoomEvent` / `UserLeftRoomEvent`.
-- `[Backend]` Validate membership before allowing message send.
-- `[Backend]` `GET /api/rooms`, `POST /api/rooms`, `POST /api/rooms/{id}/join`, `POST /api/rooms/{id}/leave`, `GET /api/rooms/{id}/members`.
-- `[Frontend]` `RoomList` sidebar (joined rooms, join button, last message preview).
-- `[Frontend]` `CreateRoomForm` modal.
-- `[Frontend]` `RoomInfo` panel (name, description, member list with online status).
-
-### Phase 5: Presence & Typing Indicators (Week 8–9)
-
-**Deliverables:**
-- Online presence tracking in Redis.
-- Typing indicators via WS.
-- System messages for join/leave.
-- Frontend presence UI updates in real-time.
-
-**Tasks:**
-- `[Backend]` On WS connect: `HSET room:{roomId}:members {userId} {timestamp}`.
-- `[Backend]` On WS disconnect: `HDEL room:{roomId}:members {userId}`.
-- `[Backend]` Listens to `UserJoinedRoomEvent` / `UserLeftRoomEvent` — publishes presence events to Redis.
-- `[Backend]` Handle `/app/room/{roomId}/typing` for typing indicator.
-- `[Frontend]` Subscribe to presence channel; update member list in real-time.
-- `[Frontend]` Send typing event on keydown (debounced 300ms); send stop after 2s.
-- `[Frontend]` Show "User X is typing..." banner.
-- `[Frontend]` System messages (gray, smaller text): "User X joined the room".
-
-### Phase 6: Error Handling & Polish (Week 9–10)
-
-**Deliverables:**
-- Auto-reconnect fully wired with exponential backoff + jitter.
-- User-facing error toasts and banners.
-- Message queue during offline periods.
-- Exception handler for consistent error responses.
-- Chaos test: kill Redis, restart app, kill network.
-
-**Tasks:**
-- `[Backend]` `@ControllerAdvice` exception handler (consistent JSON error body with status, code, message).
-- `[Backend]` Return proper status codes: 400 (validation), 401 (auth), 403 (forbidden), 404 (not found), 429 (rate limit stub), 5xx (server error).
-- `[Frontend]` Full reconnect logic wired: detect disconnect → backoff → retry → max attempts → error banner.
-- `[Frontend]` Message queue: store in memory during disconnect; flush on reconnect.
-- `[Frontend]` Toast/notification system.
-- `[Frontend]` Disable send button while offline; show pending message count.
-
-### Phase 7: Testing & Documentation (Week 10–11)
-
-**Deliverables:**
-- JUnit 5 + Testcontainers suite with >80% service-layer coverage.
-- Postman collection for all endpoints.
-- README with setup, architecture, and environment variable list.
-- ER diagram + architecture diagram.
-- Demo video.
-
-**Tasks:**
-- `[Backend]` JUnit tests: `AuthService`, `RoomService`, `MessageService`, repository layer.
-- `[Backend]` Testcontainers integration tests (PostgreSQL + Redis).
-- `[Backend]` Test edge cases: duplicate messages, invalid JWT, non-member send, sequence_id ordering.
-- `[Backend]` Verify `ApplicationModuleTest` still passes (no regressions on module boundaries).
-- `[Testing]` Postman collection: auth flow, room CRUD, message catch-up, presence.
-- `[All]` README: project overview, `docker compose up` instructions, env vars, architecture notes.
-- `[All]` ER diagram, module event diagram.
-- `[All]` Demo video (signup → create room → send messages → disconnect → reconnect → catch-up).
-
-### Phase 8: Final Polish & Review (Week 11–12)
-
-**Deliverables:**
-- Code review within trio; all feedback addressed.
-- Security audit checklist signed off.
-- Final e2e testing.
-- Presentation slides.
-
-**Tasks:**
-- `[All]` Code review: focus on module boundary enforcement, security, SQL query correctness.
-- `[Backend]` Check for N+1 queries; verify all indexes from `init.sql` are present.
-- `[Backend]` Review CORS config (frontend origin whitelisted; no `*` in production).
-- `[Backend]` Verify no hardcoded secrets; all via environment variables.
-- `[Frontend]` Clean up console warnings/errors.
-- `[All]` Final e2e run using QA script below.
-- `[All]` Prepare presentation slides.
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| Service extraction reveals cross-module coupling that wasn't visible in the monolith | Medium | High | `ApplicationModuleTest` in Week 1 catches this early. Fix before Week 6 freeze. |
+| RabbitMQ consumer lag introduces measurable latency in Stage 2 — legitimate finding, not a bug | High | Low | Document as expected architectural trade-off. Worth including in Q3 analysis. |
+| `msg-service → room-service` HTTP call adds p99 latency outliers | Medium | Medium | Circuit breaker (Resilience4j) prevents cascade. Document in Q4 analysis. |
+| Comparison numbers are influenced by Docker networking rather than architecture | Low | Medium | Both stages run on same host same bridge network. Note limitation in report methodology. |
+| Week 3 (WS + Redis) slips and compresses Stage 2 time | Medium | High | Pair-program WS wiring. Working two-tab PoC must exist by end of Week 3. This is the hard deadline. |
+| Stage 1 freeze violated — feature added after Week 6 tag | Low | High | `v1.0-monolith` git tag is the reference. CI blocks merges to `main` that modify `backend/` after tag. |
+| k6 scenarios produce inconsistent results between runs | Medium | Medium | Run each scenario 3 times; take median. Commit all raw JSON files. |
 
 ---
 
-## Data Model
+## Acceptance Criteria
 
-```sql
-CREATE TABLE users (
-  id            BIGSERIAL PRIMARY KEY,
-  email         VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  display_name  VARCHAR(100),
-  avatar_url    TEXT,
-  email_verified BOOLEAN DEFAULT TRUE,   -- auto-verified in this version
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  deleted_at    TIMESTAMP NULL
-);
+**Stage 1 (complete by end of Week 6):**
+- ✅ Full QA script passes manually
+- ✅ `ApplicationModuleTest` passing in CI continuously
+- ✅ JUnit suite >80% service-layer coverage
+- ✅ All three k6 scenarios complete with saved JSON output in `comparison/stage1/`
+- ✅ Grafana shows all metric panels populated with real data
+- ✅ Git tag `v1.0-monolith` exists
 
-CREATE TABLE rooms (
-  id          BIGSERIAL PRIMARY KEY,
-  name        VARCHAR(255) NOT NULL,
-  description TEXT,
-  created_by  BIGINT NOT NULL REFERENCES users(id),
-  is_public   BOOLEAN DEFAULT TRUE,
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  deleted_at  TIMESTAMP NULL
-);
+**Stage 2 (complete by end of Week 11):**
+- ✅ Full QA script passes against Stage 2 (same scenarios, Nginx gateway)
+- ✅ All four services healthy in Stage 2 Docker Compose
+- ✅ All three k6 scenarios complete with saved JSON output in `comparison/stage2/`
+- ✅ Grafana shows all four services' metrics populated
+- ✅ Scenario C (resilience) recorded with and without circuit breakers
 
-CREATE TABLE room_members (
-  id        BIGSERIAL PRIMARY KEY,
-  room_id   BIGINT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-  user_id   BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role      VARCHAR(20) NOT NULL DEFAULT 'member', -- 'member' | 'admin'
-  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(room_id, user_id)
-);
-
-CREATE TABLE messages (
-  id          BIGSERIAL PRIMARY KEY,
-  room_id     BIGINT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-  user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  text        TEXT NOT NULL,
-  sequence_id BIGINT NOT NULL,
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(room_id, sequence_id)
-);
-
--- Critical indexes
-CREATE INDEX idx_messages_room_seq     ON messages(room_id, sequence_id DESC);
-CREATE INDEX idx_room_members_room     ON room_members(room_id);
-CREATE INDEX idx_room_members_user     ON room_members(user_id);
-CREATE INDEX idx_refresh_tokens_expiry ON refresh_tokens(expires_at);
-
-CREATE TABLE refresh_tokens (
-  id         BIGSERIAL PRIMARY KEY,
-  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash VARCHAR(255) NOT NULL UNIQUE,
-  expires_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+**Comparison (complete by end of Week 12):**
+- ✅ `comparison/REPORT.md` populated with all table cells filled
+- ✅ All four research questions (Q1–Q4) answered with data, not claims
+- ✅ Limitations section written honestly
+- ✅ Presentation slides cover methodology + results in ≤15 min
+- ✅ Demo video shows same user flow on both architectures back-to-back
 
 ---
 
-## Success Metrics & Acceptance Criteria
-
-**Functional:**
-- ✅ User can sign up, log in, and log out.
-- ✅ User can create a room and another user can join it.
-- ✅ User can send a message and see it appear instantly for other users in the room.
-- ✅ User can see the last 50 messages when entering a room.
-- ✅ User can see who is online in a room.
-- ✅ User's browser reconnects automatically if network drops; they see "Reconnecting..." banner.
-- ✅ User receives missed messages after reconnect (catch-up from DB by sequence_id).
-- ✅ Typing indicators show when another user is typing.
-- ✅ System messages appear when a user joins or leaves.
-
-**Non-Functional:**
-- ✅ 10 concurrent users chatting without message loss or ordering errors.
-- ✅ Message delivery latency <100ms on localhost.
-- ✅ Reconnect completes in <5s on average.
-- ✅ `docker compose up -d` starts all services healthy within 60s.
-- ✅ All module boundary violations caught by `ApplicationModuleTest` in CI.
-- ✅ JUnit + Testcontainers suite with >80% service-layer coverage.
-- ✅ Passwords hashed with bcrypt (min 12 rounds).
-- ✅ JWT validated on all protected endpoints; expired tokens rejected with 401.
-- ✅ No hardcoded secrets.
-- ✅ No cross-module `@Autowired` service references.
-
-**Documentation:**
-- ✅ README with setup instructions and architecture overview.
-- ✅ ER diagram and module event diagram.
-- ✅ API documentation (endpoints, request/response examples, error codes).
-- ✅ Postman collection (runnable for all features).
-- ✅ Demo video showing full user flow including reconnect scenario.
-
----
-
-## Risk Mitigation
-
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Cross-module `@Autowired` violations introduced under time pressure | Medium | High | `ApplicationModuleTest` fails CI on any violation. Fix before merging. |
-| PgBouncer transaction mode breaks `@Transactional(REQUIRES_NEW)` or DDL inside transactions | Low | Medium | Avoid nested transactions. Run Flyway/Liquibase migrations against Postgres directly, not via PgBouncer. |
-| WS blocked by VPS firewall or Nginx missing upgrade headers | Medium | High | Test WS upgrade through VPS in Week 1. Configure Nginx proxy with `Upgrade` and `Connection` headers early. |
-| Phase 3 (WS + Redis) slips and blocks all downstream phases | Medium | High | Pair-program WS + Redis. Target a working two-tab PoC by end of Week 5. Cut scope (typing, presence) if behind. |
-| Redis restart loses presence data mid-demo | Low | Low | Ephemeral by design. Clients re-announce on reconnect. Document as known limitation. |
-| Merge conflicts with three developers on shared modules | Low | Low | Clear module ownership. Merge to `dev` daily. Code review on all PRs. |
-
----
-
-## Deployment & Running
-
-### Local Development
-
-**Prerequisites:**
-- Docker & Docker Compose
-- Java 21+ (for IDE support)
-- Node 20+ (for Vite frontend)
-- Git
-
-**Setup:**
-```bash
-# Clone repo
-git clone <repo-url>
-cd giano
-
-# Configure environment
-cp .env.example .env
-# Edit .env: set DB_PASSWORD, JWT_SECRET
-
-# Start infrastructure (Postgres, Redis, PgBouncer)
-docker compose up -d postgres redis pgbouncer
-
-# Wait for Postgres health check (or check: docker compose ps)
-# Then start backend
-cd backend
-./mvnw spring-boot:run
-
-# In another terminal, start frontend
-cd frontend
-npm install
-npm run dev
-# Open http://localhost:5173
-
-# Run tests
-cd backend
-./mvnw test
-
-# Run with coverage report
-./mvnw verify
-# Report at: backend/target/site/jacoco/index.html
-```
-
-**Troubleshooting:**
-- "Connection refused to pgbouncer": Postgres healthcheck may still be pending. Wait ~15s; check `docker compose ps`.
-- "Port already in use 5433/6380/6433": These ports are non-default to avoid conflicts. Check for other Docker services on those ports.
-- "JWT secret not set": Ensure `JWT_SECRET` is in `.env` and is at least 32 characters.
-- "SpringBoot ApplicationModuleTest failed": A cross-module direct dependency was introduced. Remove the `@Autowired` reference and replace with an application event.
-
-### QA Script (Manual E2E Test)
-
-1. Open `http://localhost:5173` in two browser windows (Window 1, Window 2).
-2. **Window 1:** Sign up (email A), log in.
-3. **Window 2:** Sign up (email B), log in.
-4. **Window 1:** Create room "General".
-5. **Window 1:** Send message "Hello from A".
-6. **Window 2:** Join room "General". Verify message history shows "Hello from A".
-7. **Window 2:** Send "Hi A" — verify Window 1 sees it instantly.
-8. **Window 1:** Start typing (don't send) — verify Window 2 shows typing indicator.
-9. **Window 2:** Disconnect network (or close tab and reopen).
-10. **Window 1:** Send 3 more messages while Window 2 is disconnected.
-11. **Window 2:** Reconnect — verify "Reconnecting..." banner appears, then catch-up messages appear in correct order.
-12. Verify both users show as online in the member panel.
-
----
-
-## Deliverables Checklist
-
-**Week 1–2 (Infrastructure):**
-- [ ] `docker-compose.yml` verified end-to-end with all services
-- [ ] `init.sql` with all tables, constraints, and indexes
-- [ ] Spring Boot skeleton with `ApplicationModuleTest` passing CI
-- [ ] Vite frontend scaffold
-- [ ] GitLab repo, README started, branch strategy set
-
-**Week 2–4 (Auth):**
-- [ ] Signup/login/refresh/logout endpoints
-- [ ] JWT generation & validation middleware
-- [ ] Email verification stub (auto-verify)
-- [ ] `UserRegisteredEvent` published from auth module
-- [ ] React login/signup forms with `useAuth` hook
-- [ ] Postman collection (auth endpoints)
-
-**Week 4–7 (Messaging):**
-- [ ] WS server with STOMP
-- [ ] Message persistence + sequence_id
-- [ ] Redis Pub/Sub integration
-- [ ] Catch-up API (`after_sequence_id`)
-- [ ] Frontend WS client with reconnect logic
-- [ ] Two-tab e2e manual test passing
-
-**Week 7–8 (Rooms):**
-- [ ] Room CRUD endpoints
-- [ ] Membership management
-- [ ] `UserJoinedRoomEvent` / `UserLeftRoomEvent` published
-- [ ] Frontend room list, create form, member panel
-
-**Week 8–9 (Presence):**
-- [ ] Redis presence hash (on connect/disconnect)
-- [ ] Typing indicators (debounced, auto-clear)
-- [ ] System messages (join/leave)
-- [ ] Frontend presence UI
-
-**Week 9–10 (Resilience):**
-- [ ] Auto-reconnect with backoff + jitter
-- [ ] Message queue during offline
-- [ ] Error toasts and banners
-- [ ] `@ControllerAdvice` exception handler
-
-**Week 10–11 (Testing & Docs):**
-- [ ] JUnit 5 service-layer tests
-- [ ] Testcontainers integration tests
-- [ ] `ApplicationModuleTest` still passing
-- [ ] Postman collection (all endpoints)
-- [ ] README with setup, env vars, architecture
-- [ ] ER diagram + module event diagram
-- [ ] Demo video
-
-**Week 11–12 (Polish):**
-- [ ] Code review & refactoring
-- [ ] Security audit (secrets, JWT, CORS, SQL)
-- [ ] Final e2e QA script run
-- [ ] GitLab CI pipeline green on `main`
-- [ ] Presentation slides
-
----
-
-## Deferred Items
-
-These items from the original proposal are explicitly out of scope. They may be revisited during the microservices comparison phase.
-
-| Feature | Reason |
-|---------|--------|
-| Email verification (SMTP) | No comparison value; stub sufficient |
-| Password reset via email | No comparison value; stub sufficient |
-| Social login (Google OAuth) | Unrelated to comparison goals |
-| Redis message cache (`messages:{roomId}`) | Replaced by DB catch-up query; simpler |
-| Message pagination (scroll-up load older) | Deferred; catch-up covers the baseline |
-| Message edit / delete | Adds sequence_id complexity; not needed |
-| File / image sharing | Storage layer not designed for it |
-| @Mentions and notifications | Out of scope |
-| Read receipts | Out of scope |
-| Bucket4j rate limiting | Stub or omit; not a comparison metric |
-| Multi-instance / clustering | Explicitly out of scope for monolith version |
-
----
-
-## References & Resources
-
-**Spring Boot & Modulith:**
-- [Spring Boot WebSocket Tutorial](https://spring.io/guides/gs/messaging-stomp-websocket)
-- [Spring Modulith Documentation](https://spring.io/projects/spring-modulith)
-- [Spring Security & JWT (Baeldung)](https://www.baeldung.com/spring-security-authentication-with-a-database)
-
-**Redis:**
-- [Spring Data Redis Pub/Sub](https://spring.io/guides/gs/messaging-redis)
-- [Redis Pub/Sub Documentation](https://redis.io/topics/pubsub)
-
-**React + WebSocket:**
-- [@stomp/stompjs Documentation](https://stomp-js.github.io/stomp-js/latest/)
-- [Vite React Template](https://vitejs.dev/guide/#scaffolding-your-first-vite-project)
-
-**Testing:**
-- [JUnit 5 User Guide](https://junit.org/junit5/docs/current/user-guide/)
-- [Testcontainers for Postgres & Redis](https://www.testcontainers.org/)
-
-**Docker & Infrastructure:**
-- [Docker Compose Documentation](https://docs.docker.com/compose/)
-- [PgBouncer Configuration](https://pgbouncer.github.io/config.html)
-- [edoburu/pgbouncer Docker image](https://hub.docker.com/r/edoburu/pgbouncer)
-
----
-
-**Document Version:** 2.0
+**Document Version:** 3.0
 **Last Updated:** 2026-03-17
-**Prepared for:** 3-person development team (school project, 8–12 weeks)
-**Changes from v1.1:** Updated Docker Compose to match configured infrastructure (PgBouncer v1.25.1-p0, scram-sha-256, adjusted ports). Added GitLab CI pipeline. Added Spring Modulith module event map and `ApplicationModuleTest` requirement. Stubbed email verification and password reset. Removed Redis message cache in favour of DB catch-up query. Added Deferred Items section.
+**Changes from v2.0:** Complete rewrite. Added Stage 2 microservices. Restructured around 4 comparison research questions. Added instrumentation design, k6 scenarios, comparison report template, per-service Docker Compose, Nginx gateway, RabbitMQ config, repository structure. Frontend scoped to functional-only. Timeline compressed to 12 weeks with AI-assisted development assumed throughout.
