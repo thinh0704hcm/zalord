@@ -41,4 +41,20 @@ public class User {
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
 }

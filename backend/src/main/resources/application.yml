@@ -16,3 +16,7 @@ spring:
       port: 6380
 server:
   port: 8081
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiry_minutes: ${JWT_EXPIRY_MINUTES}
