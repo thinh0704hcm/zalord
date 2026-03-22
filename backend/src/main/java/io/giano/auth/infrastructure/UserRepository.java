@@ -10,6 +10,6 @@ import io.giano.auth.domain.User;
 public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByPhoneNumber(String phoneNumber);
     Optional<User> findByEmail(String email);
-    Boolean existsByPhoneNumber(String phoneNumber);
-    Boolean existsByEmail(String email);
+    boolean existsByPhoneNumber(String phoneNumber);
+    boolean existsByEmail(String email);
 }
