@@ -1,4 +1,4 @@
-package io.giano.auth.api;
+package io.zalord.auth.api;
 
 public class LoginRequest {
     private String phoneNumber;
@@ -10,5 +10,13 @@ public class LoginRequest {
 
     public String getPassword() {
         return password;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 }

@@ -1,4 +1,4 @@
-# giano
+# zalord
 A simple messaging app demonstrating a software product's lifecycle.
 
 ## Getting started
@@ -14,14 +14,14 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-git remote add origin https://gitlab.com/f3-team/giano.git
+git remote add origin https://gitlab.com/f3-team/zalord.git
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
-* [Set up project integrations](https://gitlab.com/f3-team/giano/-/settings/integrations)
+* [Set up project integrations](https://gitlab.com/f3-team/zalord/-/settings/integrations)
 
 ## Collaborate with your team
 

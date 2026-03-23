@@ -1,4 +1,4 @@
-# giano — Development Plan
+# zalord — Development Plan
 ## Software Implementation: Modular Monolith + Microservices
 
 > This document covers only software development — architecture, code, and unit/integration tests.
@@ -9,9 +9,9 @@
 ## Codebase Structure
 
 ```
-giano/
+zalord/
 ├── backend/                        # Stage 1 — modular monolith
-│   └── src/main/java/io/giano/
+│   └── src/main/java/io/zalord/
 │       ├── auth/
 │       │   ├── AuthModule.java
 │       │   ├── api/                # Controllers, request/response DTOs
@@ -33,11 +33,11 @@ giano/
 │       │   ├── api/
 │       │   └── service/            # Redis presence, typing indicator
 │       ├── common/                 # Shared: JwtUtil, error DTOs, base classes
-│       └── GianoApplication.java
+│       └── zalordApplication.java
 │
 ├── services/                       # Stage 2 — microservices
 │   ├── common/                     # Shared library: event DTOs, JwtUtil, base config
-│   │   └── src/main/java/io/giano/common/
+│   │   └── src/main/java/io/zalord/common/
 │   │       ├── events/             # UserRegisteredEvent, MessageSentEvent, etc.
 │   │       ├── security/           # JwtUtil (identical to monolith)
 │   │       └── dto/                # Shared request/response DTOs
@@ -107,7 +107,7 @@ class PresenceEventHandler {
 class ModuleBoundaryTest {
     @Test
     void verifyModularity() {
-        ApplicationModules.of(GianoApplication.class).verify(); // fails CI on violation
+        ApplicationModules.of(zalordApplication.class).verify(); // fails CI on violation
     }
 }
 ```
@@ -387,28 +387,28 @@ Client reconnects → sends lastSeqId
 **Metrics to instrument (Micrometer):**
 ```java
 // Performance
-Timer.builder("giano.message.e2e.latency")
+Timer.builder("zalord.message.e2e.latency")
     .tag("room", roomId).register(meterRegistry);
 
-Timer.builder("giano.ws.connect.duration")
+Timer.builder("zalord.ws.connect.duration")
     .register(meterRegistry);
 
 // Operational
-Timer.builder("giano.event.publish.duration")
+Timer.builder("zalord.event.publish.duration")
     .tag("event_type", eventType).register(meterRegistry);
 
-Timer.builder("giano.db.query.duration")
+Timer.builder("zalord.db.query.duration")
     .tag("query", queryName).register(meterRegistry);
 
 // Resilience
-Counter.builder("giano.message.loss.total")
+Counter.builder("zalord.message.loss.total")
     .register(meterRegistry);
 
-Timer.builder("giano.reconnect.duration")
+Timer.builder("zalord.reconnect.duration")
     .register(meterRegistry);
 
 // Outbox
-Gauge.builder("giano.outbox.unpublished.count",
+Gauge.builder("zalord.outbox.unpublished.count",
     outboxRepository, r -> r.countByPublishedFalse())
     .register(meterRegistry);
 ```
@@ -421,7 +421,7 @@ Gauge.builder("giano.outbox.unpublished.count",
 
 **AI acceleration:** Medium — metric placement requires understanding the code.
 
-**Done when:** Every Grafana panel shows real data. `giano.outbox.unpublished.count` visible and accurate.
+**Done when:** Every Grafana panel shows real data. `zalord.outbox.unpublished.count` visible and accurate.
 
 ---
 
@@ -454,7 +454,7 @@ PresenceServiceTest:
   - user disconnect → removed from Redis, UserLeftRoomEvent published
 
 ModuleBoundaryTest:
-  - ApplicationModules.of(GianoApplication.class).verify() → no violations
+  - ApplicationModules.of(zalordApplication.class).verify() → no violations
 ```
 
 **Testcontainers setup:**
@@ -595,7 +595,7 @@ Client → Nginx → msg-service
 **Additional Stage 2 metrics:**
 ```java
 // Consumer lag (presence-service, msg-service)
-Gauge.builder("giano.rabbitmq.consumer.lag",
+Gauge.builder("zalord.rabbitmq.consumer.lag",
     rabbitTemplate, t -> getQueueDepth(t))
     .tag("queue", queueName).register(meterRegistry);
 
@@ -605,11 +605,11 @@ Gauge.builder("giano.rabbitmq.consumer.lag",
 // resilience4j.circuitbreaker.state{name}
 
 // Service recovery time (all services)
-Timer.builder("giano.service.recovery.duration")
+Timer.builder("zalord.service.recovery.duration")
     .register(meterRegistry);
 
 // Inter-service call latency (msg-service, room-service)
-Timer.builder("giano.interservice.call.duration")
+Timer.builder("zalord.interservice.call.duration")
     .tag("target", "room-service").register(meterRegistry);
 ```
 

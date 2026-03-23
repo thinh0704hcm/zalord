@@ -1,4 +1,4 @@
-package io.giano.auth.application;
+package io.zalord.auth.application;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -6,14 +6,14 @@ import java.util.Optional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import io.giano.auth.api.AuthResponse;
-import io.giano.auth.api.LoginRequest;
-import io.giano.auth.api.RegisterRequest;
-import io.giano.auth.domain.User;
-import io.giano.auth.infrastructure.UserRepository;
-import io.giano.common.exception.InvalidCredentialsException;
-import io.giano.common.exception.UserAlreadyExistsException;
-import io.giano.common.security.JwtService;
+import io.zalord.auth.api.AuthResponse;
+import io.zalord.auth.api.LoginRequest;
+import io.zalord.auth.api.RegisterRequest;
+import io.zalord.auth.domain.User;
+import io.zalord.auth.infrastructure.UserRepository;
+import io.zalord.common.exception.InvalidCredentialsException;
+import io.zalord.common.exception.UserAlreadyExistsException;
+import io.zalord.common.security.JwtService;
 
 @Service
 public class AuthService {

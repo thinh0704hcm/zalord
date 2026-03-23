@@ -1,4 +1,4 @@
-# giano — Deployment & Testing Plan
+# zalord — Deployment & Testing Plan
 ## Infrastructure, Load Testing, and Comparison Study
 
 > This document covers everything outside the codebase: server setup, deployment topology,
@@ -15,7 +15,7 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │  VPS1 — Vietnam (strongest)                                      │
 │                                                                  │
-│  Stage 1: giano monolith app + PgBouncer                        │
+│  Stage 1: zalord monolith app + PgBouncer                        │
 │  Stage 2: Nginx gateway + msg-service (WS-intensive)            │
 │                                                                  │
 │  Exposed ports: 80 (Stage 2 only), 8080 (Stage 1)              │
@@ -147,7 +147,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'giano-app'
+  - job_name: 'zalord-app'
     static_configs:
       - targets: ['<VPS1_PUBLIC_IP>:8080']
     metrics_path: '/actuator/prometheus'
@@ -210,8 +210,8 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: giano
-      POSTGRES_USER: giano_user
+      POSTGRES_DB: zalord
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -219,7 +219,7 @@ services:
     ports:
       - "10.0.0.2:5432:5432"    # WireGuard IP only — not public
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d giano"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d zalord"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -238,14 +238,14 @@ services:
     restart: unless-stopped
     environment:
       DB_HOST: postgres
-      DB_USER: giano_user
+      DB_USER: zalord_user
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: giano
+      DB_NAME: zalord
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 25
       AUTH_TYPE: scram-sha-256
-      AUTH_USER: giano_user
+      AUTH_USER: zalord_user
       AUTH_QUERY: "SELECT usename, passwd FROM pg_shadow WHERE usename=$1"
     ports:
       - "10.0.0.2:6432:5432"    # WireGuard IP only
@@ -267,8 +267,8 @@ services:
     image: ${CI_REGISTRY_IMAGE}/backend:${IMAGE_TAG}
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://10.0.0.2:6432/giano
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_URL: jdbc:postgresql://10.0.0.2:6432/zalord
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_DATA_REDIS_HOST: 10.0.0.2
       SPRING_DATA_REDIS_PORT: 6379
@@ -299,7 +299,7 @@ echo "=== Deploying Stage 1 (Monolith) ==="
 # 1. Start infrastructure on VPS2
 echo "[VPS2] Starting infrastructure..."
 ssh deploy@vps2 "
-  cd /opt/giano &&
+  cd /opt/zalord &&
   docker compose -f docker-compose.infra.yml pull &&
   docker compose -f docker-compose.infra.yml up -d &&
   docker compose -f docker-compose.infra.yml ps
@@ -308,14 +308,14 @@ ssh deploy@vps2 "
 # 2. Wait for Postgres to be healthy
 echo "[VPS2] Waiting for Postgres..."
 ssh deploy@vps2 "
-  until docker compose -f /opt/giano/docker-compose.infra.yml exec postgres \
-    pg_isready -U giano_user -d giano; do sleep 2; done
+  until docker compose -f /opt/zalord/docker-compose.infra.yml exec postgres \
+    pg_isready -U zalord_user -d zalord; do sleep 2; done
 "
 
 # 3. Deploy app on VPS1
 echo "[VPS1] Deploying app..."
 ssh deploy@vps1 "
-  cd /opt/giano &&
+  cd /opt/zalord &&
   docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY &&
   docker pull $CI_REGISTRY_IMAGE/backend:latest &&
   docker compose -f docker-compose.stage1.yml up -d
@@ -360,7 +360,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: auth_db
-      POSTGRES_USER: giano_user
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - auth_db_data:/var/lib/postgresql/data
@@ -368,7 +368,7 @@ services:
     ports:
       - "10.0.0.2:5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d auth_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d auth_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -377,7 +377,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: room_db
-      POSTGRES_USER: giano_user
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - room_db_data:/var/lib/postgresql/data
@@ -385,7 +385,7 @@ services:
     ports:
       - "10.0.0.2:5434:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d room_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d room_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -394,7 +394,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: msg_db
-      POSTGRES_USER: giano_user
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - msg_db_data:/var/lib/postgresql/data
@@ -402,7 +402,7 @@ services:
     ports:
       - "10.0.0.2:5435:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d msg_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d msg_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -411,7 +411,7 @@ services:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: giano
+      RABBITMQ_DEFAULT_USER: zalord
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -438,10 +438,10 @@ services:
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth_db
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
@@ -458,10 +458,10 @@ services:
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://room-db:5432/room_db
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       AUTH_SERVICE_URL: http://10.0.0.2:8081
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
@@ -479,7 +479,7 @@ services:
     environment:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       AUTH_SERVICE_URL: http://10.0.0.2:8081
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
@@ -507,10 +507,10 @@ services:
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://10.0.0.2:5435/msg_db
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: 10.0.0.2
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       SPRING_DATA_REDIS_HOST: 10.0.0.2
       SPRING_DATA_REDIS_PORT: 6380
@@ -635,9 +635,9 @@ echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.i
 sudo apt update && sudo apt install k6
 
 # Set target
-export GIANO_BASE_URL="http://<VPS1_PUBLIC_IP>:8080"   # Stage 1
+export zalord_BASE_URL="http://<VPS1_PUBLIC_IP>:8080"   # Stage 1
 # or
-export GIANO_BASE_URL="http://<VPS1_PUBLIC_IP>:80"     # Stage 2
+export zalord_BASE_URL="http://<VPS1_PUBLIC_IP>:80"     # Stage 2
 ```
 
 ---
@@ -653,8 +653,8 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 
-const e2eLatency = new Trend('giano_msg_e2e_latency', true);
-const msgLoss    = new Counter('giano_msg_loss');
+const e2eLatency = new Trend('zalord_msg_e2e_latency', true);
+const msgLoss    = new Counter('zalord_msg_loss');
 
 export const options = {
   scenarios: {
@@ -665,7 +665,7 @@ export const options = {
     }
   },
   thresholds: {
-    'giano_msg_e2e_latency{quantile:0.95}': ['value<300'],
+    'zalord_msg_e2e_latency{quantile:0.95}': ['value<300'],
     'http_req_failed': ['rate<0.01'],
   }
 };
@@ -674,13 +674,13 @@ export function setup() {
   // Create test users and room, return context
   const users = [];
   for (let i = 0; i < 10; i++) {
-    const res = http.post(`${__ENV.GIANO_BASE_URL}/api/auth/signup`, JSON.stringify({
+    const res = http.post(`${__ENV.zalord_BASE_URL}/api/auth/signup`, JSON.stringify({
       email: `user${i}@test.com`, password: 'Test@1234', displayName: `User${i}`
     }), { headers: { 'Content-Type': 'application/json' } });
     users.push(res.json('accessToken'));
   }
   // Create room with user 0
-  const room = http.post(`${__ENV.GIANO_BASE_URL}/api/rooms`, JSON.stringify({
+  const room = http.post(`${__ENV.zalord_BASE_URL}/api/rooms`, JSON.stringify({
     name: 'load-test-room'
   }), { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${users[0]}` }});
   return { users, roomId: room.json('id') };
@@ -691,7 +691,7 @@ export default function(data) {
   const sentAt = Date.now();
 
   const res = ws.connect(
-    `ws://${__ENV.GIANO_BASE_URL.replace('http://', '')}/ws/websocket?token=${token}`,
+    `ws://${__ENV.zalord_BASE_URL.replace('http://', '')}/ws/websocket?token=${token}`,
     {},
     function(socket) {
       socket.on('open', () => {
@@ -930,7 +930,7 @@ Stage 1 specific:
 Stage 2 specific:
   - RabbitMQ queue depth (room.joined, room.left, message.sent queues)
   - RabbitMQ consumer lag
-  - Inter-service HTTP call latency (giano.interservice.call.duration)
+  - Inter-service HTTP call latency (zalord.interservice.call.duration)
   - Circuit breaker state (resilience4j.circuitbreaker.state)
 ```
 
@@ -1037,7 +1037,7 @@ Total RAM (both):   ___ MB      ___ MB
 ### Report Structure
 
 ```markdown
-# giano Architecture Comparison Report
+# zalord Architecture Comparison Report
 
 ## Methodology
 - Hardware: VPS1 [spec], VPS2 [spec], VPS3 [spec]

@@ -1,4 +1,4 @@
-package io.giano.common.exception;
+package io.zalord.common.exception;
 
 public class UserAlreadyExistsException extends RuntimeException {
     public UserAlreadyExistsException(String message) {

@@ -1,4 +1,4 @@
-package io.giano.common.security;
+package io.zalord.common.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

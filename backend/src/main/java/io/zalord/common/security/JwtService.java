@@ -1,4 +1,4 @@
-package io.giano.common.security;
+package io.zalord.common.security;
 
 import java.security.Key;
 import java.time.Instant;
@@ -8,7 +8,7 @@ import java.util.Date;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import io.giano.auth.domain.User;
+import io.zalord.auth.domain.User;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;

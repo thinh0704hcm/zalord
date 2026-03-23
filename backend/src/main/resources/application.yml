@@ -1,7 +1,7 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:6433/giano?sslmode=disable
-    username: giano_user
+    url: jdbc:postgresql://localhost:6433/zalord?sslmode=disable
+    username: zalord_user
     password: ${DB_PASSWORD}
   jpa:
     hibernate:

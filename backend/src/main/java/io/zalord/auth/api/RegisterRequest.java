@@ -1,4 +1,4 @@
-package io.giano.auth.api;
+package io.zalord.auth.api;
 
 import java.time.LocalDate;
 

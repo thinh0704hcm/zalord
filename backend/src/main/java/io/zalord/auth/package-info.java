@@ -6,6 +6,6 @@
  * @version 1.0
  */
 @NullMarked
-package io.giano.auth;
+package io.zalord.auth;
 
 import org.jspecify.annotations.NullMarked;
