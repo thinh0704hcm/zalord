@@ -10,6 +10,7 @@ import io.zalord.auth.api.LoginRequest;
 import io.zalord.auth.api.RegisterRequest;
 import io.zalord.auth.domain.User;
 import io.zalord.auth.infrastructure.UserRepository;
+import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.InvalidCredentialsException;
 import io.zalord.common.exception.UserAlreadyExistsException;
 import io.zalord.common.security.JwtService;
@@ -49,6 +50,8 @@ public class AuthService {
         newUser.setPasswordHash(passwordEncoder.encode(registerRequest.getPassword()));
 
         if (registerRequest.getEmail() != null)
+            if (userRepository.existsByEmail(registerRequest.getEmail()))
+                throw new EmailAlreadyExistsException("Email already exists.");
             newUser.setEmail(registerRequest.getEmail());
 
         if (registerRequest.getBirthDate() != null)
