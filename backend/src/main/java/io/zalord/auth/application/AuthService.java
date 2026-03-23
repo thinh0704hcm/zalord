@@ -1,6 +1,5 @@
 package io.zalord.auth.application;
 
-import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
