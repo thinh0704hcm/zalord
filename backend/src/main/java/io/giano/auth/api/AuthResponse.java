@@ -1,4 +1,4 @@
-package io.giano.auth.application;
+package io.giano.auth.api;
 
 import java.util.UUID;
 

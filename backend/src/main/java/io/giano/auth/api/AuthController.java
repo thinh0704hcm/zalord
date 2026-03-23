@@ -5,7 +5,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import io.giano.auth.application.AuthResponse;
 import io.giano.auth.application.AuthService;
 
 @RestController
@@ -18,7 +17,12 @@ public class AuthController {
     }
     
     @PostMapping("/login")
-    public AuthResponse login(@RequestBody LoginRequest request) {
-        return authService.login(request.getPhoneNumber(), request.getPassword());
+    public AuthResponse login(@RequestBody LoginRequest loginRequest) {
+        return authService.login(loginRequest);
+    }
+
+    @PostMapping("/register")
+    public AuthResponse register(@RequestBody RegisterRequest registerRequest) {
+        return authService.register(registerRequest);
     }
 }
