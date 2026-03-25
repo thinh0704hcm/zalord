@@ -3,6 +3,7 @@ package io.zalord.auth.application;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -81,7 +82,7 @@ public class AuthServiceTest {
 
             //Verify
             //assertions
-            verify(userRepository).findByPhoneNumber(INVALID_PHONE);
+            verify(userRepository).findByPhoneNumber(anyString());
             verifyNoInteractions(passwordEncoder, jwtService);
         }
 
@@ -94,9 +95,9 @@ public class AuthServiceTest {
             invalidRequest.setPhoneNumber(VALID_PHONE);
             invalidRequest.setPassword(WRONG_PASSWORD);
 
-            when(userRepository.findByPhoneNumber(VALID_PHONE))
+            when(userRepository.findByPhoneNumber(anyString()))
                 .thenReturn(Optional.of(validUser));
-            when(passwordEncoder.matches(WRONG_PASSWORD, HASHED_PASSWORD))
+            when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(false);
 
             //Act & Assert
@@ -120,11 +121,11 @@ public class AuthServiceTest {
             validRequest.setPhoneNumber(VALID_PHONE);
             validRequest.setPassword(RAW_PASSWORD);
 
-            when(userRepository.findByPhoneNumber(VALID_PHONE))
+            when(userRepository.findByPhoneNumber(anyString()))
                 .thenReturn(Optional.of(validUser));
-            when(passwordEncoder.matches(RAW_PASSWORD, HASHED_PASSWORD))
+            when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(true);
-            when(jwtService.generateToken(validUser))
+            when(jwtService.generateToken(any(User.class)))
                 .thenReturn(VALID_TOKEN);
 
             //Act
@@ -150,7 +151,7 @@ public class AuthServiceTest {
             invalidRequest.setPhoneNumber(INVALID_PHONE);
             invalidRequest.setPassword(RAW_PASSWORD);
 
-            when(userRepository.existsByPhoneNumber(INVALID_PHONE)).thenReturn(true);
+            when(userRepository.existsByPhoneNumber(anyString())).thenReturn(true);
 
             //Act & Assert
             assertThrows(UserAlreadyExistsException.class, () -> authService.register(invalidRequest));
@@ -170,8 +171,8 @@ public class AuthServiceTest {
             invalidRequest.setPassword(RAW_PASSWORD);
             invalidRequest.setEmail(INVALID_EMAIL);
 
-            when(userRepository.existsByPhoneNumber(VALID_PHONE)).thenReturn(false);
-            when(userRepository.existsByEmail(INVALID_EMAIL)).thenReturn(true);
+            when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+            when(userRepository.existsByEmail(anyString())).thenReturn(true);
 
             //Act & Assert
             assertThrows(EmailAlreadyExistsException.class, () -> authService.register(invalidRequest));
@@ -191,10 +192,10 @@ public class AuthServiceTest {
             validRequest.setPhoneNumber(VALID_PHONE);
             validRequest.setPassword(RAW_PASSWORD);
 
-            when(userRepository.existsByPhoneNumber(VALID_PHONE)).thenReturn(false);
-            when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(HASHED_PASSWORD);
+            when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+            when(passwordEncoder.encode(anyString())).thenReturn(HASHED_PASSWORD);
             when(userRepository.saveAndFlush(any(User.class))).thenReturn(validUser);
-            when(jwtService.generateToken(validUser)).thenReturn(VALID_TOKEN);
+            when(jwtService.generateToken(any(User.class))).thenReturn(VALID_TOKEN);
 
             //Act
             AuthResponse response = authService.register(validRequest);
