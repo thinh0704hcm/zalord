@@ -1,4 +1,4 @@
-package io.zalord.auth.api;
+package io.zalord.auth.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

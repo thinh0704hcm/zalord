@@ -1,10 +1,13 @@
-package io.zalord.auth.api;
+package io.zalord.auth.api.controller;
 
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.zalord.auth.api.dto.AuthResponse;
+import io.zalord.auth.api.dto.LoginRequest;
+import io.zalord.auth.api.dto.RegisterRequest;
 import io.zalord.auth.application.AuthService;
 import jakarta.validation.Valid;
 

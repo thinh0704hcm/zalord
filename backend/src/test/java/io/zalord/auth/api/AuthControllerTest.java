@@ -20,6 +20,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import io.zalord.auth.api.controller.AuthController;
+import io.zalord.auth.api.dto.AuthResponse;
+import io.zalord.auth.api.dto.LoginRequest;
+import io.zalord.auth.api.dto.RegisterRequest;
 import io.zalord.auth.application.AuthService;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.UserAlreadyExistsException;

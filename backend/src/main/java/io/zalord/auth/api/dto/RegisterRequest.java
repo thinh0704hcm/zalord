@@ -1,4 +1,4 @@
-package io.zalord.auth.api;
+package io.zalord.auth.api.dto;
 
 import java.time.LocalDate;
 

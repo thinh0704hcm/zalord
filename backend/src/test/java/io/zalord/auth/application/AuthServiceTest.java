@@ -20,10 +20,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import io.zalord.auth.api.AuthResponse;
-import io.zalord.auth.api.LoginRequest;
-import io.zalord.auth.api.RegisterRequest;
-import io.zalord.auth.domain.User;
+import io.zalord.auth.api.dto.AuthResponse;
+import io.zalord.auth.api.dto.LoginRequest;
+import io.zalord.auth.api.dto.RegisterRequest;
+import io.zalord.auth.domain.entities.User;
 import io.zalord.auth.infrastructure.UserRepository;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.InvalidCredentialsException;
