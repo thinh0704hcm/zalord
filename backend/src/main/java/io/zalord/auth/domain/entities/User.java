@@ -1,8 +1,10 @@
-package io.giano.auth.domain;
+package io.zalord.auth.domain.entities;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import org.hibernate.annotations.CreationTimestamp;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,8 +12,12 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
 
 @Entity
+@Getter
+@Setter
 @Table(name="users", schema="auth")
 public class User {
     @Id
@@ -36,7 +42,8 @@ public class User {
     @Column(name = "gender")
     private String gender;
 
-    @Column(name = "created_at", nullable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false, nullable = false)
     private Instant createdAt;
 
     @Column(name = "deleted_at")

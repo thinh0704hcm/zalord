@@ -4,7 +4,7 @@ stages:
   - deploy
 
 variables:
-  POSTGRES_DB: giano_test
+  POSTGRES_DB: zalord_test
   POSTGRES_USER: test
   POSTGRES_PASSWORD: test
   POSTGRES_HOST_AUTH_METHOD: trust
@@ -17,7 +17,7 @@ backend:test:
     - postgres:16-alpine
     - redis:7-alpine
   variables:
-    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/giano_test
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/zalord_test
     SPRING_DATASOURCE_USERNAME: test
     SPRING_DATASOURCE_PASSWORD: test
     SPRING_DATA_REDIS_HOST: redis
@@ -92,6 +92,6 @@ deploy:production:
     - ssh deploy@$SSH_HOST "
         docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY &&
         docker pull $CI_REGISTRY_IMAGE/backend:latest &&
-        cd /opt/giano &&
+        cd /opt/zalord &&
         docker compose -f docker-compose.prod.yml up -d --no-deps app
       "

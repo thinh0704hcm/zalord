@@ -9,8 +9,8 @@ Since your issue is manual fluency, the simplest structure that you can write an
 Use this if you want the lowest confusion:
 
 ```text
-backend/src/main/java/io/giano/
-  GianoApplication.java
+backend/src/main/java/io/zalord/
+  zalordApplication.java
   auth/
     api/
       AuthController.java
@@ -29,8 +29,8 @@ This is enough for Week 1.
 ## Recommended Week 1 Backend Shape
 
 ```text
-backend/src/main/java/io/giano/
-  GianoApplication.java
+backend/src/main/java/io/zalord/
+  zalordApplication.java
   auth/
     api/
       AuthController.java
@@ -57,8 +57,8 @@ Use this only if the simpler structure already makes sense to you.
 If the split above feels too heavy for Week 1, use this:
 
 ```text
-backend/src/main/java/io/giano/
-  GianoApplication.java
+backend/src/main/java/io/zalord/
+  zalordApplication.java
   auth/
     api/
       AuthController.java

@@ -9,9 +9,9 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>io</groupId>
-	<artifactId>giano</artifactId>
-	<name>io.giano</name>
-	<description>Giano real-time messaging backend</description>
+	<artifactId>zalord</artifactId>
+	<name>io.zalord</name>
+	<description>zalord real-time messaging backend</description>
 	<properties>
 		<java.version>21</java.version>
 		<spring-modulith.version>2.0.3</spring-modulith.version>
@@ -63,6 +63,10 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

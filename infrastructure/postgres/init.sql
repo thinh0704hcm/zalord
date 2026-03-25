@@ -1,4 +1,4 @@
-GRANT pg_monitor TO giano_user;
+GRANT pg_monitor TO zalord_user;
 
 CREATE SCHEMA IF NOT EXISTS auth;
 

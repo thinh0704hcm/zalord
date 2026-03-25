@@ -1,4 +1,4 @@
-# giano — Architecture Comparison Study
+# zalord — Architecture Comparison Study
 ## Modular Monolith vs. Microservices (School Project — Trio Team)
 
 > A real-time chat application built twice — first as a modular monolith, then extracted into
@@ -52,7 +52,7 @@ The frontend is functional but minimal. It exists to drive realistic WebSocket l
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  giano (Spring Boot)                 │
+│                  zalord (Spring Boot)                 │
 │                                                      │
 │  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
 │  │   auth   │  │   room   │  │     messaging     │  │
@@ -124,32 +124,32 @@ The monolith's `ApplicationEventPublisher` events map directly to RabbitMQ excha
 
 **Performance:**
 ```
-giano_message_e2e_latency_ms        # Time from WS send to all subscribers received
-giano_ws_connect_duration_ms        # WS handshake + STOMP CONNECT time
-giano_http_request_duration_ms      # Per-endpoint latency histogram (p50/p95/p99)
-giano_messages_per_second           # Throughput counter per room
+zalord_message_e2e_latency_ms        # Time from WS send to all subscribers received
+zalord_ws_connect_duration_ms        # WS handshake + STOMP CONNECT time
+zalord_http_request_duration_ms      # Per-endpoint latency histogram (p50/p95/p99)
+zalord_messages_per_second           # Throughput counter per room
 ```
 
 **Operational:**
 ```
-giano_db_query_duration_ms          # Per-query timing
-giano_event_publish_duration_ms     # Time to publish inter-module/service event
-giano_event_consume_lag_ms          # Stage 2 only: RabbitMQ consumer lag
+zalord_db_query_duration_ms          # Per-query timing
+zalord_event_publish_duration_ms     # Time to publish inter-module/service event
+zalord_event_consume_lag_ms          # Stage 2 only: RabbitMQ consumer lag
 ```
 
 **Resilience:**
 ```
-giano_circuit_open_total            # Stage 2 only: circuit breaker open events
-giano_message_loss_total            # Messages published but never confirmed received
-giano_reconnect_duration_ms         # Client reconnect time after disconnect
-giano_service_recovery_ms           # Stage 2 only: time from service restart to healthy
+zalord_circuit_open_total            # Stage 2 only: circuit breaker open events
+zalord_message_loss_total            # Messages published but never confirmed received
+zalord_reconnect_duration_ms         # Client reconnect time after disconnect
+zalord_service_recovery_ms           # Stage 2 only: time from service restart to healthy
 ```
 
 ### Prometheus scrape config (both stages)
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'giano'
+  - job_name: 'zalord'
     static_configs:
       - targets:
           # Stage 1: single app
@@ -178,7 +178,7 @@ export const options = {
     }
   },
   thresholds: {
-    'giano_message_e2e_latency_ms{quantile:"0.95"}': ['value<200'],
+    'zalord_message_e2e_latency_ms{quantile:"0.95"}': ['value<200'],
     'http_req_failed': ['rate<0.01'],
   }
 };
@@ -227,8 +227,8 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: giano
-      POSTGRES_USER: giano_user
+      POSTGRES_DB: zalord
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -236,7 +236,7 @@ services:
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d giano"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d zalord"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -255,14 +255,14 @@ services:
     restart: unless-stopped
     environment:
       DB_HOST: postgres
-      DB_USER: giano_user
+      DB_USER: zalord_user
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: giano
+      DB_NAME: zalord
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 25
       AUTH_TYPE: scram-sha-256
-      AUTH_USER: giano_user
+      AUTH_USER: zalord_user
       AUTH_QUERY: "SELECT usename, passwd FROM pg_shadow WHERE usename=$1"
     ports:
       - "6433:5432"
@@ -274,8 +274,8 @@ services:
     build: ./backend
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:5432/giano
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:5432/zalord
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
@@ -435,13 +435,13 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: auth_db
-      POSTGRES_USER: giano_user
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - auth_db_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/auth-init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d auth_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d auth_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -450,13 +450,13 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: room_db
-      POSTGRES_USER: giano_user
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - room_db_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/room-init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d room_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d room_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -465,13 +465,13 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: msg_db
-      POSTGRES_USER: giano_user
+      POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - msg_db_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/msg-init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U giano_user -d msg_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d msg_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -481,7 +481,7 @@ services:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: giano
+      RABBITMQ_DEFAULT_USER: zalord
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672"
@@ -505,10 +505,10 @@ services:
     build: ./services/auth-service
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth_db
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
@@ -522,10 +522,10 @@ services:
     build: ./services/room-service
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://room-db:5432/room_db
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       AUTH_SERVICE_URL: http://auth-service:8081
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
@@ -539,10 +539,10 @@ services:
     build: ./services/msg-service
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://msg-db:5432/msg_db
-      SPRING_DATASOURCE_USERNAME: giano_user
+      SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       AUTH_SERVICE_URL: http://auth-service:8081
       ROOM_SERVICE_URL: http://room-service:8082
@@ -558,7 +558,7 @@ services:
     environment:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: giano
+      SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       AUTH_SERVICE_URL: http://auth-service:8081
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
@@ -830,7 +830,7 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 | Task | Owner | AI-accelerated? |
 |------|-------|----------------|
 | Mirror all Micrometer metrics on all 4 services (same metric names, same tags) | Backend | High |
-| Add `giano_event_consume_lag_ms` and `giano_service_recovery_ms` (Stage 2-only metrics) | Backend | Medium |
+| Add `zalord_event_consume_lag_ms` and `zalord_service_recovery_ms` (Stage 2-only metrics) | Backend | Medium |
 | Update Prometheus scrape config to Stage 2 targets | DevOps | Low |
 | Verify Grafana dashboard shows all services' panels (no empty panels) | DevOps | Low |
 | Add Resilience4j circuit breaker on `msg-service → room-service` membership check | Backend | Medium |
@@ -892,7 +892,7 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 The final report lives at `comparison/REPORT.md`. Template:
 
 ```markdown
-# giano Architecture Comparison Report
+# zalord Architecture Comparison Report
 
 ## Methodology
 - Hardware: [specs]
@@ -987,7 +987,7 @@ stages:
   - deploy
 
 variables:
-  POSTGRES_DB: giano_test
+  POSTGRES_DB: zalord_test
   POSTGRES_USER: test
   POSTGRES_PASSWORD: test
   POSTGRES_HOST_AUTH_METHOD: trust
@@ -999,7 +999,7 @@ backend:test:
     - postgres:16-alpine
     - redis:7-alpine
   variables:
-    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/giano_test
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres/zalord_test
     SPRING_DATASOURCE_USERNAME: test
     SPRING_DATASOURCE_PASSWORD: test
     SPRING_DATA_REDIS_HOST: redis
@@ -1070,7 +1070,7 @@ deploy:production:
     - ssh deploy@$SSH_HOST "
         docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY &&
         docker pull $CI_REGISTRY_IMAGE/backend:latest &&
-        cd /opt/giano &&
+        cd /opt/zalord &&
         docker compose -f docker-compose.prod.yml up -d --no-deps app
       "
 ```
@@ -1092,14 +1092,14 @@ deploy:production:
 ## Repository Structure
 
 ```
-giano/
+zalord/
 ├── backend/                        # Stage 1 — modular monolith
-│   └── src/main/java/io/giano/
+│   └── src/main/java/io/zalord/
 │       ├── auth/
 │       ├── room/
 │       ├── messaging/
 │       ├── presence/
-│       └── GianoApplication.java
+│       └── zalordApplication.java
 ├── services/                       # Stage 2 — microservices
 │   ├── common/                     # Shared event DTOs
 │   ├── auth-service/

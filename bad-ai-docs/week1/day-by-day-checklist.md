@@ -13,8 +13,8 @@ Goal: the app boots, and you can explain the request path from memory.
 - [ ] run `./mvnw spring-boot:run` from `backend/`
 - [ ] app starts without errors
 - [ ] open `pom.xml` and identify: Spring Boot starter web, Spring Data JPA, security, database driver
-- [ ] read `GianoApplication.java` — one line on what it does
-- [ ] confirm root package is `io.giano`
+- [ ] read `zalordApplication.java` — one line on what it does
+- [ ] confirm root package is `io.zalord`
 - [ ] read one small Spring Boot `@RestController` example from official docs or Baeldung
 - [ ] close the example and write one sentence each on: controller, service, repository, entity
 - [ ] write the request path from memory: HTTP → controller → service → repository → database
