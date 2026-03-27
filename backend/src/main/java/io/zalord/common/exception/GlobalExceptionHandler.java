@@ -44,6 +44,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    @ExceptionHandler ({UnauthorizedException.class})
+    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException e) {
+        ErrorResponse body = ErrorResponse.builder()
+            .error("User is unauthorized to perform action:" + e.getMessage())
+            .code("UNAUTHORIZED")
+            .timestamp(Instant.now())
+            .build();
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
+
+    @ExceptionHandler ({ChatNotFoundException.class})
+    public ResponseEntity<ErrorResponse> handleChatNotFound(ChatNotFoundException e) {
+        ErrorResponse body = ErrorResponse.builder()
+            .error("Chat not found")
+            .code("CHAT_NOT_FOUND")
+            .timestamp(Instant.now())
+            .build();
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
     @ExceptionHandler ({MethodArgumentNotValidException.class})
     public ResponseEntity<ErrorResponse> handleValidationFailure(MethodArgumentNotValidException e) {
         Map<String, String> fields = e.getBindingResult()

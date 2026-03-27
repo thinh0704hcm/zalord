@@ -33,8 +33,8 @@ public class Chat {
     @Enumerated(EnumType.STRING)
     private ChatType chatType;
 
-    @Column(name = "last_message_at", nullable = false)
-    private Instant lastMessageAt;
+    @Column(name = "last_activity_at", nullable = false)
+    private Instant lastActivityAt;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)

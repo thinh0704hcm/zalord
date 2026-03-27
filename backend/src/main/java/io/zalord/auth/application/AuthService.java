@@ -30,7 +30,7 @@ public class AuthService {
     }
 
     public AuthResponse login (LoginRequest loginRequest) {
-        Optional<User> storedUser = userRepository.findByPhoneNumber(loginRequest.getPhoneNumber());
+        Optional<User> storedUser = userRepository.findByPhoneNumberAndDeletedAtIsNull(loginRequest.getPhoneNumber());
         if (storedUser.isEmpty()) {
             throw new InvalidCredentialsException("Invalid credentials.");
         }
@@ -41,7 +41,7 @@ public class AuthService {
     }
 
     public AuthResponse register (RegisterRequest registerRequest) {
-        if (userRepository.existsByPhoneNumber(registerRequest.getPhoneNumber()))
+        if (userRepository.existsByPhoneNumberAndDeletedAtIsNull(registerRequest.getPhoneNumber()))
             throw new UserAlreadyExistsException("Phone number is already registered.");
 
         User newUser = new User();
@@ -50,7 +50,7 @@ public class AuthService {
         newUser.setPasswordHash(passwordEncoder.encode(registerRequest.getPassword()));
 
         if (registerRequest.getEmail() != null)
-            if (userRepository.existsByEmail(registerRequest.getEmail()))
+            if (userRepository.existsByEmailAndDeletedAtIsNull(registerRequest.getEmail()))
                 throw new EmailAlreadyExistsException("Email already exists.");
             newUser.setEmail(registerRequest.getEmail());
 
