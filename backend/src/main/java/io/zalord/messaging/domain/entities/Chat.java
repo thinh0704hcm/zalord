@@ -4,6 +4,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.annotations.SoftDelete;
 
 import io.zalord.messaging.domain.enums.ChatType;
 import jakarta.persistence.Column;
@@ -20,6 +23,8 @@ import lombok.Setter;
 @Entity
 @Getter
 @Setter
+@SQLRestriction("deleted_at IS NULL")
+@SQLDelete(sql = "UPDATE messaging.chats SET deleted_at = NOW() WHERE id = ?")
 @Table(name = "chats", schema = "messaging")
 public class Chat {
     @Id

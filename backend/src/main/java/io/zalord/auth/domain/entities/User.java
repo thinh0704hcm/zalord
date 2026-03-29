@@ -5,6 +5,8 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,6 +20,8 @@ import lombok.Setter;
 @Entity
 @Getter
 @Setter
+@SQLRestriction("deleted_at IS NULL")
+@SQLDelete(sql = "UPDATE auth.users SET deleted_at = NOW() WHERE id = ?")
 @Table(name="users", schema="auth")
 public class User {
     @Id

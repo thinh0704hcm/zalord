@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 
 import io.zalord.messaging.domain.enums.ContentType;
@@ -23,6 +25,8 @@ import lombok.Setter;
 @Entity
 @Getter
 @Setter
+@SQLRestriction("deleted_at IS NULL")
+@SQLDelete(sql = "UPDATE messaging.messages SET deleted_at = NOW() WHERE id = ?")
 @Table(name = "messages", schema="messaging")
 public class Message {
     @Id

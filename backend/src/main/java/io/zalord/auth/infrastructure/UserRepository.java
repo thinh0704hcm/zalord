@@ -8,8 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import io.zalord.auth.domain.entities.User;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
-    Optional<User> findByPhoneNumberAndDeletedAtIsNull(String phoneNumber);
-    Optional<User> findByEmailAndDeletedAtIsNull(String email);
-    boolean existsByPhoneNumberAndDeletedAtIsNull(String phoneNumber);
-    boolean existsByEmailAndDeletedAtIsNull(String email);
+    Optional<User> findByPhoneNumber(String phoneNumber);
+    Optional<User> findByEmail(String email);
+    boolean existsByPhoneNumber(String phoneNumber);
+    boolean existsByEmail(String email);
 }

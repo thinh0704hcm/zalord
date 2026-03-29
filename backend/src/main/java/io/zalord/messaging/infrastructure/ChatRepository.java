@@ -14,7 +14,7 @@ import io.zalord.messaging.domain.enums.ChatType;
 
 public interface ChatRepository extends JpaRepository<Chat, UUID> {
 
-    Optional<Chat> findByChatIdAndDeletedAtIsNull (UUID chatId);
+    Optional<Chat> findByChatId (UUID chatId);
 
     @Query("""
         SELECT c FROM Chat c

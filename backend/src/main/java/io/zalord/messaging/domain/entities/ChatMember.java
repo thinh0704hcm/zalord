@@ -3,6 +3,9 @@ package io.zalord.messaging.domain.entities;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+
 import io.zalord.messaging.domain.enums.ChatMemberRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -17,6 +20,8 @@ import lombok.Setter;
 @Entity
 @Getter
 @Setter
+@SQLRestriction("deleted_at IS NULL")
+@SQLDelete(sql = "UPDATE messaging.chat_members SET deleted_at = NOW() WHERE chat_id = ? AND member_id = ?")
 @IdClass(ChatMemberId.class)
 @Table(name = "chat_members", schema = "messaging")
 public class ChatMember {
@@ -29,7 +34,7 @@ public class ChatMember {
     private UUID memberId;
 
     @Column(name = "role", nullable = false)
-    @Enumerated(EnumType.STRING)
+    @Enumerated(EnumType.ORDINAL)
     private ChatMemberRole role;
 
     @Column(name = "deleted_at")
