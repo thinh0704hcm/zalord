@@ -1,12 +1,10 @@
 package io.zalord.messaging.application;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.data.util.Pair;
 import org.springframework.stereotype.Service;
 
 import io.zalord.auth.domain.entities.User;
@@ -47,7 +45,7 @@ public class ChatService {
         newChat.setChatName(request.getChatName());
         newChat.setChatType(request.getChatType());
 
-        // Flush then update LastMessageAt to match chat creation time
+        // Flush then update lastActivityAt to match chat creation time
         chatRepository.saveAndFlush(newChat);
         newChat.setLastActivityAt(newChat.getCreatedAt());
 
@@ -179,7 +177,7 @@ public class ChatService {
     }
 
     private ChatContext getChatContext(User user, UUID chatId) {
-        Chat chat = chatRepository.findByChatId(chatId)
+        Chat chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new ChatNotFoundException("Chat not found."));
 
         ChatMember chatMember = chatMemberRepository.findById(new ChatMemberId(user.getId(), chatId))

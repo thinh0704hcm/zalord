@@ -34,7 +34,7 @@ public class ChatMember {
     private UUID memberId;
 
     @Column(name = "role", nullable = false)
-    @Enumerated(EnumType.ORDINAL)
+    @Enumerated(EnumType.STRING)
     private ChatMemberRole role;
 
     @Column(name = "deleted_at")

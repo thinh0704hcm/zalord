@@ -1,7 +1,6 @@
 package io.zalord.messaging.infrastructure;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.boot.data.autoconfigure.web.DataWebProperties.Pageable;
@@ -13,15 +12,12 @@ import io.zalord.messaging.domain.entities.Chat;
 import io.zalord.messaging.domain.enums.ChatType;
 
 public interface ChatRepository extends JpaRepository<Chat, UUID> {
-
-    Optional<Chat> findByChatId (UUID chatId);
-
     @Query("""
         SELECT c FROM Chat c
         JOIN ChatMember cm on cm.chatId = c.id
         WHERE cm.memberId = :memberId
-            AND c.lastMessageAt < :cursor
-        ORDER BY c.lastMessageAt DESC
+            AND c.lastActivityAt < :cursor
+        ORDER BY c.lastActivityAt DESC
     """)
     Slice<Chat> findChatsBeforeCursor(
         UUID memberId,
@@ -34,8 +30,8 @@ public interface ChatRepository extends JpaRepository<Chat, UUID> {
         JOIN ChatMember cm on cm.chatId = c.id
         WHERE cm.memberId = :memberId
             AND c.chatType = :chatType
-            AND c.lastMessageAt < :cursor
-        ORDER BY c.lastMessageAt DESC
+            AND c.lastActivityAt < :cursor
+        ORDER BY c.lastActivityAt DESC
     """)
     Slice<Chat> findChatsBeforeCursor(
         UUID memberId,
