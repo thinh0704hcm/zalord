@@ -1,18 +1,19 @@
 package io.zalord.messaging.api.dto;
 
-import java.util.UUID;
+import java.time.Instant;
 
 import io.zalord.messaging.domain.enums.ChatType;
-import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
-public class UpdateChatRequest {
-    @NotBlank
-    private UUID chatId;
-    
+@Builder
+@AllArgsConstructor
+public class ChatResponse {
     private String chatName;
     private ChatType chatType;
+    private Instant lastActivityAt;
 }

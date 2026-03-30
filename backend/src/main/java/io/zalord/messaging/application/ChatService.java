@@ -11,6 +11,7 @@ import io.zalord.auth.domain.entities.User;
 import io.zalord.common.exception.ChatNotFoundException;
 import io.zalord.common.exception.MemberNotFound;
 import io.zalord.common.exception.UnauthorizedException;
+import io.zalord.messaging.api.dto.ChatResponse;
 import io.zalord.messaging.api.dto.CreateChatRequest;
 import io.zalord.messaging.api.dto.UpdateChatRequest;
 import io.zalord.messaging.domain.entities.Chat;
@@ -28,58 +29,64 @@ public class ChatService {
 
     private final ChatMemberRepository chatMemberRepository;
 
-    public ChatService(ChatRepository _chatRepository, ChatMemberRepository _chatMemberRepository) {
-        this.chatRepository = _chatRepository;
-        this.chatMemberRepository = _chatMemberRepository;
+    public ChatService(ChatRepository chatRepository, ChatMemberRepository chatMemberRepository) {
+        this.chatRepository = chatRepository;
+        this.chatMemberRepository = chatMemberRepository;
     }
 
     private record ChatContext(Chat chat, ChatMember member) {
     }
 
     @Transactional
-    public Chat createChat(User user, CreateChatRequest request) {
-        // Validation first
+    public ChatResponse createChat(UUID actorId, CreateChatRequest request) {
+        // Validation first (idk why I wrote this, new chat shouldn't have validations
+        // since they are new (duh))
 
         // Logic execution here (assume all information at this point is 100% reliable)
-        Chat newChat = new Chat();
-        newChat.setChatName(request.getChatName());
-        newChat.setChatType(request.getChatType());
+        Chat newChat = Chat.builder()
+                .chatName(request.getChatName())
+                .chatType(request.getChatType())
+                .build();
 
-        // Flush then update lastActivityAt to match chat creation time
+        // Flush since we need chat to exist before adding members
         chatRepository.saveAndFlush(newChat);
-        newChat.setLastActivityAt(newChat.getCreatedAt());
 
         // Following Messenger's approach of assigning all new members to be MEMBER role
         // and require explicit ADMIN assignments.
         List<ChatMember> members = new ArrayList<>();
-        ChatMember owner = new ChatMember();
-        owner.setChatId(newChat.getId());
-        owner.setMemberId(user.getId());
-        owner.setRole(ChatMemberRole.OWNER);
+        ChatMember owner = ChatMember.builder()
+                .chatId(newChat.getId())
+                .memberId(actorId)
+                .role(ChatMemberRole.OWNER)
+                .build();
         members.add(owner);
 
         for (UUID memberId : request.getMemberIds()) {
             if (memberId.equals(owner.getMemberId()))
                 continue;
-            ChatMember newChatMember = new ChatMember();
-            newChatMember.setChatId(newChat.getId());
-            newChatMember.setMemberId(memberId);
-            newChatMember.setRole(ChatMemberRole.MEMBER);
+            ChatMember newChatMember = ChatMember.builder()
+                    .chatId(newChat.getId())
+                    .memberId(memberId)
+                    .role(ChatMemberRole.MEMBER)
+                    .build();
             members.add(newChatMember);
         }
         ;
 
         chatMemberRepository.saveAll(members);
 
-        return newChat;
+        return ChatResponse.builder()
+                .chatName(newChat.getChatName())
+                .chatType(newChat.getChatType())
+                .lastActivityAt(newChat.getLastActivityAt())
+                .build();
     }
 
     @Transactional
-    public Chat updateChat(User user, UpdateChatRequest request) {
-        // Check if the user is currently in the chat and is an admin/owner
-
+    public ChatResponse updateChat(UUID actorId, UpdateChatRequest request) {
+        // Retrieve chat context
         ChatContext ctx = getChatContext(
-                user,
+                actorId,
                 request.getChatId());
         // Validate user's permission
         if (ctx.member().getRole() == ChatMemberRole.MEMBER)
@@ -88,25 +95,31 @@ public class ChatService {
         ctx.chat().setChatName(request.getChatName());
         // more in the future
         chatRepository.save(ctx.chat());
-        return ctx.chat();
+        return ChatResponse.builder()
+                .chatName(ctx.chat().getChatName())
+                .chatType(ctx.chat().getChatType())
+                .lastActivityAt(ctx.chat().getLastActivityAt()).build();
     }
 
-    public void deleteChat(User user, UUID chatId) {
+    @Transactional
+    public void deleteChat(UUID actorId, UUID chatId) {
         // Check if the user is currently in the chat and is an owner
         ChatContext ctx = getChatContext(
-                user,
+                actorId,
                 chatId);
         // Validate user's permission
         if (ctx.member().getRole() != ChatMemberRole.OWNER)
             throw new UnauthorizedException("Delete chat");
 
+        chatMemberRepository.softDeleteByChatId(ctx.chat().getId());
         chatRepository.delete(ctx.chat());
     }
 
-    public void assignChatAdmin(User user, UUID chatId, UUID memberId) {
+    @Transactional
+    public void promoteChatAdmin(UUID actorId, UUID chatId, UUID memberId) {
         // Check if the user is currently in the chat and is an owner
         ChatContext ctx = getChatContext(
-                user,
+                actorId,
                 chatId);
         // Validate user's permission
         if (ctx.member().getRole() != ChatMemberRole.OWNER)
@@ -115,10 +128,25 @@ public class ChatService {
         chatMemberRepository.upsertAsRole(ctx.chat().getId(), memberId, ChatMemberRole.ADMIN.name());
     }
 
-    public void removeChatAdmin(User user, UUID chatId, UUID memberId) {
+    @Transactional
+    public void transferChatOwnership(UUID actorId, UUID chatId, UUID memberId) {
         // Check if the user is currently in the chat and is an owner
         ChatContext ctx = getChatContext(
-                user,
+                actorId,
+                chatId);
+        // Validate user's permission
+        if (ctx.member().getRole() != ChatMemberRole.OWNER)
+            throw new UnauthorizedException("Transfer chat ownership");
+
+        chatMemberRepository.upsertAsRole(ctx.chat().getId(), ctx.member().getMemberId(), ChatMemberRole.ADMIN.name());
+        chatMemberRepository.upsertAsRole(ctx.chat().getId(), memberId, ChatMemberRole.OWNER.name());
+    }
+
+    @Transactional
+    public void demoteChatAdmin(UUID actorId, UUID chatId, UUID memberId) {
+        // Check if the user is currently in the chat and is an owner
+        ChatContext ctx = getChatContext(
+                actorId,
                 chatId);
         if (ctx.member().getRole() != ChatMemberRole.OWNER)
             throw new UnauthorizedException("Remove chat admin");
@@ -126,61 +154,60 @@ public class ChatService {
         chatMemberRepository.upsertAsRole(ctx.chat().getId(), memberId, ChatMemberRole.MEMBER.name());
     }
 
-    public void leaveChat(User user, UUID chatId) {
+    @Transactional
+    public void leaveChat(UUID actorId, UUID chatId) {
         // Check if the user is currently in the chat and is an admin/owner
         ChatContext ctx = getChatContext(
-                user,
+                actorId,
                 chatId);
 
-        if (ctx.chat().getChatType() == ChatType.DIRECT) 
+        if (ctx.chat().getChatType() == ChatType.DIRECT)
             throw new UnauthorizedException("Can't leave direct chat");
 
         ChatMemberRole actorRole = ctx.member().getRole();
         if (actorRole == ChatMemberRole.OWNER) {
             Optional<ChatMember> nextOwner = chatMemberRepository.findSecondMostSeniorMember(ctx.chat().getId());
-            if (nextOwner.isEmpty()) {
+            if (nextOwner.isPresent()) {
+                ChatMember newOwner = nextOwner.get();
+                newOwner.setRole(ChatMemberRole.OWNER);
+                chatMemberRepository.save(newOwner);
+                chatMemberRepository.delete(ctx.member());
+            } else {
+                chatMemberRepository.softDeleteByChatId(chatId);
                 chatRepository.delete(ctx.chat());
-                chatMemberRepository.delete(ctx.member());
-                return;
             }
-            else {
-                nextOwner.get().setRole(ChatMemberRole.OWNER);
-                chatMemberRepository.save(nextOwner.get());
-                chatMemberRepository.delete(ctx.member());
-                return;
-            }
-        }
-        else chatMemberRepository.delete(ctx.member());
+        } else
+            chatMemberRepository.delete(ctx.member());
     }
 
-    public void removeFromChat(User user, UUID chatId, UUID memberId) {
+    @Transactional
+    public void removeFromChat(UUID actorId, UUID chatId, UUID memberId) {
+        if (actorId.equals(memberId))
+            throw new UnauthorizedException("Can't remove own account from chat.");
         // Check if the user is currently in the chat and is an admin/owner
         ChatContext ctx = getChatContext(
-                user,
+                actorId,
                 chatId);
 
-        if (user.getId().equals(memberId))
-            throw new UnauthorizedException("Can't remove own account from chat.");
-
+        ChatMemberRole actorRole = ctx.member().getRole();
+        
+        if (actorRole == ChatMemberRole.MEMBER)
+            throw new UnauthorizedException("Insufficient permissions");
+        
         ChatMember targetMember = chatMemberRepository.findById(new ChatMemberId(ctx.chat().getId(), memberId))
                 .orElseThrow(() -> new MemberNotFound("Member not found in chat"));
 
-        ChatMemberRole actorRole = ctx.member().getRole();
-
         if (actorRole == ChatMemberRole.ADMIN && targetMember.getRole() != ChatMemberRole.MEMBER)
-            throw new UnauthorizedException("Insufficient permissions");
-
-        if (actorRole == ChatMemberRole.MEMBER)
             throw new UnauthorizedException("Insufficient permissions");
 
         chatMemberRepository.delete(targetMember);
     }
 
-    private ChatContext getChatContext(User user, UUID chatId) {
+    private ChatContext getChatContext(UUID actorId, UUID chatId) {
         Chat chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new ChatNotFoundException("Chat not found."));
 
-        ChatMember chatMember = chatMemberRepository.findById(new ChatMemberId(user.getId(), chatId))
+        ChatMember chatMember = chatMemberRepository.findById(new ChatMemberId(chatId, actorId))
                 .orElseThrow(() -> new MemberNotFound("User is not in chat."));
 
         return new ChatContext(chat, chatMember);

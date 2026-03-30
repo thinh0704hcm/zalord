@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -32,6 +33,10 @@ public interface ChatMemberRepository extends JpaRepository<ChatMember, ChatMemb
             OFFSET 1
             """, nativeQuery = true)
     Optional<ChatMember> findSecondMostSeniorMember(@Param("chatId") UUID chatId);
+
+    @Modifying                                                                                                                                 
+    @Query(value = "UPDATE messaging.chat_members SET deleted_at = NOW() WHERE chat_id = :chatId", nativeQuery = true)
+    void softDeleteByChatId(@Param("chatId") UUID chatId);
 
     @Query(value = """
             INSERT INTO messaging.chat_members (chat_id, member_id, role)

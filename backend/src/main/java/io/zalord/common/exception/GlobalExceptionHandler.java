@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
             .code("UNAUTHORIZED")
             .timestamp(Instant.now())
             .build();
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
     @ExceptionHandler ({ChatNotFoundException.class})

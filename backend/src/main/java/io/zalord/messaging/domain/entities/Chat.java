@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import io.zalord.messaging.domain.enums.ChatType;
 import jakarta.persistence.Column;
@@ -16,12 +17,18 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Getter
 @Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @SQLRestriction("deleted_at IS NULL")
 @SQLDelete(sql = "UPDATE messaging.chats SET deleted_at = NOW() WHERE id = ?")
 @Table(name = "chats", schema = "messaging")
@@ -37,6 +44,7 @@ public class Chat {
     @Enumerated(EnumType.STRING)
     private ChatType chatType;
 
+    @UpdateTimestamp
     @Column(name = "last_activity_at", nullable = false)
     private Instant lastActivityAt;
 

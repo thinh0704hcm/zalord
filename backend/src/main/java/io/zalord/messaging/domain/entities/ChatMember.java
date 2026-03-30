@@ -14,12 +14,18 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Getter
 @Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @SQLRestriction("deleted_at IS NULL")
 @SQLDelete(sql = "UPDATE messaging.chat_members SET deleted_at = NOW() WHERE chat_id = ? AND member_id = ?")
 @IdClass(ChatMemberId.class)
