@@ -37,7 +37,7 @@ public class AuthService {
         User user = storedUser.get();
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPasswordHash()))
             throw new InvalidCredentialsException("Invalid credentials.");
-        return new AuthResponse(jwtService.generateToken(user), user.getId(), user.getFullName(), user.getPhoneNumber());
+        return new AuthResponse(jwtService.generateToken(user.getId()), user.getId(), user.getFullName(), user.getPhoneNumber());
     }
 
     public AuthResponse register (RegisterRequest registerRequest) {
@@ -61,6 +61,6 @@ public class AuthService {
             newUser.setGender(registerRequest.getGender());
         
         User user = userRepository.saveAndFlush(newUser);
-        return new AuthResponse(jwtService.generateToken(user),user.getId(), user.getFullName(), user.getPhoneNumber());
+        return new AuthResponse(jwtService.generateToken(user.getId()),user.getId(), user.getFullName(), user.getPhoneNumber());
     }
 }

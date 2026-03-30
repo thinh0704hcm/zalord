@@ -1,17 +1,21 @@
 package io.zalord.common.security;
 
-import java.security.Key;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.UUID;
+
+import javax.crypto.SecretKey;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import io.zalord.auth.domain.entities.User;
 
 @Service
 public class JwtService {
@@ -21,21 +25,41 @@ public class JwtService {
     @Value("${jwt.expiry_minutes}")
     private int expiryMinutes;
 
-    public String generateToken(User user) {
-        return createToken(user);
+    public String generateToken(UUID userId) {
+        return createToken(userId);
     }
 
-    private String createToken(User user) {
+    private String createToken(UUID userId) {
         Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         return Jwts.builder()
-               .subject(user.getId().toString())
-               .issuedAt(Date.from(now))
-               .expiration(Date.from(now.plus(expiryMinutes, ChronoUnit.MINUTES)))
-               .signWith(getSignKey())
-               .compact();
+                .subject(userId.toString())
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(expiryMinutes, ChronoUnit.MINUTES)))
+                .signWith(getSignKey())
+                .compact();
     }
 
-    private Key getSignKey() {
+    public boolean isValidToken(String token) throws MalformedJwtException {
+        try {
+            extractAllClaims(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public UUID extractUserId(String token) {
+        return UUID.fromString(extractAllClaims(token).getSubject());
+    }
+
+    private Claims extractAllClaims(String token) throws JwtException {
+        return Jwts.parser()
+                .verifyWith(getSignKey())
+                .build()
+                .parseSignedClaims(token).getPayload();
+    }
+
+    private SecretKey getSignKey() {
         byte[] keyBytes = Decoders.BASE64.decode(secret);
         return Keys.hmacShaKeyFor(keyBytes);
     }
