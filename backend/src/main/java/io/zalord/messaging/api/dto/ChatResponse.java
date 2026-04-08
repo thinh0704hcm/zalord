@@ -1,6 +1,7 @@
 package io.zalord.messaging.api.dto;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import io.zalord.messaging.domain.enums.ChatType;
 import lombok.AllArgsConstructor;
@@ -13,6 +14,7 @@ import lombok.Setter;
 @Builder
 @AllArgsConstructor
 public class ChatResponse {
+    private UUID id;
     private String chatName;
     private ChatType chatType;
     private Instant lastActivityAt;

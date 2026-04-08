@@ -1,19 +1,16 @@
-package io.zalord.auth.api.dto;
+package io.zalord.auth.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.Setter;
 
-@Getter
-@Setter
-public class LoginRequest {
-    @NotBlank
+public record LoginRequest(
+
     @Pattern(regexp = "\\d{10,}", message = "phoneNumber must contain at least 10 digits")
-    private String phoneNumber;
+    @NotBlank
+    String phoneNumber,
     
     @Size(min = 6)
     @NotBlank
-    private String password;
-}
+    String password
+) {}

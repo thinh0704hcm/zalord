@@ -21,10 +21,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import io.zalord.auth.api.controller.AuthController;
-import io.zalord.auth.api.dto.AuthResponse;
-import io.zalord.auth.api.dto.LoginRequest;
-import io.zalord.auth.api.dto.RegisterRequest;
 import io.zalord.auth.application.AuthService;
+import io.zalord.auth.commands.RegisterCommand;
+import io.zalord.auth.dto.request.LoginRequest;
+import io.zalord.auth.dto.request.RegisterRequest;
+import io.zalord.auth.dto.response.AuthResponse;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.UserAlreadyExistsException;
 import io.zalord.common.security.SecurityConfig;
@@ -68,9 +69,7 @@ public class AuthControllerTest {
         @DisplayName("AUTH-LOGIN-01: Should throw when phone number is invalid")
         public void login_shouldThrow_whenPhoneNumberIsInvalid() throws Exception {
             //Arrange
-            LoginRequest invalidRequest = new LoginRequest();
-            invalidRequest.setPhoneNumber(INVALID_PHONE);
-            invalidRequest.setPassword(RAW_PASSWORD);
+            LoginRequest invalidRequest = new LoginRequest(INVALID_PHONE, RAW_PASSWORD);
 
             mockMvc.perform(post("/api/auth/login")
                         .content(asJsonString(invalidRequest))
@@ -85,9 +84,7 @@ public class AuthControllerTest {
         @DisplayName("AUTH-LOGIN-02: Should throw when password is invalid")
         public void login_shouldThrow_whenPasswordIsInvalid() throws Exception {
             //Arrange
-            LoginRequest invalidRequest = new LoginRequest();
-            invalidRequest.setPhoneNumber(VALID_PHONE);
-            invalidRequest.setPassword(INVALID_PASSWORD);
+            LoginRequest invalidRequest = new LoginRequest(VALID_PHONE, INVALID_PASSWORD);
 
             //Act & Assert
             mockMvc.perform(post("/api/auth/login")
@@ -103,9 +100,7 @@ public class AuthControllerTest {
         @DisplayName("AUTH-LOGIN-03: Should return AuthResponse when credentials are valid")
         public void login_shouldReturnAuthResponse_whenCredentialsAreValid() throws Exception {
             //Arrange
-            LoginRequest validRequest = new LoginRequest();
-            validRequest.setPhoneNumber(VALID_PHONE);
-            validRequest.setPassword(RAW_PASSWORD);
+            LoginRequest validRequest = new LoginRequest(VALID_PHONE, RAW_PASSWORD);
 
             when(authService.login(any(LoginRequest.class))).thenReturn(validAuthResponse);
 
@@ -127,10 +122,7 @@ public class AuthControllerTest {
         @DisplayName("AUTH-REG-01: Should throw when phone number is invalid")
         public void register_shouldThrow_whenPhoneNumberIsInvalid() throws Exception {
             //Arrange
-            RegisterRequest invalidRequest = new RegisterRequest();
-            invalidRequest.setPhoneNumber(INVALID_PHONE);
-            invalidRequest.setPassword(RAW_PASSWORD);
-            invalidRequest.setFullName(VALID_FULL_NAME);
+            RegisterRequest invalidRequest = new RegisterRequest(INVALID_PHONE, RAW_PASSWORD, VALID_FULL_NAME, null, null, null);
 
             //Act & Assert
             mockMvc.perform(post("/api/auth/register")
@@ -147,10 +139,7 @@ public class AuthControllerTest {
     @DisplayName("AUTH-REG-02: Should throw when password is invalid")
     public void register_shouldThrow_whenPasswordIsInvalid() throws Exception {
         //Arrange
-        RegisterRequest invalidRequest = new RegisterRequest();
-        invalidRequest.setPhoneNumber(VALID_PHONE);
-        invalidRequest.setPassword(INVALID_PASSWORD);
-        invalidRequest.setFullName(VALID_FULL_NAME);
+        RegisterRequest invalidRequest = new RegisterRequest(VALID_PHONE, INVALID_PASSWORD, VALID_FULL_NAME, null, null, null);
 
         //Act & Assert
         mockMvc.perform(post("/api/auth/register")
@@ -166,10 +155,7 @@ public class AuthControllerTest {
     @DisplayName("AUTH-REG-03: Should throw when full name is invalid")
     public void register_shouldThrow_whenFullNameIsInvalid() throws Exception {
         //Arrange
-        RegisterRequest invalidRequest = new RegisterRequest();
-        invalidRequest.setPhoneNumber(VALID_PHONE);
-        invalidRequest.setPassword(RAW_PASSWORD);
-        invalidRequest.setFullName(INVALID_FULL_NAME);
+        RegisterRequest invalidRequest = new RegisterRequest(VALID_PHONE, RAW_PASSWORD, INVALID_FULL_NAME, null, null, null);
 
         //Act & Assert
         mockMvc.perform(post("/api/auth/register")
@@ -185,12 +171,9 @@ public class AuthControllerTest {
     @DisplayName("AUTH-REG-04: Should throw when phone number exists")
     public void register_shouldThrow_whenPhoneNumberExists() throws Exception {
         //Arrange
-        RegisterRequest invalidRequest = new RegisterRequest();
-        invalidRequest.setPhoneNumber(DUPLICATE_PHONE);
-        invalidRequest.setPassword(RAW_PASSWORD);
-        invalidRequest.setFullName(VALID_FULL_NAME);
+        RegisterRequest invalidRequest = new RegisterRequest(DUPLICATE_PHONE, RAW_PASSWORD, VALID_FULL_NAME, null, null, null);
 
-        when(authService.register(any(RegisterRequest.class))).thenThrow(UserAlreadyExistsException.class);
+        when(authService.register(any(RegisterCommand.class))).thenThrow(UserAlreadyExistsException.class);
 
         //Act & Assert
         mockMvc.perform(post("/api/auth/register")
@@ -205,13 +188,9 @@ public class AuthControllerTest {
     @DisplayName("AUTH-REG-04: Should throw when phone number exists")
     public void register_shouldThrow_whenEmailExists() throws Exception {
         //Arrange
-        RegisterRequest invalidRequest = new RegisterRequest();
-        invalidRequest.setPhoneNumber(VALID_PHONE);
-        invalidRequest.setPassword(RAW_PASSWORD);
-        invalidRequest.setFullName(VALID_FULL_NAME);
-        invalidRequest.setEmail(DUPLICATE_EMAIL);
+        RegisterRequest invalidRequest = new RegisterRequest(VALID_PHONE, RAW_PASSWORD, VALID_FULL_NAME, DUPLICATE_EMAIL, null, null);
 
-        when(authService.register(any(RegisterRequest.class))).thenThrow(EmailAlreadyExistsException.class);
+        when(authService.register(any(RegisterCommand.class))).thenThrow(EmailAlreadyExistsException.class);
 
         //Act & Assert
         mockMvc.perform(post("/api/auth/register")
@@ -225,12 +204,9 @@ public class AuthControllerTest {
     @Tag("integration-auth-register")
     @DisplayName("AUTH-REG-05: Should return AuthResponse with valid credentials")
     public void register_shouldReturnAuthResponse_withValidCredentials() throws Exception {
-        RegisterRequest validRequest = new RegisterRequest();
-        validRequest.setPhoneNumber(VALID_PHONE);
-        validRequest.setPassword(RAW_PASSWORD);
-        validRequest.setFullName(VALID_FULL_NAME);
+        RegisterRequest validRequest = new RegisterRequest(VALID_PHONE, RAW_PASSWORD, VALID_FULL_NAME, null, null, null);
 
-        when(authService.register(any(RegisterRequest.class))).thenReturn(validAuthResponse);
+        when(authService.register(any(RegisterCommand.class))).thenReturn(validAuthResponse);
 
         mockMvc.perform(post("/api/auth/register")
                     .content(asJsonString(validRequest))

@@ -7,7 +7,6 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
-import io.zalord.auth.domain.entities.User;
 import io.zalord.common.exception.ChatNotFoundException;
 import io.zalord.common.exception.MemberNotFound;
 import io.zalord.common.exception.UnauthorizedException;
@@ -76,6 +75,7 @@ public class ChatService {
         chatMemberRepository.saveAll(members);
 
         return ChatResponse.builder()
+                .id(newChat.getId())
                 .chatName(newChat.getChatName())
                 .chatType(newChat.getChatType())
                 .lastActivityAt(newChat.getLastActivityAt())
@@ -96,6 +96,7 @@ public class ChatService {
         // more in the future
         chatRepository.save(ctx.chat());
         return ChatResponse.builder()
+                .id(ctx.chat().getId())
                 .chatName(ctx.chat().getChatName())
                 .chatType(ctx.chat().getChatType())
                 .lastActivityAt(ctx.chat().getLastActivityAt()).build();

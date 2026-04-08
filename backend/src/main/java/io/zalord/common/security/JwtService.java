@@ -3,6 +3,7 @@ package io.zalord.common.security;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.Map;
 import java.util.UUID;
 
 import javax.crypto.SecretKey;
@@ -25,13 +26,14 @@ public class JwtService {
     @Value("${jwt.expiry_minutes}")
     private int expiryMinutes;
 
-    public String generateToken(UUID userId) {
-        return createToken(userId);
+    public String generateToken(UUID userId, Map<String, Object> claims) {
+        return createToken(userId, claims);
     }
 
-    private String createToken(UUID userId) {
+    private String createToken(UUID userId, Map<String,Object> claims) {
         Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         return Jwts.builder()
+                .claims(claims)
                 .subject(userId.toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(expiryMinutes, ChronoUnit.MINUTES)))
@@ -50,6 +52,10 @@ public class JwtService {
 
     public UUID extractUserId(String token) {
         return UUID.fromString(extractAllClaims(token).getSubject());
+    }
+    
+    public String extractClaim(String token, String key) {
+        return (String) extractAllClaims(token).get(key);
     }
 
     private Claims extractAllClaims(String token) throws JwtException {

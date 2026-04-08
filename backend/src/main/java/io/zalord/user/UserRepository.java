@@ -1,11 +1,9 @@
-package io.zalord.auth.infrastructure;
+package io.zalord.user;
 
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-
-import io.zalord.auth.domain.entities.User;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByPhoneNumber(String phoneNumber);
