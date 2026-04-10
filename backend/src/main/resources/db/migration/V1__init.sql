@@ -2,7 +2,7 @@ GRANT pg_monitor TO zalord_user;
 
 CREATE SCHEMA IF NOT EXISTS "user";
 
-CREATE TABLE user.users (
+CREATE TABLE "user".users (
     id uuid PRIMARY KEY,
     full_name text NOT NULL,
     email varchar(100) UNIQUE,
@@ -17,13 +17,13 @@ CREATE SCHEMA IF NOT EXISTS auth;
 
 CREATE TABLE auth.credentials (
     id uuid PRIMARY KEY,
-    user_id uuid NOT NULL,
-    phone_number varchar(12) UNIQUE,
+    user_id uuid NOT NULL UNIQUE,
+    phone_number varchar(12) NOT NULL UNIQUE,
     email varchar(100) UNIQUE,
     password_hash varchar(255) NOT NULL,
     is_active boolean NOT NULL DEFAULT true,
     last_login timestamp with time zone
-)
+);
 
 CREATE SCHEMA IF NOT EXISTS messaging;
 
@@ -38,8 +38,8 @@ CREATE TABLE messaging.chats (
 
 CREATE TABLE messaging.messages (
     id uuid PRIMARY KEY,
+    chat_id uuid NOT NULL,    -- logically references messaging.chats.id
     sender_id uuid NOT NULL,    -- logically references user.users.id
-    member_id uuid NOT NULL,    -- logically references user.users.id
     content_type text NOT NULL CONSTRAINT check_content_type CHECK (content_type in ('TEXT', 'IMAGE', 'VIDEO', 'FILE')),
     payload jsonb NOT NULL,
     created_at timestamp with time zone NOT NULL,

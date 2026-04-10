@@ -3,7 +3,7 @@
 
 > This document covers everything outside the codebase: server setup, deployment topology,
 > load test design, resilience experiments, and the comparison report methodology.
-> Software implementation is in `DEVELOPMENT_PLAN.md`.
+> Software implementation milestones are in `STAGE_1_PLAN.md`.
 
 ---
 
@@ -25,8 +25,8 @@
 │  VPS2 — Vietnam                                                  │
 │                                                                  │
 │  Stage 1: PostgreSQL + Redis + PgBouncer (infra only)           │
-│  Stage 2: auth-service + room-service + presence-service        │
-│           + auth_db + room_db + msg_db + Redis + RabbitMQ       │
+│  Stage 2: auth-service + messaging-service + presence-service        │
+│           + auth_db + messaging_db + msg_db + Redis + RabbitMQ       │
 │                                                                  │
 │  Exposed ports: internal only (WireGuard)                       │
 └──────────────────────────────────────────────────────────────────┘
@@ -169,7 +169,7 @@ scrape_configs:
       - targets: ['<VPS2_PUBLIC_IP>:8081']
     metrics_path: '/actuator/prometheus'
 
-  - job_name: 'room-service'
+  - job_name: 'messaging-service'
     static_configs:
       - targets: ['<VPS2_PUBLIC_IP>:8082']
     metrics_path: '/actuator/prometheus'
@@ -199,7 +199,7 @@ scrape_configs:
 
 ## Phase D1 — Stage 1 Deployment
 
-**Prerequisite:** `v1.0-monolith` git tag exists. `ApplicationModuleTest` passing in CI.
+**Prerequisite:** `v1.0-monolith` git tag exists. All Stage 1 exit gates in `STAGE_1_PLAN.md` are green.
 
 ### VPS2 — Infrastructure Services
 
@@ -215,7 +215,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # Schema is applied by Flyway on app startup (M1) — no init.sql mount needed
     ports:
       - "10.0.0.2:5432:5432"    # WireGuard IP only — not public
     healthcheck:
@@ -274,7 +274,6 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY_MINUTES: 15
-      JWT_REFRESH_EXPIRY_DAYS: 7
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,prometheus
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
     ports:
@@ -373,19 +372,20 @@ services:
       timeout: 5s
       retries: 5
 
-  room-db:
+  messaging-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: room_db
+      POSTGRES_DB: messaging_db
       POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - room_db_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/room-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - messaging_db_data:
+/var/lib/postgresql/data
+      - ./infrastructure/postgres/messaging-init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "10.0.0.2:5434:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zalord_user -d room_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d messaging_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -453,11 +453,11 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  room-service:
-    image: ${CI_REGISTRY_IMAGE}/room-service:${IMAGE_TAG}
+  messaging-service:
+    image: ${CI_REGISTRY_IMAGE}/messaging-service:${IMAGE_TAG}
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://room-db:5432/room_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://messaging-db:5432/messaging_db
       SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -468,7 +468,7 @@ services:
     ports:
       - "10.0.0.2:8082:8080"
     depends_on:
-      room-db:
+      messaging-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -491,7 +491,8 @@ services:
 
 volumes:
   auth_db_data:
-  room_db_data:
+  messaging_db_data:
+
   msg_db_data:
   rabbitmq_data:
   redis_ms_data:
@@ -540,7 +541,7 @@ events { worker_connections 1024; }
 http {
   # Upstreams — VPS2 services via WireGuard
   upstream auth    { server 10.0.0.2:8081; }
-  upstream room    { server 10.0.0.2:8082; }
+  upstream messaging { server 10.0.0.2:8082; }
   upstream presence { server 10.0.0.2:8084; }
 
   # msg-service on same host (VPS1)
@@ -555,8 +556,8 @@ http {
       proxy_set_header X-Real-IP $remote_addr;
     }
 
-    location /api/rooms/ {
-      proxy_pass http://room/;
+    location /api/chats/ {
+      proxy_pass http://messaging/;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
     }
@@ -604,7 +605,7 @@ Stage 2 operational complexity:
 
 ## Phase T1 — Functional Verification (Both Stages)
 
-**Run the QA script from `DEVELOPMENT_PLAN.md` against each stage before running any load test.**
+**Verify all Stage 1 exit gates in `STAGE_1_PLAN.md` before running any load test.**
 
 This confirms the two systems are functionally equivalent. If they aren't, load test results are meaningless.
 
@@ -671,19 +672,19 @@ export const options = {
 };
 
 export function setup() {
-  // Create test users and room, return context
+  // Create test users and chat, return context
   const users = [];
   for (let i = 0; i < 10; i++) {
-    const res = http.post(`${__ENV.zalord_BASE_URL}/api/auth/signup`, JSON.stringify({
-      email: `user${i}@test.com`, password: 'Test@1234', displayName: `User${i}`
+    const res = http.post(`${__ENV.zalord_BASE_URL}/api/auth/register`, JSON.stringify({
+      phoneNumber: `090000000${i}`, password: 'Test@1234', fullName: `User${i}`
     }), { headers: { 'Content-Type': 'application/json' } });
     users.push(res.json('accessToken'));
   }
-  // Create room with user 0
-  const room = http.post(`${__ENV.zalord_BASE_URL}/api/rooms`, JSON.stringify({
-    name: 'load-test-room'
+  // Create chat with user 0
+  const chat = http.post(`${__ENV.zalord_BASE_URL}/api/chats`, JSON.stringify({
+    chatName: 'load-test-chat', chatType: 'GROUP'
   }), { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${users[0]}` }});
-  return { users, roomId: room.json('id') };
+  return { users, chatId: chat.json('id') };
 }
 
 export default function(data) {
@@ -696,7 +697,7 @@ export default function(data) {
     function(socket) {
       socket.on('open', () => {
         socket.send(JSON.stringify({
-          destination: `/app/room/${data.roomId}/send`,
+          destination: `/app/chat/${data.chatId}/send`,
           body: JSON.stringify({ text: `msg-${Date.now()}` })
         }));
       });
@@ -779,7 +780,7 @@ k6 run --out json=comparison/stage2/scenario-c.json k6/scenarios/resilience.js &
 # Terminal 2: kill only msg-service
 sleep 90
 ssh deploy@vps1 "docker compose -f docker-compose.ms-app.yml stop msg-service"
-# auth-service and room-service on VPS2 remain running
+# auth-service and messaging-service on VPS2 remain running
 
 sleep 30
 ssh deploy@vps1 "docker compose -f docker-compose.ms-app.yml start msg-service"
@@ -812,7 +813,7 @@ Stage 1 - component killed:
   Error rate spike:           ___% at peak
   Time to detect (k6 errors): ___ ms
   Recovery time:              ___ ms (from restart to first success)
-  Auth/room available during outage: NO
+  Auth/chat available during outage: NO
 
 Stage 2 - msg-service killed:
   Affected functionality:     Messaging + presence only
@@ -820,7 +821,7 @@ Stage 2 - msg-service killed:
   Error rate spike:           ___% at peak
   Time to detect (k6 errors): ___ ms
   Recovery time:              ___ ms
-  Auth/room available during outage: YES ← key finding
+  Auth/chat available during outage: YES ← key finding
   Circuit breaker events:     ___
 ```
 
@@ -892,7 +893,7 @@ ssh deploy@vps1 "
   docker compose -f docker-compose.ms-app.yml pull msg-service &&
   docker compose -f docker-compose.ms-app.yml up -d --no-deps msg-service
 "
-# Auth and room requests should continue succeeding during msg-service restart
+# Auth and chat requests should continue succeeding during msg-service restart
 ```
 
 **What to record:**
@@ -905,7 +906,7 @@ Stage 1 deploy:
 Stage 2 deploy (msg-service only):
   msg-service downtime:          ___ seconds
   /api/auth/** during deploy:    available? YES/NO
-  /api/rooms/** during deploy:   available? YES/NO
+  /api/chats/** during deploy:   available? YES/NO
   WS connections dropped:        ___
   Requests failed (total):       ___
 ```
@@ -928,7 +929,7 @@ Stage 1 specific:
   - PgBouncer pool utilization
 
 Stage 2 specific:
-  - RabbitMQ queue depth (room.joined, room.left, message.sent queues)
+  - RabbitMQ queue depth (chat.joined, chat.left, message.sent queues)
   - RabbitMQ consumer lag
   - Inter-service HTTP call latency (zalord.interservice.call.duration)
   - Circuit breaker state (resilience4j.circuitbreaker.state)
@@ -956,7 +957,7 @@ Total RAM (both):   ___ MB      ___ MB
 |--------|----------|---------------|
 | Total backend LOC | | |
 | LOC: auth | | |
-| LOC: room | | |
+| LOC: messaging | | |
 | LOC: messaging | | |
 | LOC: presence | | |
 | Shared library LOC | 0 | |
@@ -1057,7 +1058,7 @@ Total RAM (both):   ___ MB      ___ MB
 
 ### Strongest arguments for microservices (based on this data)
 - Independent deployability: ___ seconds downtime vs ___ seconds
-- Fault isolation: auth/room available during msg-service outage
+- Fault isolation: auth/chat available during msg-service outage
 - [others from data]
 
 ### Strongest arguments against microservices (based on this data)
@@ -1124,7 +1125,7 @@ docker:build:auth-service:
     - docker push $CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA
     - docker tag ... $CI_REGISTRY_IMAGE/auth-service:latest && docker push ...
 
-# Repeat for room-service, msg-service, presence-service
+# Repeat for messaging-service, msg-service, presence-service
 # Change detection per service — only builds what changed
 ```
 
@@ -1151,4 +1152,4 @@ docker:build:auth-service:
 ---
 
 **Document Version:** 1.0
-**Companion document:** `DEVELOPMENT_PLAN.md`
+**Companion document:** `STAGE_1_PLAN.md`

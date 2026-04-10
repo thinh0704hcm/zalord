@@ -133,7 +133,7 @@ public class AuthServiceTest {
             //Act
             AuthResponse authResponse = authService.login(validRequest);
             //Assert
-            assertEquals(VALID_TOKEN, authResponse.accessToken());
+            assertEquals(VALID_TOKEN, authResponse.token());
 
             //Verify
             verify(credentialRepository).findByPhoneNumber(VALID_PHONE);
@@ -196,7 +196,7 @@ public class AuthServiceTest {
             AuthResponse response = authService.register(validCommand);
 
             //Assert
-            assertEquals(response.accessToken(), VALID_TOKEN);
+            assertEquals(response.token(), VALID_TOKEN);
 
             //Verify
             verify(credentialRepository).existsByPhoneNumber(VALID_PHONE);

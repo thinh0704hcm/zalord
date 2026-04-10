@@ -72,6 +72,7 @@ public class AuthService {
         credential.setPhoneNumber(cmd.phoneNumber());
         credential.setEmail(cmd.email());
         credential.setPasswordHash(passwordEncoder.encode(cmd.password()));
+        credential.setActive(true);
         credentialRepository.save(credential);
 
         eventPublisher.publishEvent(new UserRegisteredEvent(

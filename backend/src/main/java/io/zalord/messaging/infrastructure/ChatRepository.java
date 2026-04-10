@@ -3,7 +3,7 @@ package io.zalord.messaging.infrastructure;
 import java.time.Instant;
 import java.util.UUID;
 
-import org.springframework.boot.data.autoconfigure.web.DataWebProperties.Pageable;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

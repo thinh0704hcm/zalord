@@ -4,24 +4,24 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
-import io.zalord.user.User;
-import io.zalord.user.UserRepository;
+import io.zalord.auth.CredentialRepository;
+import io.zalord.auth.model.Credential;
 
 public class CustomUserDetailsService implements UserDetailsService {
-    private final UserRepository userRepository;
+    private final CredentialRepository credentialRepository;
 
-    public CustomUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public CustomUserDetailsService(CredentialRepository credentialRepository) {
+        this.credentialRepository = credentialRepository;
     }
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByPhoneNumber(username)
+        Credential credential = credentialRepository.findByPhoneNumber(username)
             .orElseThrow(() -> new UsernameNotFoundException("User not found :" + username));
 
         return org.springframework.security.core.userdetails.User
-            .withUsername(user.getPhoneNumber())
-            .password(user.getPasswordHash())
+            .withUsername(credential.getPhoneNumber())
+            .password(credential.getPasswordHash())
             .build();
     }
 }

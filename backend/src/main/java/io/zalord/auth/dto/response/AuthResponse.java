@@ -3,8 +3,8 @@ package io.zalord.auth.dto.response;
 import java.util.UUID;
 
 public record AuthResponse (
-    String accessToken,
+    String token,
     UUID userId,
-    String fullName,
-    String phoneNumber
+    String phoneNumber,
+    String email
 ) {}

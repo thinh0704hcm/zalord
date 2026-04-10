@@ -14,7 +14,7 @@ This project exists to answer four concrete questions with measured evidence, no
 
 | # | Question | Measured By |
 |---|----------|-------------|
-| Q1 | How much more complex is the microservices codebase to build and understand? | LOC, coupling metrics, build time, `ApplicationModuleTest` violations |
+| Q1 | How much more complex is the microservices codebase to build and understand? | LOC, coupling metrics, build time, cross-module dependency count |
 | Q2 | How much harder is the microservices system to operate? | Docker Compose service count, deployment steps, config surface area, time-to-first-healthy |
 | Q3 | Does the architecture change observable performance at this scale? | p50/p95/p99 latency, throughput (msg/s), WS connection time under load |
 | Q4 | How do the two architectures fail differently? | Behaviour when one service/module is killed; message loss, error rates, recovery time |
@@ -26,8 +26,8 @@ Both implementations run the same functional application on the same infrastruct
 ## Scope
 
 ### What is built
-- A real-time group chat application (auth, rooms, messaging, presence)
-- Stage 1: modular monolith with Spring Modulith
+- A real-time group chat application (auth, chats, messaging, presence)
+- Stage 1: modular monolith (Spring Boot, module boundaries by convention)
 - Stage 2: four independent microservices extracted from Stage 1
 - Instrumentation layer (Micrometer + Prometheus + Grafana) present in both stages
 - k6 load test suite run identically against both stages
@@ -54,22 +54,24 @@ The frontend is functional but minimal. It exists to drive realistic WebSocket l
 ┌─────────────────────────────────────────────────────┐
 │                  zalord (Spring Boot)                 │
 │                                                      │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
-│  │   auth   │  │   room   │  │     messaging     │  │
-│  └────┬─────┘  └────┬─────┘  └────────┬──────────┘  │
-│       │             │                 │              │
-│       └─────────────┴────── events ───┘              │
-│                                       │              │
-│                              ┌────────┴──────────┐   │
-│                              │     presence      │   │
-│                              └───────────────────┘   │
+│  ┌──────────┐  ┌───────────────────┐  ┌──────────┐  │
+│  │   auth   │  │    messaging      │  │   user   │  │
+│  └────┬─────┘  │ (chats, members,  │  └──────────┘  │
+│       │        │     messages)     │                 │
+│       │        └────────┬──────────┘                 │
+│       └────── events ───┘                            │
+│                         │                            │
+│                ┌────────┴──────────┐                 │
+│                │     presence      │                 │
+│                └───────────────────┘                 │
 └─────────────────────────────────────────────────────┘
          │                          │
     PostgreSQL                    Redis
-   (single DB)               (Pub/Sub + presence)
+   (single DB,              (presence tracking)
+  3 schemas)
 ```
 
-All inter-module communication uses `ApplicationEventPublisher` / `@ApplicationModuleListener`. No direct `@Autowired` cross-module service injection. This is enforced by `ApplicationModuleTest` in CI from Week 1.
+Inter-module communication uses `ApplicationEventPublisher` (Spring's built-in event bus). No direct cross-module service injection — modules communicate via events only. Spring Modulith is not currently a dependency; boundary enforcement is by convention.
 
 ### Stage 2 — Microservices
 
@@ -81,11 +83,11 @@ All inter-module communication uses `ApplicationEventPublisher` / `@ApplicationM
           ┌─────────────────────┼──────────────────────┐
           │                     │                      │
    ┌──────▼──────┐    ┌─────────▼───────┐    ┌────────▼──────┐
-   │ auth-service│    │  room-service   │    │  msg-service  │
+   │ auth-service│    │  chat-service   │    │  msg-service  │
    │  :8081      │    │     :8082       │    │    :8083      │
    └──────┬──────┘    └─────────┬───────┘    └────────┬──────┘
           │                     │                     │
-     auth_db               room_db                msg_db
+     auth_db               chat_db                msg_db
     (Postgres)             (Postgres)            (Postgres)
                                                       │
                                           ┌───────────▼───────────┐
@@ -110,9 +112,10 @@ The monolith's `ApplicationEventPublisher` events map directly to RabbitMQ excha
 | Module (Stage 1) | Service (Stage 2) | Own DB | Listens to (RabbitMQ) | Publishes to (RabbitMQ) |
 |-----------------|-------------------|--------|----------------------|------------------------|
 | `auth` | `auth-service` | `auth_db` | — | `user.registered` |
-| `room` | `room-service` | `room_db` | `user.registered` | `room.joined`, `room.left` |
-| `messaging` | `msg-service` | `msg_db` | `room.joined`, `room.left` | `message.sent` |
-| `presence` | `presence-service` | — (Redis only) | `message.sent`, `room.joined`, `room.left` | — |
+| `messaging` (chat mgmt) | `chat-service` | `chat_db` | `user.registered` | `chat.joined`, `chat.left` |
+| `messaging` (msg handling) | `msg-service` | `msg_db` | `chat.joined`, `chat.left` | `message.sent` |
+| `presence` | `presence-service` | — (Redis only) | `message.sent`, `chat.joined`, `chat.left` | — |
+| `user` | merged into `auth-service` | `auth_db` | `user.registered` | — |
 
 ---
 
@@ -127,7 +130,7 @@ The monolith's `ApplicationEventPublisher` events map directly to RabbitMQ excha
 zalord_message_e2e_latency_ms        # Time from WS send to all subscribers received
 zalord_ws_connect_duration_ms        # WS handshake + STOMP CONNECT time
 zalord_http_request_duration_ms      # Per-endpoint latency histogram (p50/p95/p99)
-zalord_messages_per_second           # Throughput counter per room
+zalord_messages_per_second           # Throughput counter per chat
 ```
 
 **Operational:**
@@ -156,7 +159,7 @@ scrape_configs:
           - 'app:8080'
           # Stage 2: replace with individual services
           # - 'auth-service:8081'
-          # - 'room-service:8082'
+          # - 'chat-service:8082'
           # - 'msg-service:8083'
           # - 'presence-service:8084'
     metrics_path: '/actuator/prometheus'
@@ -211,7 +214,7 @@ export const options = {
 
 | Layer | Choice |
 |-------|--------|
-| Backend | Spring Boot 3.x + Spring Modulith + Java 21 |
+| Backend | Spring Boot 3.x + Java 21 |
 | Real-time | WebSocket + STOMP + Redis Pub/Sub |
 | Database | PostgreSQL 16 via PgBouncer (transaction pool) |
 | Cache / Presence | Redis 7 |
@@ -310,92 +313,100 @@ volumes:
 
 ### Data Model
 
+Three Postgres schemas enforce module ownership at the DB level. No FK constraints cross schema boundaries — cross-schema integrity is by UUID convention, not constraint. This is a deliberate decision that makes Stage 2 schema separation cleaner.
+
 ```sql
--- users
-CREATE TABLE users (
-  id             BIGSERIAL PRIMARY KEY,
-  email          VARCHAR(255) UNIQUE NOT NULL,
-  password_hash  VARCHAR(255) NOT NULL,
-  display_name   VARCHAR(100),
-  avatar_url     TEXT,
-  email_verified BOOLEAN DEFAULT TRUE,  -- stub: auto-verified
-  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  deleted_at     TIMESTAMP NULL
+CREATE SCHEMA IF NOT EXISTS "user";
+
+CREATE TABLE "user".users (
+    id uuid PRIMARY KEY,
+    full_name text NOT NULL,
+    email varchar(100) UNIQUE,
+    phone_number varchar(12) UNIQUE,
+    birth_date DATE,
+    gender varchar(20),
+    created_at timestamp with time zone NOT NULL,
+    deleted_at timestamp with time zone
 );
 
--- rooms
-CREATE TABLE rooms (
-  id          BIGSERIAL PRIMARY KEY,
-  name        VARCHAR(255) NOT NULL,
-  description TEXT,
-  created_by  BIGINT NOT NULL REFERENCES users(id),
-  is_public   BOOLEAN DEFAULT TRUE,
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  deleted_at  TIMESTAMP NULL
+CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE TABLE auth.credentials (
+    id uuid PRIMARY KEY,
+    user_id uuid NOT NULL UNIQUE,     -- mirrors user.users.id, no FK
+    phone_number varchar(12) NOT NULL UNIQUE,
+    email varchar(100) UNIQUE,
+    password_hash varchar(255) NOT NULL,
+    is_active boolean NOT NULL DEFAULT true,
+    last_login timestamp with time zone
 );
 
--- room_members
-CREATE TABLE room_members (
-  id        BIGSERIAL PRIMARY KEY,
-  room_id   BIGINT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-  user_id   BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role      VARCHAR(20) NOT NULL DEFAULT 'member',
-  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(room_id, user_id)
+CREATE SCHEMA IF NOT EXISTS messaging;
+
+CREATE TABLE messaging.chats (
+    id uuid PRIMARY KEY,
+    chat_name text NOT NULL,
+    chat_type text NOT NULL CONSTRAINT check_chat_type
+        CHECK (chat_type in ('DIRECT', 'GROUP', 'COMMUNITY')),
+    last_activity_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    deleted_at timestamp with time zone
 );
 
--- messages
-CREATE TABLE messages (
-  id          BIGSERIAL PRIMARY KEY,
-  room_id     BIGINT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-  user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  text        TEXT NOT NULL,
-  sequence_id BIGINT NOT NULL,
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(room_id, sequence_id)
+CREATE TABLE messaging.messages (
+    id uuid PRIMARY KEY,
+    chat_id uuid NOT NULL,            -- mirrors messaging.chats.id, no FK
+    sender_id uuid NOT NULL,          -- mirrors user.users.id, no FK
+    content_type text NOT NULL CONSTRAINT check_content_type
+        CHECK (content_type in ('TEXT', 'IMAGE', 'VIDEO', 'FILE')),
+    payload jsonb NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    deleted_at timestamp with time zone
 );
 
--- refresh_tokens
-CREATE TABLE refresh_tokens (
-  id         BIGSERIAL PRIMARY KEY,
-  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash VARCHAR(255) NOT NULL UNIQUE,
-  expires_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE INDEX messages_chat_id_idx ON messaging.messages(chat_id, created_at desc);
+
+CREATE TABLE messaging.chat_members (
+    chat_id uuid NOT NULL,
+    member_id uuid NOT NULL,          -- mirrors user.users.id, no FK
+    role text NOT NULL CONSTRAINT check_role
+        CHECK (role in ('MEMBER', 'ADMIN', 'OWNER')),
+    deleted_at timestamp with time zone,
+    PRIMARY KEY(chat_id, member_id)
 );
 
--- Critical indexes
-CREATE INDEX idx_messages_room_seq     ON messages(room_id, sequence_id DESC);
-CREATE INDEX idx_room_members_room     ON room_members(room_id);
-CREATE INDEX idx_room_members_user     ON room_members(user_id);
-CREATE INDEX idx_refresh_tokens_expiry ON refresh_tokens(expires_at);
+CREATE INDEX chat_members_member_id_idx ON messaging.chat_members(member_id);
 ```
+
+**Key decisions:**
+- UUID PKs throughout — no BIGSERIAL; simplifies Stage 2 (no ID coordination between services)
+- Phone-number-based auth, not email
+- `payload jsonb` for messages — supports multiple content types without schema changes
+- No refresh tokens — access tokens only (15 min expiry configured via `jwt.expiry_minutes`)
 
 ### Features (Minimum Viable for Comparison)
 
 All features serve the comparison — nothing more.
 
 **Auth:**
-- Email + password signup (bcrypt, 12 rounds). Auto-verified.
-- JWT login (15 min access, 7 day refresh). Stored in localStorage.
-- Silent refresh on 401. Redirect to login on expired refresh.
-- WebSocket upgrade validated with JWT.
+- Phone number + password registration. JWT access token (15 min). No refresh tokens.
+- WebSocket upgrade validated with JWT passed as query param or `Authorization` header.
 
-**Rooms:**
-- Create room, list public rooms, join, leave.
-- Membership check on every message send.
+**Chats:**
+- Create chat (DIRECT / GROUP / COMMUNITY), update name, delete.
+- Member management: add, remove, promote to ADMIN, transfer OWNER.
+- Membership check enforced on every message send.
 
 **Messaging:**
-- Send via STOMP `/app/room/{roomId}/send`.
-- Persist to DB with per-room `sequence_id` (`UNIQUE(room_id, sequence_id)`).
-- Broadcast via Redis Pub/Sub `room:{roomId}`.
-- Catch-up on reconnect: `GET /api/rooms/{id}/messages?after={seq}&limit=50`.
-- Client-side message queue during disconnect; flush on reconnect.
+- Send via STOMP `/app/chat/{chatId}/send`.
+- Persist to DB before broadcast.
+- Broadcast to `/topic/chats/{chatId}`.
+- Message history: `GET /chats/{chatId}/messages?cursor=&limit=` (cursor-based pagination).
 
 **Presence:**
-- Redis Hash `room:{roomId}:members` — set on WS connect, removed on disconnect.
-- Typing indicator via `/app/room/{roomId}/typing` (debounced 300ms, clear after 2s).
-- System messages on join/leave.
+- Redis Set `presence:chat:{chatId}` — member added on WS connect, removed on disconnect.
+- `GET /chats/{chatId}/presence` returns list of online member UUIDs.
+- Stale entry cleanup after 60 s on unclean disconnect.
 
 **Reconnection:**
 - Exponential backoff (1s → 2s → 4s → max 30s) with ±20% jitter.
@@ -416,7 +427,7 @@ All features serve the comparison — nothing more.
 |-----------|---------|---------|
 | Frontend | React app → `localhost:8080` | React app → `localhost:80` (Nginx gateway) |
 | Auth logic | `auth` module | `auth-service` (:8081) — code copied, not rewritten |
-| Room logic | `room` module | `room-service` (:8082) |
+| Chat management | `messaging` module | `chat-service` (:8082) |
 | Messaging logic | `messaging` module | `msg-service` (:8083) |
 | Presence logic | `presence` module | `presence-service` (:8084) |
 | Inter-module events | `ApplicationEventPublisher` | RabbitMQ exchanges (same payload DTOs) |
@@ -446,17 +457,17 @@ services:
       timeout: 5s
       retries: 5
 
-  room-db:
+  chat-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: room_db
+      POSTGRES_DB: chat_db
       POSTGRES_USER: zalord_user
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - room_db_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/room-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - chat_db_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/chat-init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zalord_user -d room_db"]
+      test: ["CMD-SHELL", "pg_isready -U zalord_user -d chat_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -518,10 +529,10 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  room-service:
-    build: ./services/room-service
+  chat-service:
+    build: ./services/chat-service
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://room-db:5432/room_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://chat-db:5432/chat_db
       SPRING_DATASOURCE_USERNAME: zalord_user
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -530,7 +541,7 @@ services:
       AUTH_SERVICE_URL: http://auth-service:8081
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
     depends_on:
-      room-db:
+      chat-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -545,7 +556,7 @@ services:
       SPRING_RABBITMQ_USERNAME: zalord
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       AUTH_SERVICE_URL: http://auth-service:8081
-      ROOM_SERVICE_URL: http://room-service:8082
+      ROOM_SERVICE_URL: http://chat-service:8082
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: true
     depends_on:
       msg-db:
@@ -577,7 +588,7 @@ services:
       - "80:80"
     depends_on:
       - auth-service
-      - room-service
+      - chat-service
       - msg-service
       - presence-service
 
@@ -600,7 +611,7 @@ services:
 
 volumes:
   auth_db_data:
-  room_db_data:
+  chat_db_data:
   msg_db_data:
   redis_data:
 ```
@@ -612,7 +623,7 @@ volumes:
 events { worker_connections 1024; }
 http {
   upstream auth    { server auth-service:8081; }
-  upstream room    { server room-service:8082; }
+  upstream chats   { server chat-service:8082; }
   upstream msg     { server msg-service:8083; }
   upstream presence { server presence-service:8084; }
 
@@ -620,7 +631,7 @@ http {
     listen 80;
 
     location /api/auth/    { proxy_pass http://auth/; }
-    location /api/rooms/   { proxy_pass http://room/; }
+    location /api/chats/   { proxy_pass http://chats/; }
     location /api/messages/{ proxy_pass http://msg/; }
     location /ws/          {
       proxy_pass http://msg/;
@@ -638,11 +649,11 @@ http {
 **auth-service** owns: `users` table, `refresh_tokens` table, JWT issuance and validation.
 Other services validate tokens by calling `GET /internal/auth/validate` — a lightweight in-process check, not a DB hit on every request.
 
-**room-service** owns: `rooms` table, `room_members` table. Calls `auth-service` for token validation. Publishes `room.joined` and `room.left` to RabbitMQ when membership changes.
+**chat-service** owns: `chats` table, `chat_members` table. Calls `auth-service` for token validation. Publishes `chat.joined` and `chat.left` to RabbitMQ when membership changes.
 
-**msg-service** owns: `messages` table, WebSocket server, STOMP routing. Validates membership by calling `room-service`. Publishes `message.sent` to RabbitMQ after each persisted message.
+**msg-service** owns: `messages` table, WebSocket server, STOMP routing. Validates membership by calling `chat-service`. Publishes `message.sent` to RabbitMQ after each persisted message.
 
-**presence-service** owns: Redis Hash presence state only (no DB). Consumes `room.joined`, `room.left`, `message.sent` from RabbitMQ. Handles typing indicator subscriptions via its own WebSocket endpoint.
+**presence-service** owns: Redis Hash presence state only (no DB). Consumes `chat.joined`, `chat.left`, `message.sent` from RabbitMQ. Handles typing indicator subscriptions via its own WebSocket endpoint.
 
 ---
 
@@ -657,69 +668,67 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 | Verify Docker Compose (Postgres, Redis, PgBouncer) end-to-end | DevOps | No |
 | Write `init.sql` (all tables + indexes) | Backend | High |
 | Spring Boot project with all dependencies declared | Backend | High |
-| Add `ApplicationModuleTest` — must pass CI from this point forward | Backend | Low |
+| Add module boundary ADRs (one per module) — document dependencies explicitly | Backend | Low |
 | Vite + React + Tailwind scaffold, Vite proxy to `:8080` | Frontend | High |
 | GitLab CI: `backend:test`, `frontend:build` stages green | DevOps | Medium |
 | Prometheus + Grafana containers in Compose; `/actuator/health` reachable | DevOps | Medium |
 | Repo structure: `backend/`, `frontend/`, `infrastructure/`, `k6/`, `comparison/` | All | — |
 
-**Done when:** `docker compose up -d` starts all services healthy; `ApplicationModuleTest` passes CI; Vite dev server proxies to Spring Boot successfully.
+**Done when:** `docker compose up -d` starts all services healthy; all Stage 1 exit gates pass; Vite dev server proxies to Spring Boot successfully.
 
 ---
 
-### Week 2 — Auth + Rooms (parallel, AI-heavy)
+### Week 2 — Auth + Chats (parallel, AI-heavy)
 
-**Goal:** Authenticated users can create and join rooms. Both features are CRUD-heavy and compress well with AI assistance.
+**Goal:** Authenticated users can create and join chats. Both features are CRUD-heavy and compress well with AI assistance.
 
 | Task | Owner | AI-accelerated? |
 |------|-------|----------------|
-| Auth module: signup, login, refresh, logout endpoints | Backend | High |
+| Auth module: phone-number signup, login endpoints | Backend | High |
 | JWT filter, bcrypt, `UserRegisteredEvent` published | Backend | High |
-| Room module: CRUD + membership endpoints, `UserJoinedRoomEvent` / `UserLeftRoomEvent` | Backend | High |
-| Axios interceptor (JWT header + silent refresh on 401) | Frontend | High |
-| Login/signup forms, protected route wrapper | Frontend | High |
-| Room list sidebar, create-room modal, join/leave buttons | Frontend | High |
-| Postman collection: auth + room endpoints | All | Medium |
+| Messaging module: CRUD + membership endpoints, role enforcement | Backend | High |
+| Postman collection: auth + chat endpoints | All | Medium |
 
-**Done when:** User A signs up, creates a room; User B signs up, joins that room; both appear in the member list.
+> **Frontend:** Out of scope for Stage 1. See STAGE_1_PLAN.md — "Frontend beyond basic WS connectivity test" is explicitly excluded.
 
----
-
-### Week 3 — Messaging Core
-
-**Goal:** Real-time message delivery working end-to-end.
-
-| Task | Owner | AI-accelerated? |
-|------|-------|----------------|
-| Spring WebSocket + STOMP configuration | Backend | Medium |
-| `@MessageMapping` handlers: `/app/room/{id}/send`, `/app/room/{id}/typing` | Backend | Medium |
-| Message service: validate → persist → publish to Redis Pub/Sub → emit `MessageSentEvent` | Backend | Medium |
-| `sequence_id` generation (DB sequence per room) | Backend | Medium |
-| Catch-up API: `GET /api/rooms/{id}/messages?after={seq}&limit=50` | Backend | High |
-| `websocketService.ts`: StompClient wrapper (connect, subscribe, send, reconnect) | Frontend | Medium |
-| `ChatWindow`: message list, input field, auto-scroll | Frontend | High |
-| Reconnect logic: exponential backoff + jitter, message queue, banner | Frontend | Medium |
-
-**Done when:** Two browser tabs exchange messages in real-time; kill network on one tab; reconnect; catch-up messages appear in correct order.
+**Done when:** User A registers, creates a chat; User B registers, joins that chat; both verified via Postman/curl.
 
 ---
 
-### Week 4 — Presence, Typing, Polish
+### Week 3 — Messaging Core (part 1)
 
-**Goal:** Presence and typing indicators complete. Frontend functionally complete for comparison purposes.
+**Goal:** WebSocket send path and message history working end-to-end, verified via `wscat`.
 
 | Task | Owner | AI-accelerated? |
 |------|-------|----------------|
-| Redis presence: `HSET`/`HDEL` on WS connect/disconnect | Backend | High |
-| Typing indicator: publish/subscribe via Redis Pub/Sub | Backend | High |
-| System messages (join/leave) | Backend | Medium |
+| Spring WebSocket + STOMP configuration; JWT at handshake | Backend | Medium |
+| `@MessageMapping` handlers: `/app/chat/{id}/send` | Backend | Medium |
+| Message service: validate → persist → broadcast | Backend | Medium |
+| Message history: `GET /api/chats/{id}/messages?cursor=&limit=` (cursor-based) | Backend | High |
+| `wscat` verification: two clients in same chat both receive message | All | Low |
+
+> **Frontend UI:** Out of scope. `wscat` is the acceptance tool for M4. See STAGE_1_PLAN.md.
+
+**Done when:** `wscat` transcript shows two clients exchange a message; DB row confirms persistence; non-member curl returns 403.
+
+---
+
+### Week 4 — Presence Module
+
+**Goal:** Online/offline presence visible to chat members; Redis state cleaned up on disconnect.
+
+| Task | Owner | AI-accelerated? |
+|------|-------|----------------|
+| Redis presence: `SADD`/`SREM` on WS connect/disconnect | Backend | High |
+| `ApplicationEventPublisher`: publish online/offline events from WS handlers | Backend | Medium |
+| `GET /chats/{chatId}/presence` — returns list of online member IDs | Backend | High |
 | Heartbeat: server PING every 30s; stale client removal | Backend | Medium |
 | `@ControllerAdvice` exception handler (consistent JSON error body) | Backend | High |
-| Member list UI with online indicators | Frontend | High |
-| Typing indicator UI (debounced, auto-clear) | Frontend | High |
-| Error toasts: 401 → login, 429 → retry notice, 5xx → generic | Frontend | High |
+| `wscat` + `curl` transcript: connect → presence appears → disconnect → presence cleared | All | Low |
 
-**Done when:** QA script (see Testing section) passes end-to-end manually.
+> **Typing indicators, member list UI, error toasts:** Out of scope for Stage 1. See STAGE_1_PLAN.md.
+
+**Done when:** connect/disconnect cycle updates Redis and `GET /presence` reflects it; Redis `SMEMBERS` confirms cleanup within 60s.
 
 ---
 
@@ -732,7 +741,7 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 | JUnit 5: `AuthService`, `RoomService`, `MessageService` unit tests | Backend | High |
 | Testcontainers integration tests (Postgres + Redis) | Backend | Medium |
 | Test edge cases: duplicate sequence_id, invalid JWT, non-member send | Backend | Medium |
-| `ApplicationModuleTest` still passing (regression check) | Backend | Low |
+| Module boundary ADRs updated if new cross-module dependencies introduced | Backend | Low |
 | Add Micrometer metrics: all four metric groups (performance, operational, resilience) | Backend | Medium |
 | Grafana dashboard: provision from JSON, verify all panels populate | DevOps | Medium |
 | k6 Scenario A (baseline, 10 VUs, 5 min) against monolith — save results to `comparison/stage1/` | All | Low |
@@ -757,7 +766,7 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 **Stage 1 baseline numbers to record:**
 ```
 - Total LOC (backend)
-- LOC per module (auth / room / messaging / presence)
+- LOC per module (auth / user / messaging / presence)
 - Build time (./mvnw package, cold cache)
 - docker compose up → all healthy: N seconds
 - Service count in Compose
@@ -790,18 +799,18 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 
 ### Week 8 — Service Extraction: Auth + Room
 
-**Goal:** `auth-service` and `room-service` fully functional against their own DBs.
+**Goal:** `auth-service` and `chat-service` fully functional against their own DBs.
 
 | Task | Owner | AI-accelerated? |
 |------|-------|----------------|
 | `auth-service`: copy auth module logic, wire to `auth_db`, publish `user.registered` to RabbitMQ | Backend | High |
 | `auth-service`: expose `GET /internal/auth/validate` for inter-service JWT checks | Backend | High |
-| `room-service`: copy room module logic, wire to `room_db` | Backend | High |
-| `room-service`: consume `user.registered` from RabbitMQ; publish `room.joined` / `room.left` | Backend | Medium |
-| `room-service`: call `auth-service /internal/auth/validate` instead of local JWT filter | Backend | Medium |
-| Frontend: verify room list and create-room flow through Nginx gateway | Frontend | Low |
+| `chat-service`: extract chat management from `messaging` module, wire to `chat_db` | Backend | High |
+| `chat-service`: consume `user.registered` from RabbitMQ; publish `chat.joined` / `chat.left` | Backend | Medium |
+| `chat-service`: call `auth-service /internal/auth/validate` instead of local JWT filter | Backend | Medium |
+| Frontend: verify chat list and create-chat flow through Nginx gateway | Frontend | Low |
 
-**Done when:** User can sign up (hits `auth-service`), create a room (hits `room-service`), and see it in the list — all through the Nginx gateway.
+**Done when:** User can register (hits `auth-service`), create a chat (hits `chat-service`), and see it in the list — all through the Nginx gateway.
 
 ---
 
@@ -812,10 +821,10 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 | Task | Owner | AI-accelerated? |
 |------|-------|----------------|
 | `msg-service`: copy messaging module, wire to `msg_db` | Backend | High |
-| `msg-service`: validate membership via `room-service` HTTP call before persisting message | Backend | Medium |
+| `msg-service`: validate membership via `chat-service` HTTP call before persisting message | Backend | Medium |
 | `msg-service`: publish `message.sent` to RabbitMQ after persist (replaces Redis Pub/Sub for events) | Backend | Medium |
 | `msg-service`: keep Redis Pub/Sub for WS broadcast within the service (internal fan-out) | Backend | Medium |
-| `presence-service`: consume `room.joined`, `room.left`, `message.sent` from RabbitMQ | Backend | High |
+| `presence-service`: consume `chat.joined`, `chat.left`, `message.sent` from RabbitMQ | Backend | High |
 | `presence-service`: Redis presence hash (identical logic to monolith) | Backend | High |
 | End-to-end test: two browser tabs through Nginx, send/receive messages, verify presence updates | All | Low |
 
@@ -833,8 +842,8 @@ Other services validate tokens by calling `GET /internal/auth/validate` — a li
 | Add `zalord_event_consume_lag_ms` and `zalord_service_recovery_ms` (Stage 2-only metrics) | Backend | Medium |
 | Update Prometheus scrape config to Stage 2 targets | DevOps | Low |
 | Verify Grafana dashboard shows all services' panels (no empty panels) | DevOps | Low |
-| Add Resilience4j circuit breaker on `msg-service → room-service` membership check | Backend | Medium |
-| Add Resilience4j circuit breaker on `room-service → auth-service` token validate | Backend | Medium |
+| Add Resilience4j circuit breaker on `msg-service → chat-service` membership check | Backend | Medium |
+| Add Resilience4j circuit breaker on `chat-service → auth-service` token validate | Backend | Medium |
 | Reconnect + catch-up verified end-to-end in Stage 2 | All | Low |
 
 **Done when:** Grafana shows all four services' metrics; circuit breakers visible in `/actuator/health`.
@@ -907,7 +916,7 @@ The final report lives at `comparison/REPORT.md`. Template:
 |-------------------------------|----------|---------------|-------|
 | Total backend LOC             |          |               |       |
 | LOC: auth                     |          |               |       |
-| LOC: room                     |          |               |       |
+| LOC: messaging                |          |               |       |
 | LOC: messaging                |          |               |       |
 | LOC: presence                 |          |               |       |
 | Build time (cold)             |          |               |       |
@@ -1096,14 +1105,14 @@ zalord/
 ├── backend/                        # Stage 1 — modular monolith
 │   └── src/main/java/io/zalord/
 │       ├── auth/
-│       ├── room/
+│       ├── messaging/
 │       ├── messaging/
 │       ├── presence/
 │       └── zalordApplication.java
 ├── services/                       # Stage 2 — microservices
 │   ├── common/                     # Shared event DTOs
 │   ├── auth-service/
-│   ├── room-service/
+│   ├── chat-service/
 │   ├── msg-service/
 │   └── presence-service/
 ├── frontend/                       # Shared — switches via .env
@@ -1111,7 +1120,7 @@ zalord/
 │   ├── postgres/
 │   │   ├── init.sql                # Stage 1 schema
 │   │   ├── auth-init.sql           # Stage 2 per-service schemas
-│   │   ├── room-init.sql
+│   │   ├── chat-init.sql
 │   │   └── msg-init.sql
 │   ├── nginx/
 │   │   └── gateway.conf
@@ -1142,9 +1151,9 @@ zalord/
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Service extraction reveals cross-module coupling that wasn't visible in the monolith | Medium | High | `ApplicationModuleTest` in Week 1 catches this early. Fix before Week 6 freeze. |
+| Service extraction reveals cross-module coupling that wasn't visible in the monolith | Medium | High | Module boundary ADRs (M5) catch this early. Fix before Stage 1 freeze. |
 | RabbitMQ consumer lag introduces measurable latency in Stage 2 — legitimate finding, not a bug | High | Low | Document as expected architectural trade-off. Worth including in Q3 analysis. |
-| `msg-service → room-service` HTTP call adds p99 latency outliers | Medium | Medium | Circuit breaker (Resilience4j) prevents cascade. Document in Q4 analysis. |
+| `msg-service → chat-service` HTTP call adds p99 latency outliers | Medium | Medium | Circuit breaker (Resilience4j) prevents cascade. Document in Q4 analysis. |
 | Comparison numbers are influenced by Docker networking rather than architecture | Low | Medium | Both stages run on same host same bridge network. Note limitation in report methodology. |
 | Week 3 (WS + Redis) slips and compresses Stage 2 time | Medium | High | Pair-program WS wiring. Working two-tab PoC must exist by end of Week 3. This is the hard deadline. |
 | Stage 1 freeze violated — feature added after Week 6 tag | Low | High | `v1.0-monolith` git tag is the reference. CI blocks merges to `main` that modify `backend/` after tag. |
@@ -1156,7 +1165,7 @@ zalord/
 
 **Stage 1 (complete by end of Week 6):**
 - ✅ Full QA script passes manually
-- ✅ `ApplicationModuleTest` passing in CI continuously
+- ✅ Module boundary ADRs maintained and up-to-date
 - ✅ JUnit suite >80% service-layer coverage
 - ✅ All three k6 scenarios complete with saved JSON output in `comparison/stage1/`
 - ✅ Grafana shows all metric panels populated with real data

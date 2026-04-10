@@ -130,6 +130,14 @@
 			<artifactId>springboot4-dotenv</artifactId>
 			<optional>true</optional>
 		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>
@@ -172,6 +180,23 @@
 								<version>1.6.3</version>
 							</path>
 					</annotationProcessorPaths>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.flywaydb</groupId>
+				<artifactId>flyway-maven-plugin</artifactId>
+				<configuration>
+					<url>jdbc:postgresql://localhost:5433/zalord?sslmode=disable</url>
+					<user>zalord_user</user>
+					<password>${DB_PASSWORD}</password>
+					<schemas>
+						<schema>user</schema>
+						<schema>auth</schema>
+						<schema>messaging</schema>
+					</schemas>
+					<locations>
+						<location>classpath:db/migration</location>
+					</locations>
 				</configuration>
 			</plugin>
 			<plugin>
