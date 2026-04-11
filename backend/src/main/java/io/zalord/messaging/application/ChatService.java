@@ -10,16 +10,16 @@ import org.springframework.stereotype.Service;
 import io.zalord.common.exception.ChatNotFoundException;
 import io.zalord.common.exception.MemberNotFound;
 import io.zalord.common.exception.UnauthorizedException;
-import io.zalord.messaging.api.dto.ChatResponse;
-import io.zalord.messaging.api.dto.CreateChatRequest;
-import io.zalord.messaging.api.dto.UpdateChatRequest;
 import io.zalord.messaging.domain.entities.Chat;
 import io.zalord.messaging.domain.entities.ChatMember;
 import io.zalord.messaging.domain.entities.ChatMemberId;
 import io.zalord.messaging.domain.enums.ChatMemberRole;
 import io.zalord.messaging.domain.enums.ChatType;
-import io.zalord.messaging.infrastructure.ChatMemberRepository;
-import io.zalord.messaging.infrastructure.ChatRepository;
+import io.zalord.messaging.dto.request.CreateChatRequest;
+import io.zalord.messaging.dto.request.UpdateChatRequest;
+import io.zalord.messaging.dto.response.ChatResponse;
+import io.zalord.messaging.repository.ChatMemberRepository;
+import io.zalord.messaging.repository.ChatRepository;
 import jakarta.transaction.Transactional;
 
 @Service

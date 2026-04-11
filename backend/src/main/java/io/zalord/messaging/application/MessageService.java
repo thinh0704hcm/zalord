@@ -8,17 +8,17 @@ import org.springframework.stereotype.Service;
 import io.zalord.common.exception.ChatNotFoundException;
 import io.zalord.common.exception.MemberNotFound;
 import io.zalord.common.exception.UnauthorizedException;
-import io.zalord.messaging.api.dto.SendMessageRequest;
-import io.zalord.messaging.api.dto.MessageResponse;
 import io.zalord.messaging.domain.entities.Chat;
 import io.zalord.messaging.domain.entities.ChatMember;
 import io.zalord.messaging.domain.entities.ChatMemberId;
 import io.zalord.messaging.domain.entities.Message;
 import io.zalord.messaging.domain.enums.ChatMemberRole;
 import io.zalord.messaging.domain.enums.ChatType;
-import io.zalord.messaging.infrastructure.ChatMemberRepository;
-import io.zalord.messaging.infrastructure.ChatRepository;
-import io.zalord.messaging.infrastructure.MessageRepository;
+import io.zalord.messaging.dto.request.SendMessageRequest;
+import io.zalord.messaging.dto.response.MessageResponse;
+import io.zalord.messaging.repository.ChatMemberRepository;
+import io.zalord.messaging.repository.ChatRepository;
+import io.zalord.messaging.repository.MessageRepository;
 
 @Service
 public class MessageService {

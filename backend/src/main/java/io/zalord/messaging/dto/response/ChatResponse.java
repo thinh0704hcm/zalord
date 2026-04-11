@@ -1,4 +1,4 @@
-package io.zalord.messaging.api.dto;
+package io.zalord.messaging.dto.response;
 
 import java.time.Instant;
 import java.util.UUID;

@@ -4,8 +4,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
-import io.zalord.auth.CredentialRepository;
 import io.zalord.auth.model.Credential;
+import io.zalord.auth.repository.CredentialRepository;
 
 public class CustomUserDetailsService implements UserDetailsService {
     private final CredentialRepository credentialRepository;

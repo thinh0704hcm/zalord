@@ -1,4 +1,4 @@
-package io.zalord.auth;
+package io.zalord.auth.repository;
 
 import java.util.Optional;
 import java.util.UUID;

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -18,17 +19,18 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import io.zalord.auth.CredentialRepository;
 import io.zalord.auth.commands.RegisterCommand;
 import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.response.AuthResponse;
 import io.zalord.auth.model.Credential;
+import io.zalord.auth.repository.CredentialRepository;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.InvalidCredentialsException;
 import io.zalord.common.exception.UserAlreadyExistsException;
@@ -37,7 +39,7 @@ import io.zalord.common.security.JwtService;
 @ExtendWith(MockitoExtension.class)
 public class AuthServiceTest {
 
-    private static final UUID VALID_UUID = UUID.fromString("Valid-uuid");
+    private static final UUID VALID_UUID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final String VALID_PHONE = "0987654321";
     private static final String INVALID_PHONE = "0000000000";
     private static final String RAW_PASSWORD = "mySecretPassword";
@@ -127,7 +129,7 @@ public class AuthServiceTest {
                 .thenReturn(Optional.of(validCredential));
             when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(true);
-            when(jwtService.generateToken(any(UUID.class), ArgumentMatchers.<Map<String, Object>>any()))
+            when(jwtService.generateToken(any(UUID.class), any()))
                 .thenReturn(VALID_TOKEN);
 
             //Act
@@ -138,7 +140,7 @@ public class AuthServiceTest {
             //Verify
             verify(credentialRepository).findByPhoneNumber(VALID_PHONE);
             verify(passwordEncoder).matches(RAW_PASSWORD, HASHED_PASSWORD);
-            verify(jwtService).generateToken(validCredential.getUserId(), ArgumentMatchers.<Map<String, Object>>any());
+            verify(jwtService).generateToken(eq(validCredential.getUserId()), ArgumentMatchers.<Map<String, Object>>any());
         }
     }
 
@@ -176,8 +178,7 @@ public class AuthServiceTest {
 
             //Verify
             verify(credentialRepository).existsByEmail(INVALID_EMAIL);
-            verify(passwordEncoder).encode(RAW_PASSWORD);
-            verifyNoInteractions(jwtService);
+            verifyNoInteractions(jwtService, passwordEncoder);
         }
 
         @Test
@@ -186,6 +187,7 @@ public class AuthServiceTest {
         public void register_shouldReturnAuthResponse_whenRegisterSuccess() {
             //Arrange
             RegisterCommand validCommand = new RegisterCommand(VALID_PHONE, RAW_PASSWORD, VALID_FULL_NAME, null, null, null);
+            ArgumentCaptor<Credential> credentialCaptor = ArgumentCaptor.forClass(Credential.class);
 
             when(credentialRepository.existsByPhoneNumber(anyString())).thenReturn(false);
             when(passwordEncoder.encode(anyString())).thenReturn(HASHED_PASSWORD);
@@ -199,9 +201,12 @@ public class AuthServiceTest {
             assertEquals(response.token(), VALID_TOKEN);
 
             //Verify
+            verify(credentialRepository).save(credentialCaptor.capture());
+            UUID capturedId = credentialCaptor.getValue().getUserId();
+            
             verify(credentialRepository).existsByPhoneNumber(VALID_PHONE);
             verify(passwordEncoder).encode(RAW_PASSWORD);
-            verify(jwtService).generateToken(validCredential.getUserId(), ArgumentMatchers.<Map<String, Object>>any());
+            verify(jwtService).generateToken(eq(capturedId), ArgumentMatchers.<Map<String, Object>>any());
         }
     }
 }

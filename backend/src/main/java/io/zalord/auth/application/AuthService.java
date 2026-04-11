@@ -8,11 +8,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import io.zalord.auth.CredentialRepository;
 import io.zalord.auth.commands.RegisterCommand;
 import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.response.AuthResponse;
 import io.zalord.auth.model.Credential;
+import io.zalord.auth.repository.CredentialRepository;
 import io.zalord.common.events.UserRegisteredEvent;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.InvalidCredentialsException;

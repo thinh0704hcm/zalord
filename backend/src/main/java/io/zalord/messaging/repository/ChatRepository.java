@@ -1,4 +1,4 @@
-package io.zalord.messaging.infrastructure;
+package io.zalord.messaging.repository;
 
 import java.time.Instant;
 import java.util.UUID;

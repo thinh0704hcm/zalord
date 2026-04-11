@@ -1,4 +1,4 @@
-package io.zalord.auth.api.controller;
+package io.zalord.auth.api;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
