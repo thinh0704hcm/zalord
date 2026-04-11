@@ -80,12 +80,11 @@ public class ChatService {
 
         chatMemberRepository.saveAll(members);
 
-        return ChatResponse.builder()
-                .id(newChat.getId())
-                .chatName(newChat.getChatName())
-                .chatType(newChat.getChatType())
-                .lastActivityAt(newChat.getLastActivityAt())
-                .build();
+        return new ChatResponse(
+                newChat.getId(),
+                newChat.getChatName(),
+                newChat.getChatType(),
+                newChat.getLastActivityAt());
     }
 
     @Transactional
@@ -101,11 +100,11 @@ public class ChatService {
         ctx.chat().setChatName(cmd.chatName());
         // more in the future
         chatRepository.save(ctx.chat());
-        return ChatResponse.builder()
-                .id(ctx.chat().getId())
-                .chatName(ctx.chat().getChatName())
-                .chatType(ctx.chat().getChatType())
-                .lastActivityAt(ctx.chat().getLastActivityAt()).build();
+        return new ChatResponse(
+                ctx.chat().getId(),
+                ctx.chat().getChatName(),
+                ctx.chat().getChatType(),
+                ctx.chat().getLastActivityAt());
     }
 
     @Transactional
@@ -134,7 +133,7 @@ public class ChatService {
 
         chatMemberRepository.upsertAsRole(ctx.chat().getId(), cmd.memberId(), ChatMemberRole.ADMIN.name());
     }
-    
+
     @Transactional
     public void demoteChatAdmin(DemoteChatAdminCommand cmd) {
         // Check if the user is currently in the chat and is an owner
@@ -159,7 +158,6 @@ public class ChatService {
         chatMemberRepository.upsertAsRole(ctx.chat().getId(), ctx.member().getMemberId(), ChatMemberRole.ADMIN.name());
         chatMemberRepository.upsertAsRole(ctx.chat().getId(), cmd.recipientId(), ChatMemberRole.OWNER.name());
     }
-
 
     @Transactional
     public void leaveChat(LeaveChatCommand cmd) {
@@ -197,10 +195,10 @@ public class ChatService {
                 cmd.chatId());
 
         ChatMemberRole actorRole = ctx.member().getRole();
-        
+
         if (actorRole == ChatMemberRole.MEMBER)
             throw new UnauthorizedException("Insufficient permissions");
-        
+
         ChatMember targetMember = chatMemberRepository.findById(new ChatMemberId(ctx.chat().getId(), cmd.memberId()))
                 .orElseThrow(() -> new MemberNotFound("Member not found in chat"));
 
