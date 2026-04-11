@@ -12,12 +12,11 @@ import io.zalord.common.exception.MemberNotFound;
 import io.zalord.common.exception.UnauthorizedException;
 import io.zalord.messaging.application.commands.CreateChatCommand;
 import io.zalord.messaging.application.commands.DeleteChatCommand;
-import io.zalord.messaging.application.commands.DemoteChatAdminCommand;
 import io.zalord.messaging.application.commands.LeaveChatCommand;
-import io.zalord.messaging.application.commands.PromoteChatAdminCommand;
 import io.zalord.messaging.application.commands.RemoveFromChatCommand;
 import io.zalord.messaging.application.commands.TransferChatOwnershipCommand;
 import io.zalord.messaging.application.commands.UpdateChatCommand;
+import io.zalord.messaging.application.commands.UpdateMemberRoleCommand;
 import io.zalord.messaging.domain.entities.Chat;
 import io.zalord.messaging.domain.entities.ChatMember;
 import io.zalord.messaging.domain.entities.ChatMemberId;
@@ -122,7 +121,7 @@ public class ChatService {
     }
 
     @Transactional
-    public void promoteChatAdmin(PromoteChatAdminCommand cmd) {
+    public void updateMemberRole(UpdateMemberRoleCommand cmd) {
         // Check if the user is currently in the chat and is an owner
         ChatContext ctx = getChatContext(
                 cmd.actorId(),
@@ -131,18 +130,7 @@ public class ChatService {
         if (ctx.member().getRole() != ChatMemberRole.OWNER)
             throw new UnauthorizedException("Assign chat admin");
 
-        chatMemberRepository.upsertAsRole(ctx.chat().getId(), cmd.memberId(), ChatMemberRole.ADMIN.name());
-    }
-
-    @Transactional
-    public void demoteChatAdmin(DemoteChatAdminCommand cmd) {
-        // Check if the user is currently in the chat and is an owner
-        ChatContext ctx = getChatContext(
-                cmd.actorId(),
-                cmd.chatId());
-        if (ctx.member().getRole() != ChatMemberRole.OWNER)
-            throw new UnauthorizedException("Remove chat admin");
-        chatMemberRepository.upsertAsRole(ctx.chat().getId(), cmd.memberId(), ChatMemberRole.MEMBER.name());
+        chatMemberRepository.upsertAsRole(ctx.chat().getId(), cmd.memberId(), cmd.role().toString());
     }
 
     @Transactional
