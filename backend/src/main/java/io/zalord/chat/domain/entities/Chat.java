@@ -1,4 +1,4 @@
-package io.zalord.messaging.domain.entities;
+package io.zalord.chat.domain.entities;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -8,7 +8,7 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import io.zalord.messaging.domain.enums.ChatType;
+import io.zalord.chat.domain.enums.ChatType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

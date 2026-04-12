@@ -1,8 +1,8 @@
-package io.zalord.messaging.application.commands;
+package io.zalord.chat.application.commands;
 
 import java.util.UUID;
 
-import io.zalord.messaging.domain.enums.ChatMemberRole;
+import io.zalord.chat.domain.enums.ChatMemberRole;
 
 public record UpdateMemberRoleCommand(UUID actorId, UUID chatId, UUID memberId, ChatMemberRole role) {
 

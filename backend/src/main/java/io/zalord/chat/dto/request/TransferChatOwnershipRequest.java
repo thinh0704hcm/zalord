@@ -1,4 +1,4 @@
-package io.zalord.messaging.dto.request;
+package io.zalord.chat.dto.request;
 
 import java.util.UUID;
 

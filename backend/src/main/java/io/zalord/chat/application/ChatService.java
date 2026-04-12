@@ -1,4 +1,4 @@
-package io.zalord.messaging.application;
+package io.zalord.chat.application;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7,24 +7,24 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import io.zalord.chat.application.commands.CreateChatCommand;
+import io.zalord.chat.application.commands.DeleteChatCommand;
+import io.zalord.chat.application.commands.LeaveChatCommand;
+import io.zalord.chat.application.commands.RemoveFromChatCommand;
+import io.zalord.chat.application.commands.TransferChatOwnershipCommand;
+import io.zalord.chat.application.commands.UpdateChatCommand;
+import io.zalord.chat.application.commands.UpdateMemberRoleCommand;
+import io.zalord.chat.domain.entities.Chat;
+import io.zalord.chat.domain.entities.ChatMember;
+import io.zalord.chat.domain.entities.ChatMemberId;
+import io.zalord.chat.domain.enums.ChatMemberRole;
+import io.zalord.chat.domain.enums.ChatType;
+import io.zalord.chat.dto.response.ChatResponse;
+import io.zalord.chat.repository.ChatMemberRepository;
+import io.zalord.chat.repository.ChatRepository;
 import io.zalord.common.exception.ChatNotFoundException;
 import io.zalord.common.exception.MemberNotFound;
 import io.zalord.common.exception.UnauthorizedException;
-import io.zalord.messaging.application.commands.CreateChatCommand;
-import io.zalord.messaging.application.commands.DeleteChatCommand;
-import io.zalord.messaging.application.commands.LeaveChatCommand;
-import io.zalord.messaging.application.commands.RemoveFromChatCommand;
-import io.zalord.messaging.application.commands.TransferChatOwnershipCommand;
-import io.zalord.messaging.application.commands.UpdateChatCommand;
-import io.zalord.messaging.application.commands.UpdateMemberRoleCommand;
-import io.zalord.messaging.domain.entities.Chat;
-import io.zalord.messaging.domain.entities.ChatMember;
-import io.zalord.messaging.domain.entities.ChatMemberId;
-import io.zalord.messaging.domain.enums.ChatMemberRole;
-import io.zalord.messaging.domain.enums.ChatType;
-import io.zalord.messaging.dto.response.ChatResponse;
-import io.zalord.messaging.repository.ChatMemberRepository;
-import io.zalord.messaging.repository.ChatRepository;
 import jakarta.transaction.Transactional;
 
 @Service

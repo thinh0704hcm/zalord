@@ -4,22 +4,22 @@ import java.time.Instant;
 
 import org.springframework.stereotype.Service;
 
+import io.zalord.chat.domain.entities.Chat;
+import io.zalord.chat.domain.entities.ChatMember;
+import io.zalord.chat.domain.entities.ChatMemberId;
+import io.zalord.chat.domain.enums.ChatMemberRole;
+import io.zalord.chat.domain.enums.ChatType;
+import io.zalord.chat.repository.ChatMemberRepository;
+import io.zalord.chat.repository.ChatRepository;
 import io.zalord.common.exception.ChatNotFoundException;
 import io.zalord.common.exception.MemberNotFound;
 import io.zalord.common.exception.MessageNotFoundException;
 import io.zalord.common.exception.UnauthorizedException;
 import io.zalord.messaging.application.commands.DeleteMessageCommand;
 import io.zalord.messaging.application.commands.SendMessageCommand;
-import io.zalord.messaging.domain.entities.Chat;
-import io.zalord.messaging.domain.entities.ChatMember;
-import io.zalord.messaging.domain.entities.ChatMemberId;
 import io.zalord.messaging.domain.entities.Message;
-import io.zalord.messaging.domain.enums.ChatMemberRole;
-import io.zalord.messaging.domain.enums.ChatType;
 import io.zalord.messaging.domain.enums.ContentType;
 import io.zalord.messaging.dto.response.MessageResponse;
-import io.zalord.messaging.repository.ChatMemberRepository;
-import io.zalord.messaging.repository.ChatRepository;
 import io.zalord.messaging.repository.MessageRepository;
 import jakarta.transaction.Transactional;
 

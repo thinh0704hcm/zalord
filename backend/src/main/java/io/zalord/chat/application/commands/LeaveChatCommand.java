@@ -1,4 +1,4 @@
-package io.zalord.messaging.application.commands;
+package io.zalord.chat.application.commands;
 
 import java.util.UUID;
 

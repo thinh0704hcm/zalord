@@ -1,4 +1,4 @@
-package io.zalord.messaging.domain.enums;
+package io.zalord.chat.domain.enums;
 
 public enum ChatMemberRole {
     OWNER,

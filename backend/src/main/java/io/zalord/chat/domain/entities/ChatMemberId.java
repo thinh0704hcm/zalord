@@ -1,4 +1,4 @@
-package io.zalord.messaging.domain.entities;
+package io.zalord.chat.domain.entities;
 
 import java.util.Objects;
 import java.util.UUID;

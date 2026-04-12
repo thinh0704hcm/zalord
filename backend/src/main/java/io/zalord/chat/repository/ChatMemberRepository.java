@@ -1,4 +1,4 @@
-package io.zalord.messaging.repository;
+package io.zalord.chat.repository;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -9,9 +9,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import io.zalord.messaging.domain.entities.ChatMember;
-import io.zalord.messaging.domain.entities.ChatMemberId;
-import io.zalord.messaging.domain.enums.ChatMemberRole;
+import io.zalord.chat.domain.entities.ChatMember;
+import io.zalord.chat.domain.entities.ChatMemberId;
+import io.zalord.chat.domain.enums.ChatMemberRole;
 
 public interface ChatMemberRepository extends JpaRepository<ChatMember, ChatMemberId> {
     boolean existsByChatIdAndMemberId(UUID chatId, UUID memberId);

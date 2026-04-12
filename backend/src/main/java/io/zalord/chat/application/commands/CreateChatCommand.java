@@ -1,9 +1,9 @@
-package io.zalord.messaging.application.commands;
+package io.zalord.chat.application.commands;
 
 import java.util.Set;
 import java.util.UUID;
 
-import io.zalord.messaging.domain.enums.ChatType;
+import io.zalord.chat.domain.enums.ChatType;
 
 public record CreateChatCommand(
         UUID actorId,

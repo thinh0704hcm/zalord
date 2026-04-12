@@ -1,4 +1,4 @@
-package io.zalord.messaging.dto.request;
+package io.zalord.chat.dto.request;
 
 import io.zalord.messaging.domain.enums.ContentType;
 import io.zalord.messaging.domain.interfaces.MessagePayload;

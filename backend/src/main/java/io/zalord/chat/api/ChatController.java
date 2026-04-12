@@ -1,4 +1,4 @@
-package io.zalord.messaging.api;
+package io.zalord.chat.api;
 
 import java.util.UUID;
 
@@ -13,20 +13,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.zalord.chat.application.ChatService;
+import io.zalord.chat.application.commands.CreateChatCommand;
+import io.zalord.chat.application.commands.DeleteChatCommand;
+import io.zalord.chat.application.commands.LeaveChatCommand;
+import io.zalord.chat.application.commands.RemoveFromChatCommand;
+import io.zalord.chat.application.commands.TransferChatOwnershipCommand;
+import io.zalord.chat.application.commands.UpdateChatCommand;
+import io.zalord.chat.application.commands.UpdateMemberRoleCommand;
+import io.zalord.chat.dto.request.CreateChatRequest;
+import io.zalord.chat.dto.request.TransferChatOwnershipRequest;
+import io.zalord.chat.dto.request.UpdateChatRequest;
+import io.zalord.chat.dto.request.UpdateMemberRoleRequest;
+import io.zalord.chat.dto.response.ChatResponse;
 import io.zalord.common.security.AuthenticatedUser;
-import io.zalord.messaging.application.ChatService;
-import io.zalord.messaging.application.commands.CreateChatCommand;
-import io.zalord.messaging.application.commands.DeleteChatCommand;
-import io.zalord.messaging.application.commands.LeaveChatCommand;
-import io.zalord.messaging.application.commands.RemoveFromChatCommand;
-import io.zalord.messaging.application.commands.TransferChatOwnershipCommand;
-import io.zalord.messaging.application.commands.UpdateChatCommand;
-import io.zalord.messaging.application.commands.UpdateMemberRoleCommand;
-import io.zalord.messaging.dto.request.CreateChatRequest;
-import io.zalord.messaging.dto.request.TransferChatOwnershipRequest;
-import io.zalord.messaging.dto.request.UpdateChatRequest;
-import io.zalord.messaging.dto.request.UpdateMemberRoleRequest;
-import io.zalord.messaging.dto.response.ChatResponse;
 import jakarta.validation.Valid;
 
 @RestController
