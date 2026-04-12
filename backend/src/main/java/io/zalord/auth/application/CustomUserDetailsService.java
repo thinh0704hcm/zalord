@@ -1,4 +1,4 @@
-package io.zalord.common.security;
+package io.zalord.auth.application;
 
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

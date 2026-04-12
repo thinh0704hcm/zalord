@@ -74,7 +74,7 @@ public class MessageService {
         public MessageResponse deleteMessage(DeleteMessageCommand cmd) {
                 Message message = messageRepository.findById(cmd.messageId())
                                 .orElseThrow(() -> new MessageNotFoundException("Message not found"));
-                if (cmd.actorId() != message.getSenderId())
+                if (!cmd.actorId().equals( message.getSenderId()))
                         throw new UnauthorizedException("Delete message");
                 message.setContentType(ContentType.DELETED);
                 message.setPayload(null);
