@@ -40,11 +40,14 @@ A production-grade chat system built with microservices architecture, designed t
 
 ## Documents
 
+Each document covers both Stage 1 (modular monolith) and Stage 2 (microservices) where applicable.
+
 | File | Description |
 |---|---|
-| [architecture.md](./architecture.md) | Service map, tech stack, communication patterns |
-| [services.md](./services.md) | Per-service responsibility and API surface |
-| [database.md](./database.md) | PostgreSQL, ScyllaDB schemas and Redis key design |
+| [architecture.md](./architecture.md) | Stage 1 + Stage 2 architecture, service map, tech stack, communication patterns |
+| [services.md](./services.md) | Stage 1 modules + Stage 2 per-service responsibility and API surface |
+| [database.md](./database.md) | Stage 1 + Stage 2 schemas — PostgreSQL, ScyllaDB, Redis key design |
 | [patterns.md](./patterns.md) | Design patterns: Outbox, Redis Sequence, Presigned URL |
-| [infrastructure.md](./infrastructure.md) | Deployment, resource allocation, Docker Compose layout |
-| [roadmap.md](./roadmap.md) | 3-month sprint plan and team responsibilities |
+| [infrastructure.md](./infrastructure.md) | Stage 2 deployment, resource allocation, Docker Compose layout |
+| [roadmap.md](./roadmap.md) | Stage 1 milestones + exit gate + Stage 2 sprint plan |
+| [development.md](./development.md) | Local setup, conventions, evidence collection, Stage 1 exit gate checklist |

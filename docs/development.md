@@ -1,7 +1,8 @@
-# Zalord — Development Guide
+# Development Guide
 
-> Covers: local setup, running the app, running tests, working conventions.
-> For architecture, see [DESIGN.md](DESIGN.md). For milestone plans, see [bad-ai-docs/STAGE_1_PLAN.md](bad-ai-docs/STAGE_1_PLAN.md).
+> Local setup, running the app, testing, conventions, and evidence collection.
+> For architecture, see [architecture.md](architecture.md).
+> For milestone plans, see [roadmap.md](roadmap.md).
 
 ---
 
@@ -148,45 +149,68 @@ Prometheus scrape endpoint: `http://localhost:8080/actuator/prometheus`
 backend/src/main/java/io/zalord/
 ├── ZalordApplication.java
 ├── auth/                        # phone-number auth, JWT issuance
-│   ├── CredentialRepository.java
-│   ├── api/controller/
+│   ├── api/AuthController.java
 │   ├── application/AuthService.java
-│   ├── commands/
-│   ├── dto/
-│   └── model/Credential.java
+│   ├── application/CustomUserDetailsService.java   # owns its own security principal
+│   ├── commands/RegisterCommand.java
+│   ├── dto/request/, dto/response/
+│   ├── model/Credential.java
+│   └── repository/CredentialRepository.java
 ├── user/                        # user profile
 │   ├── User.java
 │   └── UserRepository.java
-├── messaging/                   # chats, members, messages
-│   ├── api/dto/
-│   ├── application/
-│   │   ├── ChatService.java
-│   │   └── MessageService.java
-│   ├── domain/
-│   │   ├── entities/
-│   │   └── enums/
-│   └── infrastructure/          # Spring Data repositories
-└── common/                      # shared: security, events, exceptions
+├── chat/                        # chat management: CRUD, members, roles
+│   ├── api/ChatController.java
+│   ├── application/ChatService.java
+│   ├── application/commands/    # CreateChat, DeleteChat, LeaveChat,
+│   │                            # RemoveFromChat, TransferOwnership,
+│   │                            # UpdateChat, UpdateMemberRole
+│   ├── domain/entities/Chat.java, ChatMember.java, ChatMemberId.java
+│   ├── domain/enums/ChatType.java, ChatMemberRole.java
+│   ├── dto/request/, dto/response/
+│   └── repository/ChatRepository.java, ChatMemberRepository.java
+├── messaging/                   # message send/delete, history
+│   ├── application/MessageService.java
+│   ├── application/commands/SendMessageCommand.java, DeleteMessageCommand.java
+│   ├── domain/entities/Message.java
+│   ├── domain/enums/ContentType.java
+│   ├── domain/interfaces/MessagePayload.java
+│   ├── dto/response/MessageResponse.java
+│   └── repository/MessageRepository.java
+└── common/                      # shared: security filters, events, exceptions
     ├── events/UserRegisteredEvent.java
-    ├── exception/
-    └── security/
+    ├── exception/GlobalExceptionHandler.java, (domain exceptions)
+    └── security/JwtService.java, JwtAuthenticationFilter.java,
+                SecurityConfig.java, PasswordEncoderConfig.java,
+                AuthenticatedUser.java
 ```
 
-Cross-module rules (enforced by ADRs, not code):
-- `auth` may not import from `messaging` or `user`.
-- `messaging` may not import from `auth` or `user` (use JWT principal for identity).
-- `common` may import from `auth` only for `CredentialRepository` (known coupling — see [ADR-auth](docs/adr/adr-auth.md)).
-- No module may import from `common.security` internals except Spring itself.
+### Planned (not yet implemented)
+
+- `messaging/port/ChatAccessPort.java` — interface for messaging → chat boundary
+- `chat/adapter/ChatAccessAdapter.java` — chat module implements ChatAccessPort
+- `presence/` — Redis-backed online/offline tracking (M7)
+- `user/` event listener for `UserRegisteredEvent` (M5 discovery item)
+
+### Cross-module rules (enforced by ADRs, not code)
+
+- `auth` may not import from `chat`, `messaging`, or `user`.
+- `chat` may not import from `messaging`, `auth`, or `user`.
+- `messaging` may only interact with `chat` through `ChatAccessPort` — never directly import chat repositories or entities.
+- `common` may not import from any domain module.
+- Identity flows from JWT principal only — no module queries `user.users` to resolve the current user at request time.
 
 ---
 
 ## 9. Conventions
 
 ### Naming
-- REST controllers: `XxxController` in `<module>/api/controller/`
+- REST controllers: `XxxController` in `<module>/api/`
 - Service layer: `XxxService` in `<module>/application/`
-- Repositories: `XxxRepository` in `<module>/infrastructure/`
+- Command objects: `XxxCommand` in `<module>/application/commands/`
+- Repositories: `XxxRepository` in `<module>/repository/`
 - Domain entities: in `<module>/domain/entities/`
+- Enums: in `<module>/domain/enums/`
 
 ### Transactions
 - `@Transactional` lives on service methods, never on controllers or repositories.
@@ -197,8 +221,9 @@ Cross-module rules (enforced by ADRs, not code):
 - Response DTOs: plain records or `@Value`-annotated classes. No entity leakage to controllers.
 
 ### Error handling
-- All exceptions thrown as subtypes of the domain exceptions in `common.exception/`.
+- All exceptions thrown as subtypes of the domain exceptions in `common/exception/`.
 - `GlobalExceptionHandler` maps them to consistent JSON: `{ error, message, timestamp }`.
+- Each module throws its own exceptions — do not let another module's exceptions cross a boundary.
 
 ### Soft deletes
 - Entities with `deleted_at` must never be hard-deleted in Stage 1.
@@ -216,18 +241,25 @@ Collect these as you complete each milestone. Save files under `docs/evidence/`.
 | M2 | `docs/evidence/M2-test-output.txt` | `./mvnw test` output showing 10+ messaging cases green |
 | M3 | `docs/evidence/M3-message-history.sh` | `curl` transcript: first page, 403 non-member, empty chat |
 | M4 | `docs/evidence/M4-wscat-transcript.txt` | `wscat` showing two clients exchanging a message |
+| M5 | `docs/evidence/M5-adr-summary.md` | List of all module coupling violations found and their ADRs |
 | M6 | `docs/evidence/M6-baseline-metrics.md` | startup time, p50/p99, DB query count per request |
 | M7 | `docs/evidence/M7-presence-transcript.txt` | connect → presence update → disconnect → Redis SMEMBERS cleared |
 
 ---
 
-## 11. Making the Local Startup Repeatable
+## 11. Stage 1 Exit Gate
 
-The Stage 1 exit gate requires `docker compose up && ./mvnw spring-boot:run` to work from scratch.
+`docker compose up && ./mvnw spring-boot:run` must work from a clean state before Stage 2 begins.
 
-Checklist before calling it done:
-- [ ] `docker compose down -v && docker compose up -d` — fresh DB, all healthy
-- [ ] `./mvnw spring-boot:run` — starts without errors on first run
-- [ ] `curl http://localhost:8080/actuator/health` → `{"status":"UP"}`
-- [ ] `POST /api/auth/register` with a new phone number → 201
-- [ ] `flyway:info` shows V1 applied (after M1)
+```
+- [ ] docker compose down -v && docker compose up -d    — fresh DB, all services healthy
+- [ ] ./mvnw spring-boot:run                            — starts without errors on first run
+- [ ] curl http://localhost:8080/actuator/health        — {"status":"UP"}
+- [ ] POST /api/auth/register with a new phone number  — 201 + valid JWT
+- [ ] POST /api/auth/login                             — 200 + valid JWT
+- [ ] flyway:info shows V1 applied                     — (after M1)
+- [ ] ./mvnw test                                      — all tests green (after M2)
+- [ ] docs/evidence/ has files for M1–M7               — thesis baseline captured
+```
+
+**Stage 2 does not begin until every box is checked.**

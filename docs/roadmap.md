@@ -1,4 +1,51 @@
-# 3-Month Roadmap
+# Roadmap
+
+---
+
+## Stage 1 — Modular Monolith Milestones
+
+Complete all milestones and pass the exit gate before starting Stage 2.
+
+| Milestone | Description | Status | Evidence |
+|---|---|---|---|
+| M1 | Flyway migrations replace `init.sql` | ❌ | `docs/evidence/M1-flyway-info.txt` |
+| M2 | 10+ messaging unit tests passing | ❌ | `docs/evidence/M2-test-output.txt` |
+| M3 | Cursor-based message history | ✅ | `docs/evidence/M3-message-history.sh` |
+| M4 | WebSocket / STOMP send & receive | ✅ | `docs/evidence/M4-wscat-transcript.txt` |
+| M5 | ADR audit — all coupling violations documented | ❌ | `docs/evidence/M5-adr-summary.md` |
+| M6 | Actuator metrics + baseline performance captured | ❌ | `docs/evidence/M6-baseline-metrics.md` |
+| M7 | Presence module (Redis-backed) | ❌ | `docs/evidence/M7-presence-transcript.txt` |
+
+### M5 Checklist (boundary audit)
+
+```
+- [ ] Fix: user module listener for UserRegisteredEvent (user.users is currently empty)
+- [ ] Implement: ChatAccessPort in messaging + ChatAccessAdapter in chat
+- [ ] Document: messaging → chat coupling decision in ADR
+- [ ] Document: common → auth coupling history in ADR (now resolved — CustomUserDetailsService moved to auth)
+- [ ] Document: no cross-schema FK constraints rationale in ADR
+```
+
+### Stage 1 Exit Gate
+
+**Stage 2 does not begin until every box is checked.**
+
+```
+- [ ] docker compose down -v && docker compose up -d  — fresh DB, all services healthy
+- [ ] ./mvnw spring-boot:run                          — starts without errors on first run
+- [ ] curl /actuator/health                           — {"status":"UP"}
+- [ ] POST /api/auth/register                         — 201 + valid JWT
+- [ ] POST /api/auth/login                            — 200 + valid JWT
+- [ ] flyway:info shows V1 applied                    — (M1)
+- [ ] ./mvnw test — all green                         — (M2)
+- [ ] docs/evidence/ has files for M1–M7              — thesis baseline captured
+```
+
+**Thesis note:** M6 baseline metrics (startup time, p50/p99 latency, DB query count per request) are the quantitative Stage 1 reference. Without them, the Stage 2 comparison has nothing to measure against.
+
+---
+
+## Stage 2 — 3-Month Roadmap
 
 ## Team Split
 

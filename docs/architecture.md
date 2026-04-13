@@ -1,5 +1,78 @@
 # Architecture
 
+---
+
+## Stage 1 — Modular Monolith
+
+> The current running system. All modules run in a single Spring Boot JVM.
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Spring Boot JVM                    │
+│                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
+│  │   auth   │  │   user   │  │      chat        │  │
+│  │ register │  │ User     │  │ chats/members/   │  │
+│  │ login    │  │ UserRepo │  │ roles            │  │
+│  └────┬─────┘  └──────────┘  └────────┬─────────┘  │
+│       │  UserRegisteredEvent           │ ChatAccessPort
+│       └───────────────────────────────┘            │
+│                                                     │
+│  ┌──────────────────────────┐                       │
+│  │        messaging         │                       │
+│  │  send/delete/history     │                       │
+│  └──────────────────────────┘                       │
+│                                                     │
+│  ┌──────────────────────────────────────────────┐   │
+│  │                  common                      │   │
+│  │  security (JWT, filters, SecurityConfig)     │   │
+│  │  events (UserRegisteredEvent)                │   │
+│  │  exception (GlobalExceptionHandler)          │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌──────────────┐   [presence — M7, not yet built]  │
+│  │  WebSocket   │   Redis SADD/SREM per chatId      │
+│  │  STOMP broker│   GET /chats/{id}/presence        │
+│  └──────────────┘                                   │
+└────────────────┬────────────────────────────────────┘
+                 │
+        ┌────────┴────────┐
+        │                 │
+  PostgreSQL            Redis
+  (3 schemas)        (presence)
+```
+
+**Key properties:**
+- All modules run in one JVM — cross-module calls are direct method calls.
+- `messaging` interacts with `chat` exclusively through `ChatAccessPort` (planned — not yet implemented).
+- `UserRegisteredEvent` is synchronous (same thread, same transaction) via `ApplicationEventPublisher`.
+- No cross-schema FK constraints — UUID identity convention only.
+- STOMP broker is in-process (simple broker); replaced by Kafka in Stage 2.
+- In Stage 2, the synchronous `ChatAccessPort` call becomes an HTTP/gRPC call — a known coupling point documented for thesis comparison.
+
+### Stage 1 Module Boundaries
+
+| Rule | Detail |
+|---|---|
+| `auth` | May not import from `chat`, `messaging`, or `user` |
+| `chat` | May not import from `messaging`, `auth`, or `user` |
+| `messaging` | Accesses `chat` only through `ChatAccessPort` — no direct repo or entity imports |
+| `common` | May not import from any domain module |
+| Identity | Flows from JWT principal only — no module queries `user.users` at request time |
+
+### Stage 1 Infrastructure
+
+| Component | Image | Local port | Notes |
+|---|---|---|---|
+| PostgreSQL | postgres:16-alpine | 5433 | DB `zalord`, 3 schemas |
+| PgBouncer | edoburu/pgbouncer | 6433 | transaction mode, pool 25 |
+| Redis | redis:7-alpine | 6380 | appendonly yes |
+| Spring Boot | custom Dockerfile | 8080 | dev: `./mvnw spring-boot:run` |
+
+---
+
+## Stage 2 — Microservices
+
 ## Tech Stack
 
 | Layer | Technology | Rationale |

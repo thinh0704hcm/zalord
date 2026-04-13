@@ -1,5 +1,61 @@
 # Services
 
+---
+
+## Stage 1 — Modules (Modular Monolith)
+
+All modules run in a single Spring Boot JVM. See [development.md](development.md) for the full package layout.
+
+### `auth`
+**Owns:** `auth.credentials` table, JWT issuance, `CustomUserDetailsService`.
+**Exposes:** `POST /api/auth/register`, `POST /api/auth/login`
+**Publishes:** `UserRegisteredEvent` after registration.
+**Notable:** No refresh token in Stage 1 — single-token, configurable expiry via `JWT_EXPIRY_MINUTES`.
+
+### `user`
+**Owns:** `user.users` table.
+**Exposes:** No REST endpoints in Stage 1.
+**Consumes:** Should listen to `UserRegisteredEvent` to populate `user.users` — **not yet implemented (M5 item)**.
+
+### `chat`
+**Owns:** `messaging.chats`, `messaging.chat_members` tables.
+**Exposes:**
+```
+POST   /api/chats                              create chat
+GET    /api/chats                              list my chats
+PATCH  /api/chats/{id}                         rename (ADMIN+)
+DELETE /api/chats/{id}                         delete (OWNER only)
+POST   /api/chats/{id}/members                 add member (ADMIN+)
+DELETE /api/chats/{id}/members/{memberId}      remove / leave
+PATCH  /api/chats/{id}/members/{memberId}/role promote/demote
+```
+**Implements:** `ChatAccessPort` (planned — not yet built) — exposes `canSendMessage` and `updateLastActivity` to `messaging`.
+**Key transaction:** `createChat` writes to `chats` + `chat_members` atomically. `leaveChat` has owner-succession logic — also one transaction.
+
+### `messaging`
+**Owns:** `messaging.messages` table.
+**Exposes:**
+```
+GET    /api/chats/{id}/messages?cursor=&limit=   paginated history
+@MessageMapping /app/chat/{id}/send              STOMP send (M4)
+```
+**Accesses `chat` through:** `ChatAccessPort` only — no direct repo or entity imports from `chat`.
+**Key transaction:** `sendMessage` writes message + updates `chat.lastActivityAt` atomically.
+
+### `common`
+**Owns:** No database tables.
+**Contains:** JWT filter chain, `SecurityConfig`, `GlobalExceptionHandler`, `UserRegisteredEvent`.
+**Rule:** May not import from any domain module.
+
+### `presence` _(M7 — not yet built)_
+**Will own:** Redis keys `presence:chat:{chatId}` (set of online user IDs).
+**Will expose:** `GET /api/chats/{chatId}/presence`
+**Thesis note:** In the monolith, presence is trivially derived from in-JVM WebSocket session state. In Stage 2, it requires broker-mediated events — this is the sharpest architectural contrast point between stages.
+
+---
+
+## Stage 2 — Services (Microservices)
+
 Detailed breakdown of each service: responsibilities, APIs, data ownership, and inter-service dependencies.
 
 ---
