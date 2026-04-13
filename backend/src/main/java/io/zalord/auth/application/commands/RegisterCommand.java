@@ -1,4 +1,4 @@
-package io.zalord.auth.commands;
+package io.zalord.auth.application.commands;
 
 import java.time.LocalDate;
 

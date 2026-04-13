@@ -26,10 +26,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import io.zalord.auth.commands.RegisterCommand;
+import io.zalord.auth.application.commands.RegisterCommand;
 import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.response.AuthResponse;
-import io.zalord.auth.model.Credential;
+import io.zalord.auth.domain.entities.Credential;
 import io.zalord.auth.repository.CredentialRepository;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.InvalidCredentialsException;
@@ -50,12 +50,10 @@ public class AuthServiceTest {
     private static final String VALID_FULL_NAME = "myName";
     
     @Mock private CredentialRepository credentialRepository;
-
     @Mock private ApplicationEventPublisher eventPublisher;
-
     @Mock private JwtService jwtService;
-
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private io.zalord.auth.application.RefreshTokenService refreshTokenService;
 
     private AuthService authService;
 
@@ -69,7 +67,7 @@ public class AuthServiceTest {
         validCredential.setPhoneNumber(VALID_PHONE);
         validCredential.setPasswordHash(HASHED_PASSWORD);
 
-        authService = new AuthService(credentialRepository, jwtService, passwordEncoder, eventPublisher);
+        authService = new AuthService(credentialRepository, jwtService, passwordEncoder, eventPublisher, refreshTokenService);
     }
 
     @Nested

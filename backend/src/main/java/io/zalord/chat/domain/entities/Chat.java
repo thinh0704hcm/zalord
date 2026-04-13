@@ -31,7 +31,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @SQLRestriction("deleted_at IS NULL")
 @SQLDelete(sql = "UPDATE messaging.chats SET deleted_at = NOW() WHERE id = ?")
-@Table(name = "chats", schema = "messaging")
+@Table(name = "chats", schema = "chat")
 public class Chat {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

@@ -1,4 +1,4 @@
-package io.zalord.user;
+package io.zalord.user.domain.entities;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -25,13 +25,13 @@ public class User {
     @Id
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
-    
+
     @Column(name = "phone_number", nullable = false, unique = true)
     private String phoneNumber;
 
     @Column(name = "email", unique = true)
     private String email;
-    
+
     @Column(name = "full_name", nullable = false, length = 200)
     private String fullName;
 

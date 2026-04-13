@@ -21,7 +21,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import io.zalord.auth.application.AuthService;
-import io.zalord.auth.commands.RegisterCommand;
+import io.zalord.auth.application.RefreshTokenService;
+import io.zalord.auth.application.commands.RegisterCommand;
 import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.request.RegisterRequest;
 import io.zalord.auth.dto.response.AuthResponse;
@@ -51,6 +52,8 @@ public class AuthControllerTest {
         @MockitoBean
         AuthService authService;
         @MockitoBean
+        RefreshTokenService refreshTokenService;
+        @MockitoBean
         JwtAuthenticationFilter jwtAuthenticationFilter;
         @Autowired
         ObjectMapper objectMapper;
@@ -68,7 +71,7 @@ public class AuthControllerTest {
 
     @BeforeEach
     public void setUp() {
-        validAuthResponse = new AuthResponse(VALID_TOKEN, UUID.randomUUID(), VALID_PHONE, null);
+        validAuthResponse = new AuthResponse(VALID_TOKEN, "refresh-token", UUID.randomUUID(), VALID_PHONE, null);
     }
 
     @Nested

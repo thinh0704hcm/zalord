@@ -1,4 +1,4 @@
-package io.zalord.common.security;
+package io.zalord.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

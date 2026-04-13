@@ -10,6 +10,7 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        globally_quoted_identifiers: true
   data:
     redis:
       host: localhost
@@ -24,3 +25,13 @@ server:
 jwt:
   secret: ${JWT_SECRET}
   expiry_minutes: ${JWT_EXPIRY_MINUTES}
+  refresh_expiry_days: ${JWT_REFRESH_EXPIRY_DAYS:7}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: always

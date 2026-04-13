@@ -1,4 +1,4 @@
-package io.zalord.auth.model;
+package io.zalord.auth.domain.entities;
 
 import org.hibernate.annotations.SQLRestriction;
 

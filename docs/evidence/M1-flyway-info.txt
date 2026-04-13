@@ -1,0 +1,14 @@
+Flyway Info — captured 2026-04-13
+Database: jdbc:postgresql://localhost:5433/zalord (PostgreSQL 16.13)
+Schema version: 3
+
++-----------+---------+------------------------------+--------+---------------------+---------+----------+
+| Category  | Version | Description                  | Type   | Installed On        | State   | Undoable |
++-----------+---------+------------------------------+--------+---------------------+---------+----------+
+|           |         | << Flyway Schema Creation >> | SCHEMA | 2026-04-11 16:54:13 | Success |          |
+| Versioned | 1       | init                         | SQL    | 2026-04-11 16:54:13 | Success | No       |
+| Versioned | 2       | add deleted message type     | SQL    | 2026-04-11 16:55:11 | Success | No       |
+| Versioned | 3       | separate chat from messaging | SQL    | 2026-04-12 11:36:46 | Success | No       |
++-----------+---------+------------------------------+--------+---------------------+---------+----------+
+
+BUILD SUCCESS — Total time: 4.441s

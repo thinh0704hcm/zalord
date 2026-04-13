@@ -29,7 +29,7 @@ import lombok.Setter;
 @SQLRestriction("deleted_at IS NULL")
 @SQLDelete(sql = "UPDATE messaging.chat_members SET deleted_at = NOW() WHERE chat_id = ? AND member_id = ?")
 @IdClass(ChatMemberId.class)
-@Table(name = "chat_members", schema = "messaging")
+@Table(name = "chat_members", schema = "chat")
 public class ChatMember {
     @Id
     @Column(name = "chat_id", updatable = false)

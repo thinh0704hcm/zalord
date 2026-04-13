@@ -5,7 +5,7 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import io.zalord.auth.model.Credential;
+import io.zalord.auth.domain.entities.Credential;
 
 public interface CredentialRepository extends JpaRepository<Credential, UUID> {
     Optional<Credential> findByEmail(String email);

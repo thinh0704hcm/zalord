@@ -8,8 +8,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.zalord.auth.application.AuthService;
-import io.zalord.auth.commands.RegisterCommand;
+import io.zalord.auth.application.RefreshTokenService;
+import io.zalord.auth.application.commands.RegisterCommand;
 import io.zalord.auth.dto.request.LoginRequest;
+import io.zalord.auth.dto.request.RefreshTokenRequest;
 import io.zalord.auth.dto.request.RegisterRequest;
 import io.zalord.auth.dto.response.AuthResponse;
 import jakarta.validation.Valid;
@@ -18,9 +20,11 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthController(AuthService _authService) {
-        this.authService = _authService;
+    public AuthController(AuthService authService, RefreshTokenService refreshTokenService) {
+        this.authService = authService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @PostMapping("/login")
@@ -43,5 +47,16 @@ public class AuthController {
 
         AuthResponse response = authService.register(cmd);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return ResponseEntity.ok(refreshTokenService.refresh(request.refreshToken()));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
+        refreshTokenService.revoke(request.refreshToken());
+        return ResponseEntity.noContent().build();
     }
 }

@@ -28,9 +28,16 @@ import io.zalord.chat.dto.request.UpdateMemberRoleRequest;
 import io.zalord.chat.dto.response.ChatResponse;
 import io.zalord.common.security.AuthenticatedUser;
 import jakarta.validation.Valid;
+import java.time.Instant;
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import io.zalord.chat.application.commands.AddMemberCommand;
+import io.zalord.chat.dto.request.AddMemberRequest;
+
 
 @RestController
-@RequestMapping("/api/chat")
+@RequestMapping("/api/chats")
 public class ChatController {
     private final ChatService chatService;
 
@@ -106,5 +113,22 @@ public class ChatController {
             @PathVariable UUID chatId) {
         chatService.leaveChat(new LeaveChatCommand(actor.userId(), chatId));
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping
+    public ResponseEntity<List<ChatResponse>> getMyChats(
+            @AuthenticationPrincipal AuthenticatedUser actor,
+            @RequestParam(defaultValue = "9999-12-31T23:59:59Z") Instant cursor,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(chatService.getMyChats(actor.userId(), cursor, size));
+    }
+
+    @PostMapping("/{chatId}/members")
+    public ResponseEntity<Void> addMember(
+            @AuthenticationPrincipal AuthenticatedUser actor,
+            @PathVariable UUID chatId,
+            @Valid @RequestBody AddMemberRequest request) {
+        chatService.addMember(new AddMemberCommand(actor.userId(), chatId, request.memberId(), request.role()));
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }

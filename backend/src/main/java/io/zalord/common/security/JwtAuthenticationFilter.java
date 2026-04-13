@@ -31,41 +31,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
 
-        // TODO Step 1 & 2: Check if authHeader is null or doesn't start with "Bearer "
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             // If so, call filterChain.doFilter() and return.
             filterChain.doFilter(request, response);
             return;
         }
 
-        // TODO Step 3: Extract the exact token string
         String token = authHeader.substring(7);
 
-        // TODO Step 4b: Check if ID is not null AND
         // SecurityContextHolder.getContext().getAuthentication() is null
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
 
-            // TODO Step 5: Validate token with jwtService.isValidToken()
             if (jwtService.isValidToken(token)) {
 
                 UUID userId = jwtService.extractUserId(token);
                 AuthenticatedUser principal = new AuthenticatedUser(userId);
 
-                // TODO Step 5b: If valid, create UsernamePasswordAuthenticationToken
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         principal,
                         null,
                         Collections.emptyList());
 
-                // TODO Step 5c: Set details on the auth token using
                 // WebAuthenticationDetailsSource
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                // TODO Step 5d: Set the auth token into
                 // SecurityContextHolder.getContext().setAuthentication(...)
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
         }
-        // TODO Step 6: Call filterChain.doFilter(request, response) to continue the
         // journey
         filterChain.doFilter(request, response);
 

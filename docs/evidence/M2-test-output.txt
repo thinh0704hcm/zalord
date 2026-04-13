@@ -1,0 +1,14 @@
+Test run — captured 2026-04-13
+./mvnw test
+
+Tests run: 3  — io.zalord.auth.application.AuthServiceTest$RegisterTests    PASS
+Tests run: 3  — io.zalord.auth.application.AuthServiceTest$LoginTests       PASS
+Tests run: 6  — io.zalord.auth.api.AuthControllerTest$RegisterTests         PASS
+Tests run: 3  — io.zalord.auth.api.AuthControllerTest$LoginTests            PASS
+Tests run: 3  — io.zalord.messaging.application.MessageServiceTest$SendMessageTests    PASS
+Tests run: 3  — io.zalord.messaging.application.MessageServiceTest$DeleteMessageTests  PASS
+Tests run: 5  — io.zalord.chat.adapter.ChatAccessAdapterTest$CanSendMessageTests       PASS
+Tests run: 2  — io.zalord.chat.adapter.ChatAccessAdapterTest$UpdateLastActivityTests   PASS
+
+Tests run: 28, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS

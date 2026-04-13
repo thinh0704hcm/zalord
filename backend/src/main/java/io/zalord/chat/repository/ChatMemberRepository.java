@@ -22,7 +22,7 @@ public interface ChatMemberRepository extends JpaRepository<ChatMember, ChatMemb
             Collection<ChatMemberRole> roles);
 
         @Query(value = """
-            SELECT * FROM messaging.chat_members
+            SELECT * FROM chat.chat_members
             WHERE chat_id = :chatId
             ORDER BY CASE role
                 WHEN 'OWNER' THEN 0
@@ -35,12 +35,12 @@ public interface ChatMemberRepository extends JpaRepository<ChatMember, ChatMemb
     Optional<ChatMember> findSecondMostSeniorMember(@Param("chatId") UUID chatId);
 
     @Modifying                                                                                                                                 
-    @Query(value = "UPDATE messaging.chat_members SET deleted_at = NOW() WHERE chat_id = :chatId", nativeQuery = true)
+    @Query(value = "UPDATE chat.chat_members SET deleted_at = NOW() WHERE chat_id = :chatId", nativeQuery = true)
     void softDeleteByChatId(@Param("chatId") UUID chatId);
 
     @Modifying
     @Query(value = """
-            INSERT INTO messaging.chat_members (chat_id, member_id, role)
+            INSERT INTO chat.chat_members (chat_id, member_id, role)
             VALUES (:chatId, :memberId, :role)
             ON CONFLICT (chat_id, member_id)
             DO UPDATE SET role = :role, deleted_at = NULL

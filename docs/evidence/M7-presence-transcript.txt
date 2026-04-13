@@ -1,0 +1,26 @@
+M7 — Presence Module — captured 2026-04-13
+
+## Endpoint Test
+
+Request:
+  GET /api/chats/00000000-0000-0000-0000-000000000001/presence
+  Authorization: Bearer <valid JWT>
+
+Response:
+  HTTP 200
+  []
+
+## Module Components
+
+- PresenceService      — Redis SADD/SREM on presence:chat:{chatId} keys
+- PresenceSessionRegistry — in-memory ConcurrentHashMap: sessionId → {userId, Set<chatId>}
+  NOTE: This breaks in Stage 2 (multi-instance) — intentional design contrast point for thesis
+- StompPresenceEventListener — handles SessionConnectedEvent, SessionSubscribeEvent, SessionDisconnectEvent
+  Parses /topic/chats/{chatId} destination pattern to extract chatId
+- PresenceController   — GET /api/chats/{chatId}/presence → returns Set<UUID> of active userIds
+
+## Thesis Note
+Stage 1 uses in-memory session registry + Redis for presence state.
+Stage 2 requires full Redis-based session registry (or pub/sub fanout) because
+multiple service instances cannot share in-memory state.
+This is a concrete, measurable architectural difference for the comparison.

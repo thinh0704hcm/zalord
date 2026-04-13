@@ -26,8 +26,27 @@ public class JwtService {
     @Value("${jwt.expiry_minutes}")
     private int expiryMinutes;
 
+    @Value("${jwt.refresh_expiry_days}")
+    private int refreshExpiryDays;
+
     public String generateToken(UUID userId, Map<String, Object> claims) {
         return createToken(userId, claims);
+    }
+
+    public String generateRefreshToken(UUID userId, UUID jti) {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        return Jwts.builder()
+                .subject(userId.toString())
+                .claim("jti", jti.toString())
+                .claim("type", "refresh")
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(refreshExpiryDays, ChronoUnit.DAYS)))
+                .signWith(getSignKey())
+                .compact();
+    }
+
+    public String extractJti(String token) {
+        return (String) extractAllClaims(token).get("jti");
     }
 
     private String createToken(UUID userId, Map<String,Object> claims) {

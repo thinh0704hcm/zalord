@@ -8,6 +8,10 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import io.zalord.chat.application.commands.AddMemberCommand;
+
 import io.zalord.chat.application.commands.CreateChatCommand;
 import io.zalord.chat.application.commands.DeleteChatCommand;
 import io.zalord.chat.application.commands.LeaveChatCommand;
@@ -219,5 +223,20 @@ public class ChatService {
                 .orElseThrow(() -> new MemberNotFound("User is not in chat."));
 
         return new ChatContext(chat, chatMember);
+    }
+
+    public List<ChatResponse> getMyChats(UUID userId, Instant cursor, int size) {
+        Slice<Chat> slice = chatRepository.findChatsBeforeCursor(userId, cursor, PageRequest.of(0, size));
+        return slice.getContent().stream()
+                .map(c -> new ChatResponse(c.getId(), c.getChatName(), c.getChatType(), c.getLastActivityAt()))
+                .toList();
+    }
+
+    @Transactional
+    public void addMember(AddMemberCommand cmd) {
+        ChatContext ctx = getChatContext(cmd.actorId(), cmd.chatId());
+        if (ctx.member().getRole() == ChatMemberRole.MEMBER)
+            throw new io.zalord.common.exception.UnauthorizedException("Only OWNER or ADMIN can add members");
+        chatMemberRepository.upsertAsRole(cmd.chatId(), cmd.memberId(), cmd.role().name());
     }
 }

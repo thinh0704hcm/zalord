@@ -8,10 +8,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import io.zalord.auth.commands.RegisterCommand;
+import io.zalord.auth.application.commands.RegisterCommand;
 import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.response.AuthResponse;
-import io.zalord.auth.model.Credential;
+import io.zalord.auth.domain.entities.Credential;
 import io.zalord.auth.repository.CredentialRepository;
 import io.zalord.common.events.UserRegisteredEvent;
 import io.zalord.common.exception.EmailAlreadyExistsException;
@@ -27,12 +27,16 @@ public class AuthService {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthService(CredentialRepository credentialRepository, JwtService jwtService, PasswordEncoder passwordEncoder, ApplicationEventPublisher eventPublisher) {
+    public AuthService(CredentialRepository credentialRepository, JwtService jwtService,
+            PasswordEncoder passwordEncoder, ApplicationEventPublisher eventPublisher,
+            RefreshTokenService refreshTokenService) {
         this.credentialRepository = credentialRepository;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
+        this.refreshTokenService = refreshTokenService;
     }
 
     public AuthResponse login(LoginRequest loginRequest) {
@@ -51,9 +55,10 @@ public class AuthService {
         );
 
         return new AuthResponse(
-            jwtService.generateToken(credential.getUserId(), claims), 
-            credential.getUserId(), 
-            credential.getPhoneNumber(), 
+            jwtService.generateToken(credential.getUserId(), claims),
+            refreshTokenService.issue(credential.getUserId()),
+            credential.getUserId(),
+            credential.getPhoneNumber(),
             credential.getEmail()
         );
     }
@@ -89,8 +94,10 @@ public class AuthService {
             "phoneNumber", credential.getPhoneNumber()
         );
 
-        return new AuthResponse(jwtService.generateToken(credential.getUserId(), claims), 
-            credential.getUserId(), 
+        return new AuthResponse(
+            jwtService.generateToken(credential.getUserId(), claims),
+            refreshTokenService.issue(credential.getUserId()),
+            credential.getUserId(),
             credential.getPhoneNumber(),
             credential.getEmail()
         );
