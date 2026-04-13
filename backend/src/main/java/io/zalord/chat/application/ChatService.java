@@ -1,5 +1,6 @@
 package io.zalord.chat.application;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -194,6 +195,20 @@ public class ChatService {
             throw new UnauthorizedException("Insufficient permissions");
 
         chatMemberRepository.delete(targetMember);
+    }
+
+    public void validateCanSendMessage(UUID chatId, UUID actorId) {
+        ChatContext ctx = getChatContext(actorId, chatId);
+
+        if (ctx.chat().getChatType() == ChatType.COMMUNITY && ctx.member.getRole() == ChatMemberRole.MEMBER)
+            throw new UnauthorizedException("Send community message");
+    }
+
+    public void updateLastActivityAt(UUID chatId, Instant timestamp) {
+        Chat chat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new ChatNotFoundException("Chat not found with id" + chatId));
+        chat.setLastActivityAt(timestamp);
+        chatRepository.save(chat);
     }
 
     private ChatContext getChatContext(UUID actorId, UUID chatId) {
