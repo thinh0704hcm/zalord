@@ -41,12 +41,12 @@ No cross-schema FK constraints. References are by UUID convention only — the a
 
 **Negative:**
 - No database-level referential integrity across schemas. A bug that deletes a user without cleaning up their messages or credentials is not caught by the DB.
-- Application code must enforce consistency — particularly the `UserRegisteredEvent` listener that creates `user.users` rows when `auth.credentials` rows are created.
+- Application code must enforce consistency — particularly the `AccountRegisteredEvent` listener that creates `user.users` rows when `auth.credentials` rows are created.
 
 ---
 
 ## Consistency mechanism
 
-The `UserRegisteredEvent` (synchronous, same transaction as `AuthService.register`) ensures that `user.users` and `auth.credentials` are always created together. If the listener fails, the entire registration transaction rolls back.
+The `AccountRegisteredEvent` (synchronous, same transaction as `AuthService.register`) ensures that `user.users` and `auth.credentials` are always created together. If the listener fails, the entire registration transaction rolls back.
 
 `messaging.messages.sender_id` and `messaging.chat_members.member_id` reference users who were created through this mechanism — consistency is maintained at the application layer, not the DB layer.

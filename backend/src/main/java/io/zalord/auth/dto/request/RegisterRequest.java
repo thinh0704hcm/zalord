@@ -1,7 +1,5 @@
 package io.zalord.auth.dto.request;
 
-import java.time.LocalDate;
-import org.springframework.format.annotation.DateTimeFormat;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -17,14 +15,6 @@ public record RegisterRequest(
     @NotBlank
     String password,
 
-    @NotBlank
-    String fullName,
-
     @Email
-    String email,
-
-    @DateTimeFormat
-    LocalDate birthDate,
-
-    String gender
+    String email
 ) {}

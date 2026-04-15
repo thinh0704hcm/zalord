@@ -9,13 +9,13 @@ All modules run in a single Spring Boot JVM. See [development.md](development.md
 ### `auth`
 **Owns:** `auth.credentials` table, JWT issuance, `CustomUserDetailsService`.
 **Exposes:** `POST /api/auth/register`, `POST /api/auth/login`
-**Publishes:** `UserRegisteredEvent` after registration.
-**Notable:** No refresh token in Stage 1 — single-token, configurable expiry via `JWT_EXPIRY_MINUTES`.
+**Publishes:** `AccountRegisteredEvent` after credential creation.
+**Notable:** Stage 1 registration is auth-only: phone number, password, and optional email. Profile fields are not part of the auth boundary.
 
 ### `user`
 **Owns:** `user.users` table.
-**Exposes:** No REST endpoints in Stage 1.
-**Consumes:** Should listen to `UserRegisteredEvent` to populate `user.users` — **not yet implemented (M5 item)**.
+**Exposes:** `GET /api/users/me`, `GET /api/users/{id}`
+**Consumes:** `AccountRegisteredEvent` to create an empty shell user record. Profile fields remain null until user-owned profile flows populate them.
 
 ### `chat`
 **Owns:** `messaging.chats`, `messaging.chat_members` tables.
@@ -44,7 +44,7 @@ GET    /api/chats/{id}/messages?cursor=&limit=   paginated history
 
 ### `common`
 **Owns:** No database tables.
-**Contains:** JWT filter chain, `SecurityConfig`, `GlobalExceptionHandler`, `UserRegisteredEvent`.
+**Contains:** JWT filter chain, `SecurityConfig`, `GlobalExceptionHandler`, `AccountRegisteredEvent`.
 **Rule:** May not import from any domain module.
 
 ### `presence` _(M7 — not yet built)_

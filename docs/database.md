@@ -10,7 +10,7 @@ Single PostgreSQL database `zalord`. Three schemas with no cross-schema FK const
 -- Schema: user
 CREATE TABLE user.users (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  full_name    TEXT NOT NULL,
+  full_name    TEXT,
   email        TEXT,
   phone_number TEXT UNIQUE NOT NULL,
   birth_date   DATE,
@@ -62,6 +62,8 @@ CREATE TABLE messaging.chat_members (
 CREATE INDEX messages_chat_id_idx ON messaging.messages(chat_id, created_at DESC);
 CREATE INDEX chat_members_member_id_idx ON messaging.chat_members(member_id);
 ```
+
+`user.users.full_name` became nullable in `V4__allow_empty_user_profile_shell.sql` so `user` can create an empty shell record from auth registration before profile completion.
 
 **Soft deletes:** `deleted_at` on `users`, `chats`, `messages`. Queries must filter `deleted_at IS NULL`.
 **Migrations:** Managed by Flyway (after M1). Pre-M1: applied from `infrastructure/postgres/init.sql` on first container start.

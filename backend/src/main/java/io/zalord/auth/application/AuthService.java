@@ -13,7 +13,7 @@ import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.response.AuthResponse;
 import io.zalord.auth.domain.entities.Credential;
 import io.zalord.auth.repository.CredentialRepository;
-import io.zalord.common.events.UserRegisteredEvent;
+import io.zalord.common.events.AccountRegisteredEvent;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.InvalidCredentialsException;
 import io.zalord.common.exception.UserAlreadyExistsException;
@@ -80,14 +80,7 @@ public class AuthService {
         credential.setActive(true);
         credentialRepository.save(credential);
 
-        eventPublisher.publishEvent(new UserRegisteredEvent(
-            userId,
-            cmd.phoneNumber(),
-            cmd.email(),
-            cmd.fullName(),
-            cmd.birthDate(),
-            cmd.gender()
-        ));
+        eventPublisher.publishEvent(new AccountRegisteredEvent(userId, cmd.phoneNumber(), cmd.email()));
 
         Map<String,Object> claims = Map.of(
             "userId", credential.getUserId(),

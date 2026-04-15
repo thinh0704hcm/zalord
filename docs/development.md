@@ -178,7 +178,7 @@ backend/src/main/java/io/zalord/
 │   ├── dto/response/MessageResponse.java
 │   └── repository/MessageRepository.java
 └── common/                      # shared: security filters, events, exceptions
-    ├── events/UserRegisteredEvent.java
+    ├── events/AccountRegisteredEvent.java
     ├── exception/GlobalExceptionHandler.java, (domain exceptions)
     └── security/JwtService.java, JwtAuthenticationFilter.java,
                 SecurityConfig.java, PasswordEncoderConfig.java,
@@ -190,7 +190,12 @@ backend/src/main/java/io/zalord/
 - `messaging/port/ChatAccessPort.java` — interface for messaging → chat boundary
 - `chat/adapter/ChatAccessAdapter.java` — chat module implements ChatAccessPort
 - `presence/` — Redis-backed online/offline tracking (M7)
-- `user/` event listener for `UserRegisteredEvent` (M5 discovery item)
+
+### Registration boundary
+
+- `POST /api/auth/register` accepts only auth-owned fields: `phoneNumber`, `password`, and optional `email`.
+- `auth` publishes `AccountRegisteredEvent` after saving credentials.
+- `user` listens to that event and creates a shell `user.users` row with null profile fields.
 
 ### Cross-module rules (enforced by ADRs, not code)
 

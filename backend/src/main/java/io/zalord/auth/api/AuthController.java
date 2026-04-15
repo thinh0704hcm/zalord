@@ -39,10 +39,7 @@ public class AuthController {
         RegisterCommand cmd = new RegisterCommand(
             registerRequest.phoneNumber(),
             registerRequest.password(),
-            registerRequest.fullName(),
-            registerRequest.email(),
-            registerRequest.birthDate(),
-            registerRequest.gender()
+            registerRequest.email()
         );
 
         AuthResponse response = authService.register(cmd);

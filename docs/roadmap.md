@@ -19,7 +19,7 @@ Complete all milestones and pass the exit gate before starting Stage 2.
 ### M5 Checklist (boundary audit)
 
 ```
-- [ ] Fix: user module listener for UserRegisteredEvent (user.users is currently empty)
+- [x] Fix: user module listener for account registration event (user.users shell record is created synchronously)
 - [ ] Implement: ChatAccessPort in messaging + ChatAccessAdapter in chat
 - [ ] Document: messaging → chat coupling decision in ADR
 - [ ] Document: common → auth coupling history in ADR (now resolved — CustomUserDetailsService moved to auth)

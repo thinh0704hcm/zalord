@@ -15,7 +15,7 @@
 │  │ register │  │ User     │  │ chats/members/   │  │
 │  │ login    │  │ UserRepo │  │ roles            │  │
 │  └────┬─────┘  └──────────┘  └────────┬─────────┘  │
-│       │  UserRegisteredEvent           │ ChatAccessPort
+│       │  AccountRegisteredEvent        │ ChatAccessPort
 │       └───────────────────────────────┘            │
 │                                                     │
 │  ┌──────────────────────────┐                       │
@@ -26,7 +26,7 @@
 │  ┌──────────────────────────────────────────────┐   │
 │  │                  common                      │   │
 │  │  security (JWT, filters, SecurityConfig)     │   │
-│  │  events (UserRegisteredEvent)                │   │
+│  │  events (AccountRegisteredEvent)             │   │
 │  │  exception (GlobalExceptionHandler)          │   │
 │  └──────────────────────────────────────────────┘   │
 │                                                     │
@@ -45,7 +45,8 @@
 **Key properties:**
 - All modules run in one JVM — cross-module calls are direct method calls.
 - `messaging` interacts with `chat` exclusively through `ChatAccessPort` (planned — not yet implemented).
-- `UserRegisteredEvent` is synchronous (same thread, same transaction) via `ApplicationEventPublisher`.
+- `AccountRegisteredEvent` is synchronous (same thread, same transaction) via `ApplicationEventPublisher`.
+- `auth` registration creates credentials only; `user` consumes the event to create an empty shell profile row.
 - No cross-schema FK constraints — UUID identity convention only.
 - STOMP broker is in-process (simple broker); replaced by Kafka in Stage 2.
 - In Stage 2, the synchronous `ChatAccessPort` call becomes an HTTP/gRPC call — a known coupling point documented for thesis comparison.

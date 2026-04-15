@@ -31,6 +31,7 @@ import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.response.AuthResponse;
 import io.zalord.auth.domain.entities.Credential;
 import io.zalord.auth.repository.CredentialRepository;
+import io.zalord.common.events.AccountRegisteredEvent;
 import io.zalord.common.exception.EmailAlreadyExistsException;
 import io.zalord.common.exception.InvalidCredentialsException;
 import io.zalord.common.exception.UserAlreadyExistsException;
@@ -47,7 +48,6 @@ public class AuthServiceTest {
     private static final String HASHED_PASSWORD = "hashed_mySecretPassword";
     private static final String VALID_TOKEN = "BANANA";
     private static final String INVALID_EMAIL = "banana@gmail.com";
-    private static final String VALID_FULL_NAME = "myName";
     
     @Mock private CredentialRepository credentialRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -149,7 +149,7 @@ public class AuthServiceTest {
         @DisplayName("AUTH-REG-01: Should throw on duplicate phone number.")
         public void register_shouldThrow_whenPhoneNumberAlreadyExists () {
             //Arrange
-            RegisterCommand invalidCommand = new RegisterCommand(INVALID_PHONE, RAW_PASSWORD, VALID_FULL_NAME, null, null, null);
+            RegisterCommand invalidCommand = new RegisterCommand(INVALID_PHONE, RAW_PASSWORD, null);
 
             when(credentialRepository.existsByPhoneNumber(anyString())).thenReturn(true);
 
@@ -166,7 +166,7 @@ public class AuthServiceTest {
         @DisplayName("AUTH-REG-02: Should throw on duplicate email.")
         public void register_shouldThrow_whenEmailAlreadyExists() {
             //Arrange
-            RegisterCommand invalidCommand = new RegisterCommand(VALID_PHONE, RAW_PASSWORD, VALID_FULL_NAME, INVALID_EMAIL, null, null);
+            RegisterCommand invalidCommand = new RegisterCommand(VALID_PHONE, RAW_PASSWORD, INVALID_EMAIL);
 
             when(credentialRepository.existsByPhoneNumber(anyString())).thenReturn(false);
             when(credentialRepository.existsByEmail(anyString())).thenReturn(true);
@@ -184,8 +184,9 @@ public class AuthServiceTest {
         @DisplayName("AUTH-REG-03: Should return AuthResponse on register success.")
         public void register_shouldReturnAuthResponse_whenRegisterSuccess() {
             //Arrange
-            RegisterCommand validCommand = new RegisterCommand(VALID_PHONE, RAW_PASSWORD, VALID_FULL_NAME, null, null, null);
+            RegisterCommand validCommand = new RegisterCommand(VALID_PHONE, RAW_PASSWORD, null);
             ArgumentCaptor<Credential> credentialCaptor = ArgumentCaptor.forClass(Credential.class);
+            ArgumentCaptor<AccountRegisteredEvent> eventCaptor = ArgumentCaptor.forClass(AccountRegisteredEvent.class);
 
             when(credentialRepository.existsByPhoneNumber(anyString())).thenReturn(false);
             when(passwordEncoder.encode(anyString())).thenReturn(HASHED_PASSWORD);
@@ -205,6 +206,10 @@ public class AuthServiceTest {
             verify(credentialRepository).existsByPhoneNumber(VALID_PHONE);
             verify(passwordEncoder).encode(RAW_PASSWORD);
             verify(jwtService).generateToken(eq(capturedId), ArgumentMatchers.<Map<String, Object>>any());
+            verify(eventPublisher).publishEvent(eventCaptor.capture());
+            assertEquals(capturedId, eventCaptor.getValue().userId());
+            assertEquals(VALID_PHONE, eventCaptor.getValue().phoneNumber());
+            assertEquals(null, eventCaptor.getValue().email());
         }
     }
 }
