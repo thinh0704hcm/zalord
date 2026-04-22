@@ -23,9 +23,13 @@ import io.zalord.messaging.domain.entities.Message;
 import io.zalord.messaging.dto.response.MessageResponse;
 import io.zalord.messaging.port.ChatAccessPort;
 import io.zalord.messaging.repository.MessageRepository;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/chats")
+@Tag(name = "Messages")
+@SecurityRequirement(name = "bearerAuth")
 public class MessageController {
 
     private final MessageService messageService;

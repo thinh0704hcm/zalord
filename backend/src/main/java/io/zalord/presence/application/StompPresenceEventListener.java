@@ -1,8 +1,5 @@
 package io.zalord.presence.application;
 
-import io.zalord.presence.application.PresenceService;
-import io.zalord.presence.application.PresenceSessionRegistry;
-
 import java.security.Principal;
 import java.util.Set;
 import java.util.UUID;

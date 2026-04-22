@@ -14,10 +14,12 @@ import io.zalord.auth.dto.request.LoginRequest;
 import io.zalord.auth.dto.request.RefreshTokenRequest;
 import io.zalord.auth.dto.request.RegisterRequest;
 import io.zalord.auth.dto.response.AuthResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Authentication")
 public class AuthController {
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;

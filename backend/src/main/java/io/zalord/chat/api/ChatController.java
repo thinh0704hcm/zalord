@@ -34,10 +34,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import io.zalord.chat.application.commands.AddMemberCommand;
 import io.zalord.chat.dto.request.AddMemberRequest;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 
 @RestController
 @RequestMapping("/api/chats")
+@Tag(name = "Chats")
+@SecurityRequirement(name = "bearerAuth")
 public class ChatController {
     private final ChatService chatService;
 

@@ -12,9 +12,13 @@ import org.springframework.web.bind.annotation.RestController;
 import io.zalord.common.security.AuthenticatedUser;
 import io.zalord.user.application.UserService;
 import io.zalord.user.dto.UserResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/users")
+@Tag(name = "Users")
+@SecurityRequirement(name = "bearerAuth")
 public class UserController {
 
     private final UserService userService;
