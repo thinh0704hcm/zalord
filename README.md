@@ -31,15 +31,16 @@ docs/         Design docs — architecture, services, database, patterns
 
 ## Quick start
 
-Requires Docker (Desktop on macOS/Windows, native on Linux) and `make`. Windows users: run `make` from Git Bash or WSL.
+Requires Docker (Desktop on macOS/Windows, native on Linux) and `make`.
 
 ```bash
 cp .env.example .env       # fill in secrets
 make dev                   # start the full stack
 make dev-status            # check container health
-make smoke                 # end-to-end acceptance test (once Sprint 1 is done)
 make help                  # everything else
 ```
+
+See [`docs/development.md`](./docs/development.md) for use-case recipes (debugging a service, inspecting databases, Kafka, MinIO, the smoke test, Windows notes).
 
 ## Docs
 
