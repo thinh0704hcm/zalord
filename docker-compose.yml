@@ -31,17 +31,17 @@ services:
   # ── Postgres: auth-service's database ─────────────────────────────────────
   auth-pg:
     image: postgres:16-alpine
-    container_name: auth-db
+    container_name: zalord-auth-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: auth-db          # auto-created on first boot
+      POSTGRES_DB: auth-db          
     ports:
       - "${POSTGRES_AUTH_HOST_PORT:-6433}:5432"
     volumes:
       - pgdata_auth:/var/lib/postgresql/data
-      - ./infra/postgres:/docker-entrypoint-initdb.d:ro   # shared init.sql
+      - ./infra/postgres/init-auth.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
     command: ["postgres", "-c", "shared_buffers=64MB"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d auth-db"]
@@ -55,7 +55,7 @@ services:
   # ── Postgres: user-service's database ─────────────────────────────────────
   user-pg:
     image: postgres:16-alpine
-    container_name: user-db
+    container_name: zalord-user-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -65,7 +65,7 @@ services:
       - "${POSTGRES_USER_HOST_PORT:-6434}:5432"
     volumes:
       - pgdata_user:/var/lib/postgresql/data
-      - ./infra/postgres:/docker-entrypoint-initdb.d:ro   # shared init.sql
+      - ./infra/postgres/init-user.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
     command: ["postgres", "-c", "shared_buffers=64MB"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d user-db"]
