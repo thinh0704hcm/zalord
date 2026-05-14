@@ -78,9 +78,10 @@ Inside `make sh` you can run `env`, `curl localhost:8080/health`, `ps`, etc. to 
 ### 3.5 "I need to inspect the database"
 
 ```bash
-make psql                               # default: zalord_auth
-make psql DB=zalord_user                # any other service DB
-make psql DB=zalord_chat
+make psql                               # default: postgres-auth → zalord_auth
+make psql PG=user                       # postgres-user → zalord_user
+make psql PG=chat                       # postgres-chat → zalord_chat (Week 2+)
+make psql PG=auth DB=postgres           # connect to a different DB inside a container
 ```
 
 Once inside psql: `\dt` lists tables, `\d <table>` shows schema.

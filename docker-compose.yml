@@ -1,0 +1,211 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# zalord — local infra stack
+#
+# WEEK 1 scope: one Postgres container PER SERVICE (database-per-service via
+# physical isolation), one shared Redis (intentional — Redis hosts cross-service
+# coordination keys per docs/architecture.md), plus Nginx as gateway.
+#
+# Active Postgres containers grow as services are added:
+#   Week 1: postgres-auth, postgres-user
+#   Week 2: + postgres-chat, postgres-notif, etc.
+#
+# Heavier infra (Kafka, ScyllaDB, MinIO) is parked at the bottom, commented.
+# Service containers (auth-service, user-service) are parked above Nginx,
+# commented until you initialize each.
+#
+# All ${VAR} substitutions resolve from .env (auto-loaded by docker compose).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: zalord
+
+networks:
+  zalord-net:
+    driver: bridge
+
+volumes:
+  pgdata_auth:
+  pgdata_user:
+  redisdata:
+
+services:
+  # ── Postgres: auth-service's database ─────────────────────────────────────
+  auth-pg:
+    image: postgres:16-alpine
+    container_name: auth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: auth-db          # auto-created on first boot
+    ports:
+      - "${POSTGRES_AUTH_HOST_PORT:-6433}:5432"
+    volumes:
+      - pgdata_auth:/var/lib/postgresql/data
+      - ./infra/postgres:/docker-entrypoint-initdb.d:ro   # shared init.sql
+    command: ["postgres", "-c", "shared_buffers=64MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d auth-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── Postgres: user-service's database ─────────────────────────────────────
+  user-pg:
+    image: postgres:16-alpine
+    container_name: user-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: user-db
+    ports:
+      - "${POSTGRES_USER_HOST_PORT:-6434}:5432"
+    volumes:
+      - pgdata_user:/var/lib/postgresql/data
+      - ./infra/postgres:/docker-entrypoint-initdb.d:ro   # shared init.sql
+    command: ["postgres", "-c", "shared_buffers=64MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d user-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── Redis (shared — coordination layer by design) ─────────────────────────
+  # Hosts cross-service keys: user:sessions:*, user:delivery:* (pubsub),
+  # presence:*, conversation:seq:*. Splitting Redis per service would break
+  # the multi-device fan-out pattern in docs/architecture.md.
+  redis:
+    image: redis:7-alpine
+    container_name: zalord-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - redisdata:/data
+      - ./infra/redis/redis.conf:/etc/redis/redis.conf:ro
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── auth-service ──────────────────────────────────────────────────────────
+  # Uncomment after initializing the Spring Boot project. See
+  # docs/only-me/auth-service-guide.md.
+  #
+  # auth-service:
+  #   build:
+  #     context: ./backend/auth-service
+  #     dockerfile: Dockerfile
+  #   container_name: zalord-auth
+  #   restart: unless-stopped
+  #   depends_on:
+  #     auth-pg:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     SERVER_PORT: "8080"
+  #     SPRING_PROFILES_ACTIVE: docker
+  #     POSTGRES_HOST: auth-pg      # hardcoded — this service only knows its own DB
+  #     POSTGRES_PORT: "5432"
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     AUTH_DB_NAME: auth-db
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: "6379"
+  #     JWT_SECRET: ${JWT_SECRET}
+  #     JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES}
+  #     JWT_REFRESH_EXPIRY_DAYS: ${JWT_REFRESH_EXPIRY_DAYS}
+  #     JWT_ISSUER: ${JWT_ISSUER}
+  #     JWT_AUDIENCE: ${JWT_AUDIENCE}
+  #   ports:
+  #     - "${AUTH_SERVICE_HOST_PORT:-8081}:8080"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 6
+  #     start_period: 30s
+  #   mem_limit: 512m
+  #   networks: [zalord-net]
+
+  # ── user-service ──────────────────────────────────────────────────────────
+  # Uncomment after initializing the Go project. See
+  # docs/only-me/user-service-guide.md.
+  #
+  # user-service:
+  #   build:
+  #     context: ./backend/user-service
+  #     dockerfile: Dockerfile
+  #   container_name: zalord-user
+  #   restart: unless-stopped
+  #   depends_on:
+  #     user-pg:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     PORT: "8080"
+  #     POSTGRES_HOST: user-pg      # hardcoded — own DB only
+  #     POSTGRES_PORT: "5432"
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     USER_DB_NAME: user-db
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: "6379"
+  #     JWT_SECRET: ${JWT_SECRET}
+  #     JWT_ISSUER: ${JWT_ISSUER}
+  #     JWT_AUDIENCE: ${JWT_AUDIENCE}
+  #   ports:
+  #     - "${USER_SERVICE_HOST_PORT:-8082}:8080"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 6
+  #     start_period: 10s
+  #   mem_limit: 128m
+  #   networks: [zalord-net]
+
+  # ── Nginx (API Gateway) ───────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: zalord-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    mem_limit: 64m
+    networks: [zalord-net]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WEEK 2+  — uncomment when needed.
+#
+# Add a new Postgres container per new service that owns relational data:
+#
+#   postgres-chat:    POSTGRES_DB=zalord_chat,   volume pgdata_chat,   port 6435
+#   postgres-group:   POSTGRES_DB=zalord_group,  volume pgdata_group,  port 6436
+#   postgres-notif:   POSTGRES_DB=zalord_notif,  volume pgdata_notif,  port 6437
+#   postgres-media:   POSTGRES_DB=zalord_media,  volume pgdata_media,  port 6438
+#
+# Plus Kafka, ScyllaDB, MinIO. Full templates omitted to keep this file readable;
+# see sprint-1-plan.md §§ T2, T5, T6 for the full service definitions.

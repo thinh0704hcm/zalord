@@ -1,25 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# zalord Makefile
-#
-# Works in:
-#   - macOS / Linux                native sh
-#   - Windows Git Bash / WSL       sh
-#   - Windows cmd.exe / PowerShell with make (e.g. choco install make)
-#
-# Every target shells out to `docker` or `docker compose`, which behave
-# identically across hosts. The few host-side scripts (smoke test) are bash-
-# only and noted as such.
-#
-# Recipe-line rules (kept cmd.exe-compatible):
-#   - No `SHELL := /bin/sh`                     (cmd has no /bin/sh)
-#   - No `[ ... ]` shell tests; use $(if) / ifndef instead
-#   - No `sh -c '...'` wrappers
-#   - No single-quoted strings in echo / commands
-#   - Variables come from make ($(VAR)), not from the shell ($$VAR)
-#
-# See docs/development.md for use-case recipes.
-# ─────────────────────────────────────────────────────────────────────────────
-
 # Load .env into make if present, so $(POSTGRES_USER) etc. are usable in
 # recipes regardless of the host shell.
 ifneq (,$(wildcard .env))
@@ -31,8 +9,11 @@ endif
 POSTGRES_USER       ?= zalord
 MINIO_ROOT_USER     ?= minioadmin
 MINIO_ROOT_PASSWORD ?= minioadmin
-DB                  ?= zalord_auth
 SERVICE             ?=
+# `make psql SERVICE=auth` connects to postgres-auth, database zalord_auth.
+# Override DB to connect to a non-default database inside that container.
+PG                  ?= auth
+DB                  ?= zalord_$(PG)
 
 # Compose. Override with: make COMPOSE_FILES="-f a.yml -f b.yml" dev
 COMPOSE_FILES ?=
@@ -65,7 +46,9 @@ help:
 	@echo   make sh SERVICE=X           Open sh inside a running container
 	@echo   make restart SERVICE=X      Restart one service without rebuilding
 	@echo Infra shells:
-	@echo   make psql DB=zalord_auth    psql into a Postgres database
+	@echo   make psql                   psql into postgres-auth (default)
+	@echo   make psql PG=user           psql into postgres-user
+	@echo   make psql PG=auth DB=other  psql into a non-default DB in postgres-auth
 	@echo   make redis-cli              redis-cli inside the redis container
 	@echo   make cqlsh                  cqlsh inside the scylladb container
 	@echo   make kafka-topics           List Kafka topics
@@ -132,7 +115,7 @@ restart: require-service
 # ── Infra shells ─────────────────────────────────────────────────────────────
 # Vars expanded by make (not by the host shell), so cmd.exe is happy.
 psql:
-	$(DC) exec postgres psql -U $(POSTGRES_USER) -d $(DB)
+	$(DC) exec postgres-$(PG) psql -U $(POSTGRES_USER) -d $(DB)
 
 redis-cli:
 	$(DC) exec redis redis-cli
