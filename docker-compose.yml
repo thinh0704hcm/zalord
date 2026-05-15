@@ -209,3 +209,5 @@ services:
 #
 # Plus Kafka, ScyllaDB, MinIO. Full templates omitted to keep this file readable;
 # see sprint-1-plan.md §§ T2, T5, T6 for the full service definitions.
+
+# test git
