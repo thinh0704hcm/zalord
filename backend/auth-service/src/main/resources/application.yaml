@@ -1,3 +1,48 @@
 spring:
   application:
     name: auth-service
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/auth-db
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+
+  rabbitmq:
+    host: rabbitmq
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: ${JWT_EXPIRY_MINUTES}
+
+  refresh:
+    expiration: ${REFRESH_EXPIRY_DAYS}
+
+server:
+  port: ${SERVER_PORT:8081}
+
+logging:
+  level:
+    zalord.auth_service: ${LOG_LEVEL:DEBUG}
+    org.springframework.amqp: INFO
+    org.springframework.security: INFO
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha

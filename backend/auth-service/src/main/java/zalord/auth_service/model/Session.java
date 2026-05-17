@@ -10,12 +10,13 @@ import java.util.UUID;
 
 @Entity
 @Data
-@Table(name = "users")
+@Table(name = "sessions")
 @Getter
 @Setter
 public class Session {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(columnDefinition = "uuid", updatable = false, nullable = false)
     private UUID id;
 

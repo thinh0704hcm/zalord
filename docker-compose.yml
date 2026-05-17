@@ -26,6 +26,7 @@ volumes:
   pgdata_auth:
   pgdata_user:
   redisdata:
+  rabbitdata:
 
 services:
   # ── Postgres: auth-service's database ─────────────────────────────────────
@@ -38,7 +39,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: auth-db          
     ports:
-      - "${POSTGRES_AUTH_HOST_PORT:-6433}:5432"
+      - "${POSTGRES_AUTH_HOST_PORT}:5432"
     volumes:
       - pgdata_auth:/var/lib/postgresql/data
       - ./infra/postgres/init-auth.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
@@ -62,7 +63,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: user-db
     ports:
-      - "${POSTGRES_USER_HOST_PORT:-6434}:5432"
+      - "${POSTGRES_USER_HOST_PORT}:5432"
     volumes:
       - pgdata_user:/var/lib/postgresql/data
       - ./infra/postgres/init-user.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
@@ -99,46 +100,67 @@ services:
     mem_limit: 256m
     networks: [zalord-net]
 
-  # ── auth-service ──────────────────────────────────────────────────────────
-  # Uncomment after initializing the Spring Boot project. See
-  # docs/only-me/auth-service-guide.md.
-  #
-  # auth-service:
-  #   build:
-  #     context: ./backend/auth-service
-  #     dockerfile: Dockerfile
-  #   container_name: zalord-auth
-  #   restart: unless-stopped
-  #   depends_on:
-  #     auth-pg:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     SERVER_PORT: "8080"
-  #     SPRING_PROFILES_ACTIVE: docker
-  #     POSTGRES_HOST: auth-pg      # hardcoded — this service only knows its own DB
-  #     POSTGRES_PORT: "5432"
-  #     POSTGRES_USER: ${POSTGRES_USER}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #     AUTH_DB_NAME: auth-db
-  #     REDIS_HOST: redis
-  #     REDIS_PORT: "6379"
-  #     JWT_SECRET: ${JWT_SECRET}
-  #     JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES}
-  #     JWT_REFRESH_EXPIRY_DAYS: ${JWT_REFRESH_EXPIRY_DAYS}
-  #     JWT_ISSUER: ${JWT_ISSUER}
-  #     JWT_AUDIENCE: ${JWT_AUDIENCE}
-  #   ports:
-  #     - "${AUTH_SERVICE_HOST_PORT:-8081}:8080"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1"]
-  #     interval: 10s
-  #     timeout: 3s
-  #     retries: 6
-  #     start_period: 30s
-  #   mem_limit: 512m
-  #   networks: [zalord-net]
+  # ── RabbitMQ (event bus — outbox publisher → consumers) ───────────────────
+  # Management UI on host port ${RABBITMQ_MGMT_HOST_PORT:-15672}.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: zalord-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${RABBITMQ_HOST_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_HOST_PORT:-15672}:15672"
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 384m
+    networks: [zalord-net]
+
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: zalord-auth
+    restart: unless-stopped
+    depends_on:
+      auth-pg:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: "8081"
+      POSTGRES_HOST: auth-pg      # hardcoded — this service only knows its own DB
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES}
+      REFRESH_EXPIRY_DAYS: ${REFRESH_EXPIRY_DAYS}
+    ports:
+      - "${AUTH_SERVICE_HOST_PORT}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    mem_limit: 512m
+    networks: [zalord-net]
 
   # ── user-service ──────────────────────────────────────────────────────────
   # Uncomment after initializing the Go project. See
@@ -156,21 +178,19 @@ services:
   #     redis:
   #       condition: service_healthy
   #   environment:
-  #     PORT: "8080"
+  #     PORT: "8082"
   #     POSTGRES_HOST: user-pg      # hardcoded — own DB only
   #     POSTGRES_PORT: "5432"
   #     POSTGRES_USER: ${POSTGRES_USER}
   #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #     USER_DB_NAME: user-db
   #     REDIS_HOST: redis
   #     REDIS_PORT: "6379"
   #     JWT_SECRET: ${JWT_SECRET}
-  #     JWT_ISSUER: ${JWT_ISSUER}
-  #     JWT_AUDIENCE: ${JWT_AUDIENCE}
+  #     REFRESH_EXPIRY_DAYS: ${REFRESH_EXPIRY_DAYS}
   #   ports:
-  #     - "${USER_SERVICE_HOST_PORT:-8082}:8080"
+  #     - "${USER_SERVICE_HOST_PORT}:8082"
   #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1"]
+  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health >/dev/null 2>&1"]
   #     interval: 10s
   #     timeout: 3s
   #     retries: 6
