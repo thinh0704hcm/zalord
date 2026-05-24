@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import zalord.auth_service.config.RabbitMQConfig;
 import zalord.auth_service.dto.event.UserCreatedEvent;
 import zalord.auth_service.dto.response.LoginResponse;
+import zalord.auth_service.dto.response.RefreshResponse;
 import zalord.auth_service.dto.response.RegisterResponse;
 import zalord.auth_service.exception.InvalidCredentialsException;
 import zalord.auth_service.exception.PhoneNumberAlreadyExistsException;
@@ -21,6 +22,7 @@ import zalord.auth_service.model.CustomUserDetails;
 import zalord.auth_service.model.OutboxEvent;
 import zalord.auth_service.model.Role;
 import zalord.auth_service.enums.RoleName;
+import zalord.auth_service.model.Session;
 import zalord.auth_service.model.User;
 import zalord.auth_service.model.UserRoles;
 import zalord.auth_service.repository.OutboxEventRepository;
@@ -28,6 +30,10 @@ import zalord.auth_service.repository.RoleRepository;
 import zalord.auth_service.repository.UserRepository;
 import zalord.auth_service.repository.UserRolesRepository;
 import zalord.auth_service.service.IAuthService;
+import zalord.auth_service.service.ISessionService;
+
+import java.util.List;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -41,6 +47,7 @@ public class AuthServiceImpl implements IAuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+    private final ISessionService sessionService;
 
     public AuthServiceImpl(UserRepository userRepository,
                            RoleRepository roleRepository,
@@ -49,7 +56,8 @@ public class AuthServiceImpl implements IAuthService {
                            OutboxEventRepository outboxEventRepository,
                            AuthenticationManager authenticationManager,
                            JwtUtil jwtUtil,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           ISessionService sessionService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.userRolesRepository = userRolesRepository;
@@ -58,6 +66,7 @@ public class AuthServiceImpl implements IAuthService {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
+        this.sessionService = sessionService;
     }
 
     @Override
@@ -73,6 +82,7 @@ public class AuthServiceImpl implements IAuthService {
     }
 
     @Override
+    @Transactional
     public LoginResponse login(String phoneNumber, String password) {
         log.info("Login attempt for phoneNumber={}", phoneNumber);
 
@@ -87,12 +97,35 @@ public class AuthServiceImpl implements IAuthService {
         }
 
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-        String token = jwtUtil.generateToken(userDetails);
+        String accessToken = jwtUtil.generateToken(userDetails);
+        String refreshToken = sessionService.createSession(userDetails.getUser());
         log.info("Login success userId={} phoneNumber={}", userDetails.getUserId(), phoneNumber);
 
         return LoginResponse.builder()
-                .accessToken(token)
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public RefreshResponse refresh(String refreshToken) {
+        Session session = sessionService.validateRefreshToken(refreshToken);
+        UUID userId = session.getUser().getId();
+        List<String> roles = roleRepository.findRolesByUserId(userId);
+        String accessToken = jwtUtil.generateAccessToken(userId, roles);
+        log.info("Refreshed access token userId={}", userId);
+
+        return RefreshResponse.builder()
+                .accessToken(accessToken)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void logout(String refreshToken) {
+        sessionService.revoke(refreshToken);
+        log.info("Logout: refresh session revoked");
     }
 
     private RegisterResponse registerWithRole(String displayName,

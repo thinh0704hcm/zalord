@@ -17,18 +17,24 @@ spring:
         jdbc:
           time_zone: UTC
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
   rabbitmq:
-    host: rabbitmq
+    host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
 
   jwt:
     secret: ${JWT_SECRET}
-    expiration: ${JWT_EXPIRY_MINUTES}
+    expiration: ${JWT_EXPIRY_MINUTES}   # minutes (converted to ms in JwtUtil)
+    issuer: ${JWT_ISSUER}               # must equal Kong consumer key ("zalord")
 
   refresh:
-    expiration: ${REFRESH_EXPIRY_DAYS}
+    expiration: ${REFRESH_EXPIRY_DAYS}  # days
 
 server:
   port: ${SERVER_PORT:8081}

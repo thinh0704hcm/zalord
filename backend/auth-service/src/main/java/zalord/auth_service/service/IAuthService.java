@@ -1,6 +1,7 @@
 package zalord.auth_service.service;
 
 import zalord.auth_service.dto.response.LoginResponse;
+import zalord.auth_service.dto.response.RefreshResponse;
 import zalord.auth_service.dto.response.RegisterResponse;
 
 public interface IAuthService {
@@ -10,4 +11,8 @@ public interface IAuthService {
     RegisterResponse createAdmin(String displayName, String phoneNumber, String password);
 
     LoginResponse login(String phoneNumber, String password);
+
+    RefreshResponse refresh(String refreshToken);
+
+    void logout(String refreshToken);
 }

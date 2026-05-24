@@ -144,9 +144,9 @@ logs: require-service
 sh: require-service
 	$(DC) exec $(SERVICE) sh
 
-# Example: make restart SERVICE=nginx
+# Example: make restart SERVICE=kong
 # Restart one container without rebuilding the image. Use after editing a
-# mounted config file (e.g. nginx.conf) that the container reads at startup.
+# mounted config file (e.g. infra/kong/kong.yml) that the container reads at startup.
 restart: require-service
 	$(DC) restart $(SERVICE)
 

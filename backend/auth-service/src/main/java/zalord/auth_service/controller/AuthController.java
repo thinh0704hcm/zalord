@@ -7,14 +7,24 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import zalord.auth_service.dto.request.LoginRequest;
+import zalord.auth_service.dto.request.LogoutRequest;
+import zalord.auth_service.dto.request.RefreshRequest;
 import zalord.auth_service.dto.request.RegisterRequest;
 import zalord.auth_service.dto.response.LoginResponse;
+import zalord.auth_service.dto.response.RefreshResponse;
 import zalord.auth_service.dto.response.RegisterResponse;
+import zalord.auth_service.enums.RoleName;
+import zalord.auth_service.exception.ForbiddenException;
 import zalord.auth_service.model.ApiResponse;
 import zalord.auth_service.service.IAuthService;
+
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -47,8 +57,13 @@ public class AuthController {
     }
 
     @PostMapping("/create-admin")
-    @Operation(summary = "Create an admin user (bootstrap / admin-only endpoint)")
-    public ResponseEntity<ApiResponse<RegisterResponse>> createAdmin(@Valid @RequestBody RegisterRequest request) {
+    @Operation(summary = "Create an admin user (ADMIN role required)")
+    public ResponseEntity<ApiResponse<RegisterResponse>> createAdmin(
+            @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
+            @Valid @RequestBody RegisterRequest request) {
+
+        requireRole(rolesHeader, RoleName.ADMIN);
+
         RegisterResponse data = authService.createAdmin(
                 request.displayName(),
                 request.phoneNumber(),
@@ -78,5 +93,52 @@ public class AuthController {
         );
 
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Exchange a refresh token for a new access token")
+    public ResponseEntity<ApiResponse<RefreshResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
+        RefreshResponse data = authService.refresh(request.refreshToken());
+
+        ApiResponse<RefreshResponse> response = new ApiResponse<>(
+                HttpStatus.OK,
+                "Token refreshed",
+                data,
+                null
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "Revoke a refresh token (logout this session)")
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request) {
+        authService.logout(request.refreshToken());
+
+        ApiResponse<Void> response = new ApiResponse<>(
+                HttpStatus.OK,
+                "Logged out",
+                null,
+                null
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Authorize from the X-User-Roles header that Kong injects (comma-separated,
+     * derived from the validated JWT's `roles` claim). auth-service never parses
+     * the access token itself — Kong already verified it.
+     */
+    private void requireRole(String rolesHeader, RoleName required) {
+        Set<String> roles = rolesHeader == null || rolesHeader.isBlank()
+                ? Set.of()
+                : Arrays.stream(rolesHeader.split(","))
+                        .map(String::trim)
+                        .collect(Collectors.toSet());
+
+        if (!roles.contains(required.name())) {
+            throw new ForbiddenException(required.name() + " role required");
+        }
     }
 }

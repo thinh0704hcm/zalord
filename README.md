@@ -13,16 +13,15 @@ A real-time chat system (1-on-1 + group messaging, WebSocket delivery, presence,
 - **Redis 7** — sessions, presence, per-conversation sequence IDs, pub/sub
 - **Apache Kafka** — async event bus (Transactional Outbox pattern)
 - **MinIO** — S3-compatible media storage
-- **Nginx** — API gateway, WebSocket termination
+- **Kong** (DB-less) — API gateway: routing, edge JWT validation, `X-User-Id` injection
 - **Docker Compose** — local + single-VPS deployment
 
 ## Repository layout
 
 ```
 backend/      One directory per microservice
-infra/        Container init scripts (Postgres / Scylla / Kafka / MinIO / Redis)
-nginx/        API gateway config
-shared/       Cross-service code (Go JWT verifier, proto stubs)
+infra/        Container init + config (Postgres init SQL, Redis conf, Kong declarative config)
+shared/       Cross-service code (proto stubs)
 scripts/      Ops + smoke-test scripts
 deploy/       Kubernetes manifests (later)
 frontend/     React + Vite client (placeholder)

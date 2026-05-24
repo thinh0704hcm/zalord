@@ -3,14 +3,14 @@
 #
 # WEEK 1 scope: one Postgres container PER SERVICE (database-per-service via
 # physical isolation), one shared Redis (intentional — Redis hosts cross-service
-# coordination keys per docs/architecture.md), plus Nginx as gateway.
+# coordination keys), plus Kong (DB-less) as the API gateway.
 #
 # Active Postgres containers grow as services are added:
 #   Week 1: postgres-auth, postgres-user
 #   Week 2: + postgres-chat, postgres-notif, etc.
 #
 # Heavier infra (Kafka, ScyllaDB, MinIO) is parked at the bottom, commented.
-# Service containers (auth-service, user-service) are parked above Nginx,
+# Service containers (auth-service, user-service) are parked above Kong,
 # commented until you initialize each.
 #
 # All ${VAR} substitutions resolve from .env (auto-loaded by docker compose).
@@ -151,10 +151,11 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES}
       REFRESH_EXPIRY_DAYS: ${REFRESH_EXPIRY_DAYS}
+      JWT_ISSUER: ${JWT_ISSUER}      # must equal kong.yml consumer key ("zalord")
     ports:
       - "${AUTH_SERVICE_HOST_PORT}:8081"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1"]
       interval: 10s
       timeout: 3s
       retries: 6
@@ -198,23 +199,40 @@ services:
   #   mem_limit: 128m
   #   networks: [zalord-net]
 
-  # ── Nginx (API Gateway) ───────────────────────────────────────────────────
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: zalord-nginx
+  # ── Kong (API Gateway, DB-less) ───────────────────────────────────────────
+  # Validates JWT at the edge and injects X-User-Id so backend services never
+  # parse a token. Declarative config in infra/kong/kong.yml.
+  #   Proxy : host ${KONG_PROXY_HOST_PORT:-8080} -> 8000  (client traffic)
+  #   Admin : host ${KONG_ADMIN_HOST_PORT:-8001} -> 8001  (config/debug; keep off public)
+  kong:
+    image: kong:3.7
+    container_name: zalord-kong
     restart: unless-stopped
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_LOG_LEVEL: notice
+      # Serverless pre-function (X-User-Id injection) needs to require cjson etc.
+      KONG_UNTRUSTED_LUA: "sandbox"
+      # Resolves {vault://env/jwt-secret} in kong.yml from this env var.
+      JWT_SECRET: ${JWT_SECRET}
     ports:
-      - "${NGINX_HTTP_PORT:-8080}:80"
+      - "${KONG_PROXY_HOST_PORT:-8080}:8000"
+      - "${KONG_ADMIN_HOST_PORT:-8001}:8001"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infra/kong:/kong:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz >/dev/null 2>&1"]
+      test: ["CMD", "kong", "health"]
       interval: 10s
-      timeout: 3s
-      retries: 6
-      start_period: 5s
-    mem_limit: 64m
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    mem_limit: 512m
     networks: [zalord-net]
 
 # ─────────────────────────────────────────────────────────────────────────────
