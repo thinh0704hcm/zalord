@@ -1,6 +1,7 @@
 package zalord.auth_service.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -59,6 +60,9 @@ public class AuthController {
     @PostMapping("/create-admin")
     @Operation(summary = "Create an admin user (ADMIN role required)")
     public ResponseEntity<ApiResponse<RegisterResponse>> createAdmin(
+            // Hidden from Swagger: Kong injects this from the validated JWT and
+            // wipes any client-supplied value, so a text box here would mislead.
+            @Parameter(hidden = true)
             @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
             @Valid @RequestBody RegisterRequest request) {
 

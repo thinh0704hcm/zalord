@@ -59,10 +59,6 @@ services:
     mem_limit: 256m
     networks: [zalord-net]
 
-  # ── Redis (shared — coordination layer by design) ─────────────────────────
-  # Hosts cross-service keys: user:sessions:*, user:delivery:* (pubsub),
-  # presence:*, conversation:seq:*. Splitting Redis per service would break
-  # the multi-device fan-out pattern in docs/architecture.md.
   redis:
     image: redis:7-alpine
     container_name: zalord-redis
@@ -195,15 +191,29 @@ services:
         condition: service_healthy
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      # Read the SUBSTITUTED config (see `command` below), not the raw mounted one.
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
       KONG_PROXY_LISTEN: "0.0.0.0:8000"
       KONG_ADMIN_LISTEN: "0.0.0.0:8001"
       KONG_LOG_LEVEL: notice
       # Serverless pre-function (X-User-Id injection) needs the Lua sandbox.
       KONG_UNTRUSTED_LUA: "sandbox"
-      # NOTE: the JWT secret is NOT passed via env — Kong's workers can't see
-      # arbitrary env vars, so the env vault doesn't work. The secret is set
-      # directly in the gitignored infra/kong/kong.yml (see kong.yml.example).
+      # Allow the pre-function to `require("cjson.safe")` inside the sandbox.
+      KONG_UNTRUSTED_LUA_SANDBOX_REQUIRES: "cjson.safe"
+      # JWT secret, kept out of git. The `command` below substitutes it into the
+      # config at startup; the value lives only in .env. (Kong's env vault can't
+      # be used here — its nginx workers don't inherit the env var at request
+      # time, so signature verification fails.)
+      JWT_SECRET: ${JWT_SECRET}
+    # Substitute the __JWT_SECRET__ placeholder in the read-only mounted config
+    # into a writable copy, then hand off to Kong's normal entrypoint. `$$`
+    # escapes compose interpolation so the shell reads JWT_SECRET from the
+    # container env at runtime (secret never appears in the compose file).
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed "s|__JWT_SECRET__|$$JWT_SECRET|g" /kong/kong.yml > /tmp/kong.yml
+        exec /docker-entrypoint.sh kong docker-start
     ports:
       - "${KONG_PROXY_HOST_PORT:-8080}:8000"
       - "${KONG_ADMIN_HOST_PORT:-8001}:8001"
@@ -216,4 +226,20 @@ services:
       retries: 10
       start_period: 15s
     mem_limit: 512m
+    networks: [zalord-net]
+
+  # ── Swagger UI (dev only — aggregated API docs) ───────────────────────────
+  # Single UI with a dropdown over every service's OpenAPI spec. Not exposed to
+  # the host: reached only through Kong at http://localhost:${KONG_PROXY_HOST_PORT}/docs.
+  # URLS are origin-relative (same origin as the UI via Kong) → no CORS.
+  # Add an entry to URLS for each new service whose /v3/api-docs you route.
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: zalord-swagger
+    restart: unless-stopped
+    environment:
+      BASE_URL: /docs                         # must match the Kong route path
+      URLS: '[{"url":"/api-docs/auth","name":"auth-service"}]'
+      URLS_PRIMARY_NAME: auth-service
+    mem_limit: 64m
     networks: [zalord-net]

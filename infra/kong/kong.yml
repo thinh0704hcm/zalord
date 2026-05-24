@@ -15,6 +15,64 @@ _format_version: "3.0"
 # single point of failure. Keep every protected route to the same two plugins.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Shared plugin definitions. Declared here as GLOBAL but `enabled: false`
+# (so they do nothing on their own), then activated per-route below via a YAML
+# merge (`<<:` + `enabled: true`). Defining them here — not inside a route —
+# means deleting any single route never breaks the others' plugins.
+plugins:
+  - &jwt-def
+    name: jwt
+    enabled: false
+    config:
+      claims_to_verify:
+        - exp
+
+  - &identity-def
+    name: pre-function
+    enabled: false
+    config:
+      access:
+        - |
+          -- Decode the (already signature-verified) JWT and forward identity as
+          -- headers. cjson parses the payload properly — no regex on JSON.
+          local cjson = require("cjson.safe")
+
+          -- Strip any client-supplied identity headers so they can't be forged.
+          kong.service.request.clear_header("X-User-Id")
+          kong.service.request.clear_header("X-User-Roles")
+
+          local auth = kong.request.get_header("authorization")
+          if not auth then return end
+
+          local token = auth:match("^[Bb]earer%s+(.+)$")
+          if not token then return end
+
+          local payload_b64 = token:match("^[^.]+%.([^.]+)%.[^.]+$")
+          if not payload_b64 then return end
+
+          -- base64url -> base64 (+ padding) so ngx.decode_base64 can read it
+          payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
+          local pad = #payload_b64 % 4
+          if pad > 0 then payload_b64 = payload_b64 .. string.rep("=", 4 - pad) end
+
+          local json = ngx.decode_base64(payload_b64)
+          if not json then return end
+
+          local claims = cjson.decode(json)
+          if type(claims) ~= "table" then return end
+
+          if claims.sub then
+            kong.service.request.set_header("X-User-Id", claims.sub)
+          end
+
+          -- roles claim is a JSON array: "roles":["ADMIN","USER"]
+          local roles = claims.roles
+          if type(roles) == "table" then
+            kong.service.request.set_header("X-User-Roles", table.concat(roles, ","))
+          elseif type(roles) == "string" then
+            kong.service.request.set_header("X-User-Roles", roles)
+          end
+
 services:
   # ── auth-service ──────────────────────────────────────────────────────────
   - name: auth-service
@@ -36,49 +94,10 @@ services:
         paths:
           - "/api/v1/auth/create-admin"
         plugins:
-          - &jwt-plugin
-            name: jwt
-            config:
-              claims_to_verify:
-                - exp
-          - &identity-plugin
-            name: pre-function
-            config:
-              access:
-                - |
-                  -- Drop any client-supplied identity headers first, so a caller
-                  -- can't forge them. The jwt plugin (runs after this and rejects
-                  -- invalid tokens) guarantees these only reach the upstream when
-                  -- the token is valid.
-                  kong.service.request.clear_header("X-User-Id")
-                  kong.service.request.clear_header("X-User-Roles")
-                  local auth = kong.request.get_header("authorization")
-                  if auth then
-                    local token = auth:match("^[Bb]earer%s+(.+)$")
-                    if token then
-                      local payload_b64 = token:match("^[^.]+%.([^.]+)%.[^.]+$")
-                      if payload_b64 then
-                        payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
-                        local pad = #payload_b64 % 4
-                        if pad > 0 then
-                          payload_b64 = payload_b64 .. string.rep("=", 4 - pad)
-                        end
-                        local json = ngx.decode_base64(payload_b64)
-                        if json then
-                          local sub = json:match('"sub"%s*:%s*"([^"]+)"')
-                          if sub then
-                            kong.service.request.set_header("X-User-Id", sub)
-                          end
-                          -- roles claim is a JSON array: "roles":["ADMIN","USER"]
-                          local roles = json:match('"roles"%s*:%s*%[(.-)%]')
-                          if roles then
-                            roles = roles:gsub('"', ''):gsub('%s', '')
-                            kong.service.request.set_header("X-User-Roles", roles)
-                          end
-                        end
-                      end
-                    end
-                  end
+          - <<: *jwt-def
+            enabled: true
+          - <<: *identity-def
+            enabled: true
 
   # ── user-service: protected — same identity injection ─────────────────────
   - name: user-service
@@ -89,13 +108,40 @@ services:
         paths:
           - "/api/v1/users"
         plugins:
-          - *jwt-plugin
-          - *identity-plugin
+          - <<: *jwt-def
+            enabled: true
+          - <<: *identity-def
+            enabled: true
+
+  # ── API docs (dev only, public) ───────────────────────────────────────────
+  # Aggregated Swagger UI lives in its own container; Kong serves it at /docs
+  # and exposes each service's raw OpenAPI JSON at /api-docs/<service>. All
+  # same-origin (localhost:8080) so the browser hits no CORS. No JWT here —
+  # docs are open in dev. Add one auth-docs-style block per new service.
+  - name: swagger-ui
+    url: http://swagger-ui:8080
+    routes:
+      - name: swagger-ui-route
+        strip_path: false
+        paths:
+          - "/docs"
+
+  - name: auth-docs
+    url: http://auth-service:8081/v3/api-docs   # service path; strip_path rewrites to it
+    routes:
+      - name: auth-docs-route
+        strip_path: true
+        paths:
+          - "/api-docs/auth"
 
 # Consumer + JWT credential. `key` must equal the `iss` claim in issued tokens.
+# The secret is NOT stored here — __JWT_SECRET__ is a placeholder that the Kong
+# container substitutes at startup from the JWT_SECRET env var (see the kong
+# service `command` in docker-compose.yml). The real value lives only in .env
+# (gitignored) and must equal the auth-service JWT_SECRET.
 consumers:
   - username: zalord-clients
     jwt_secrets:
       - key: zalord
         algorithm: HS256
-        secret: "e2GaBzpkZw3W3suR7FomaYSM361hEyDyUh/dvg3gtEU="   # MUST match JWT_SECRET in .env
+        secret: "__JWT_SECRET__"
