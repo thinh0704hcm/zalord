@@ -1,25 +1,19 @@
-# Kong declarative config (DB-less mode).
-#
-# Responsibilities:
-#   1. Route public traffic to the right backend service.
-#   2. Validate the JWT at the edge on protected routes (jwt plugin).
-#   3. Inject trusted X-User-Id and X-User-Roles headers from the token's
-#      `sub` and `roles` claims, so backend services NEVER parse a JWT
-#      themselves (pre-function plugin). Any client-supplied copies of those
-#      headers are stripped first, so they can't be forged.
-#
-# Route groups:
-#   - auth public  : register/login/refresh/logout  -> no JWT (no token yet)
-#   - auth admin   : create-admin                    -> JWT + roles (ADMIN check in service)
-#   - user-service : /api/v1/users/**                -> JWT + identity injection
-#
-# IMPORTANT — the JWT must carry `iss` = the consumer credential `key` ("zalord")
-# so the jwt plugin can pick the secret. auth-service sets this via JWT_ISSUER.
-#
-# This file is gitignored (it holds the secret). The committed template is
-# kong.yml.example. The `secret:` below MUST equal JWT_SECRET in .env.
-
 _format_version: "3.0"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Security split — Kong AUTHENTICATES, services AUTHORIZE.
+#
+#   Kong (here):  verify the JWT signature + exp (jwt plugin), then inject
+#                 X-User-Id and X-User-Roles from the validated token
+#                 (pre-function). That is ALL the gateway does.
+#   Services:     decide what an identity may do — role checks and
+#                 resource-ownership checks live in the service code
+#                 (e.g. AuthController.requireRole reads X-User-Roles).
+#
+# Do NOT put authorization logic (role gates, ownership rules) in Lua here.
+# It can't see service data, it's untestable, and a gateway-only check is a
+# single point of failure. Keep every protected route to the same two plugins.
+# ─────────────────────────────────────────────────────────────────────────────
 
 services:
   # ── auth-service ──────────────────────────────────────────────────────────

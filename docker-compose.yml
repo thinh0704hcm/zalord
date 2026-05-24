@@ -1,21 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# zalord — local infra stack
-#
-# WEEK 1 scope: one Postgres container PER SERVICE (database-per-service via
-# physical isolation), one shared Redis (intentional — Redis hosts cross-service
-# coordination keys), plus Kong (DB-less) as the API gateway.
-#
-# Active Postgres containers grow as services are added:
-#   Week 1: postgres-auth, postgres-user
-#   Week 2: + postgres-chat, postgres-notif, etc.
-#
-# Heavier infra (Kafka, ScyllaDB, MinIO) is parked at the bottom, commented.
-# Service containers (auth-service, user-service) are parked above Kong,
-# commented until you initialize each.
-#
-# All ${VAR} substitutions resolve from .env (auto-loaded by docker compose).
-# ─────────────────────────────────────────────────────────────────────────────
-
 name: zalord
 
 networks:
@@ -217,10 +199,11 @@ services:
       KONG_PROXY_LISTEN: "0.0.0.0:8000"
       KONG_ADMIN_LISTEN: "0.0.0.0:8001"
       KONG_LOG_LEVEL: notice
-      # Serverless pre-function (X-User-Id injection) needs to require cjson etc.
+      # Serverless pre-function (X-User-Id injection) needs the Lua sandbox.
       KONG_UNTRUSTED_LUA: "sandbox"
-      # Resolves {vault://env/jwt-secret} in kong.yml from this env var.
-      JWT_SECRET: ${JWT_SECRET}
+      # NOTE: the JWT secret is NOT passed via env — Kong's workers can't see
+      # arbitrary env vars, so the env vault doesn't work. The secret is set
+      # directly in the gitignored infra/kong/kong.yml (see kong.yml.example).
     ports:
       - "${KONG_PROXY_HOST_PORT:-8080}:8000"
       - "${KONG_ADMIN_HOST_PORT:-8001}:8001"
@@ -234,18 +217,3 @@ services:
       start_period: 15s
     mem_limit: 512m
     networks: [zalord-net]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# WEEK 2+  — uncomment when needed.
-#
-# Add a new Postgres container per new service that owns relational data:
-#
-#   postgres-chat:    POSTGRES_DB=zalord_chat,   volume pgdata_chat,   port 6435
-#   postgres-group:   POSTGRES_DB=zalord_group,  volume pgdata_group,  port 6436
-#   postgres-notif:   POSTGRES_DB=zalord_notif,  volume pgdata_notif,  port 6437
-#   postgres-media:   POSTGRES_DB=zalord_media,  volume pgdata_media,  port 6438
-#
-# Plus Kafka, ScyllaDB, MinIO. Full templates omitted to keep this file readable;
-# see sprint-1-plan.md §§ T2, T5, T6 for the full service definitions.
-
-# test git

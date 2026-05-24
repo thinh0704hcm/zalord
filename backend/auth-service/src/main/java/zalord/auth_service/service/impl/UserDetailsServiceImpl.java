@@ -11,7 +11,6 @@ import zalord.auth_service.repository.RoleRepository;
 import zalord.auth_service.repository.UserRepository;
 
 import java.util.Optional;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -36,12 +35,5 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         }
 
         return new CustomUserDetails(userOpt.get(), roleRepository);
-    }
-
-    public CustomUserDetails loadUserById(UUID id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
-
-        return new CustomUserDetails(user, roleRepository);
     }
 }

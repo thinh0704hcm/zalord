@@ -1,7 +1,5 @@
 package zalord.auth_service.jwt;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -17,8 +15,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
 
+/**
+ * Issues access tokens. auth-service only <em>signs</em> JWTs — it never
+ * verifies them, because Kong validates every incoming token at the edge
+ * (see infra/kong/kong.yml). Hence there is no token-parsing code here.
+ */
 @Component
 public class JwtUtil {
 
@@ -35,31 +37,6 @@ public class JwtUtil {
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secretKey.getBytes());
-    }
-
-    public String extractUserId(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
-
-    public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
-
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimsResolver.apply(claims);
-    }
-
-    private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
-    }
-
-    private Boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
     }
 
     public String generateToken(CustomUserDetails userDetails) {
@@ -87,19 +64,5 @@ public class JwtUtil {
                 .setExpiration(new Date(expiryMs))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
-    }
-
-    public Boolean validateToken(String token, CustomUserDetails userDetails) {
-        final UUID id = UUID.fromString(extractUserId(token));
-        return (id.equals(userDetails.getUserId()) && !isTokenExpired(token));
-    }
-
-    public Boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
-        }
     }
 }
