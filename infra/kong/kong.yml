@@ -15,7 +15,9 @@
 #
 # IMPORTANT — the JWT must carry `iss` = the consumer credential `key` ("zalord")
 # so the jwt plugin can pick the secret. auth-service sets this via JWT_ISSUER.
-# The secret comes from JWT_SECRET via Kong's env vault ({vault://env/jwt-secret}).
+#
+# This file is gitignored (it holds the secret). The committed template is
+# kong.yml.example. The `secret:` below MUST equal JWT_SECRET in .env.
 
 _format_version: "3.0"
 
@@ -102,4 +104,4 @@ consumers:
     jwt_secrets:
       - key: zalord
         algorithm: HS256
-        secret: "{vault://env/JWT_SECRET}"
+        secret: "e2GaBzpkZw3W3suR7FomaYSM361hEyDyUh/dvg3gtEU="   # MUST match JWT_SECRET in .env
