@@ -140,42 +140,36 @@ services:
       start_period: 30s
     mem_limit: 512m
     networks: [zalord-net]
-
-  # ── user-service ──────────────────────────────────────────────────────────
-  # Uncomment after initializing the Go project. See
-  # docs/only-me/user-service-guide.md.
-  #
-  # user-service:
-  #   build:
-  #     context: ./backend/user-service
-  #     dockerfile: Dockerfile
-  #   container_name: zalord-user
-  #   restart: unless-stopped
-  #   depends_on:
-  #     user-pg:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     PORT: "8082"
-  #     POSTGRES_HOST: user-pg      # hardcoded — own DB only
-  #     POSTGRES_PORT: "5432"
-  #     POSTGRES_USER: ${POSTGRES_USER}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #     REDIS_HOST: redis
-  #     REDIS_PORT: "6379"
-  #     JWT_SECRET: ${JWT_SECRET}
-  #     REFRESH_EXPIRY_DAYS: ${REFRESH_EXPIRY_DAYS}
-  #   ports:
-  #     - "${USER_SERVICE_HOST_PORT}:8082"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health >/dev/null 2>&1"]
-  #     interval: 10s
-  #     timeout: 3s
-  #     retries: 6
-  #     start_period: 10s
-  #   mem_limit: 128m
-  #   networks: [zalord-net]
+  
+  user-service:
+    build:
+      context: ./backend/user-service
+      dockerfile: Dockerfile
+    container_name: zalord-user
+    restart: unless-stopped
+    depends_on:
+      user-pg:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      # redis:
+      #   condition: service_healthy
+    environment:
+      SERVER_PORT: "8082"
+      DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@user-pg:5432/user-db
+      MQ_URI: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      # REDIS_HOST: redis
+      # REDIS_PORT: "6379"
+    ports:
+      - "${USER_SERVICE_HOST_PORT}:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    mem_limit: 128m
+    networks: [zalord-net]
 
   # ── Kong (API Gateway, DB-less) ───────────────────────────────────────────
   # Validates JWT at the edge and injects X-User-Id so backend services never

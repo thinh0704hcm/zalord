@@ -5,4 +5,4 @@ CREATE TABLE profiles (
   avatar_url    TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at    TIMESTAMPTZ
-)
+);
