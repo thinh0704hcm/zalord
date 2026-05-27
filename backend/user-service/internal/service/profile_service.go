@@ -30,6 +30,10 @@ func (p profileService) ConsumeProfileCreated(ctx context.Context, body []byte) 
 		"User registered successfully",
 		zap.String("userId", payload.UserID),
 		zap.String("displayName", payload.DisplayName))
+	err := p.CreateProfile(ctx, uuid.MustParse(payload.UserID), payload.DisplayName)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
