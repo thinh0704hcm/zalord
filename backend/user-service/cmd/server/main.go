@@ -7,6 +7,9 @@ import (
 	"syscall"
 
 	"github.com/gin-gonic/gin"
+	queries "github.com/thinh0704hcm/zalord/backend/user-service/db/sqlc"
+	"github.com/thinh0704hcm/zalord/backend/user-service/internal/repository"
+	"github.com/thinh0704hcm/zalord/backend/user-service/internal/service"
 
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/database"
 	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/config"
@@ -61,7 +64,18 @@ func main() {
 		return
 	}
 
-	// 8. HTTP server
+	consumer := mq.NewConsumer(rmq)
+
+	query := queries.New(pool)
+	profileRepo := repository.NewProfileRepository(query)
+	profileService := service.NewProfileService(profileRepo)
+
+	err = consumer.Consume(ctx, mq.UserQueue, profileService.ConsumeProfileCreated)
+	if err != nil {
+		logger.Log.Error("rabbitmq: consume profile failed", zap.Error(err))
+	}
+
+	//8. HTTP server
 	r := gin.Default()
 
 	r.GET("/health", func(c *gin.Context) {

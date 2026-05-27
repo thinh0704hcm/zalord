@@ -53,8 +53,8 @@ public class OutboxScheduler {
                 rabbitTemplate.send(e.getTopicExchange(), e.getRoutingKey(), msg);
                 e.setPublishedAt(now);
                 published++;
-                log.debug("Published outbox event id={} exchange={} routingKey={}",
-                        e.getId(), e.getTopicExchange(), e.getRoutingKey());
+                log.debug("Published outbox event id={} exchange={} routingKey={} payload={}",
+                        e.getId(), e.getTopicExchange(), e.getRoutingKey(), e.getPayload());
             } catch (AmqpException ex) {
                 failed++;
                 log.error("Failed to publish outbox event id={} routingKey={}: {}",
