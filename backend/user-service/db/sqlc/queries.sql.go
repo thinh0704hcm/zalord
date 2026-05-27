@@ -11,11 +11,11 @@ import (
 	"github.com/google/uuid"
 )
 
-const createProfile = `-- name: CreateProfile :one
+const createProfile = `-- name: CreateProfile :exec
 INSERT INTO profiles (
     user_id, display_name
 ) VALUES ($1, $2)
-    RETURNING id, user_id, display_name, avatar_url, created_at, deleted_at
+ON CONFLICT (user_id) DO NOTHING
 `
 
 type CreateProfileParams struct {
@@ -23,16 +23,7 @@ type CreateProfileParams struct {
 	DisplayName string    `json:"display_name"`
 }
 
-func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error) {
-	row := q.db.QueryRow(ctx, createProfile, arg.UserID, arg.DisplayName)
-	var i Profile
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.DisplayName,
-		&i.AvatarUrl,
-		&i.CreatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
+func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) error {
+	_, err := q.db.Exec(ctx, createProfile, arg.UserID, arg.DisplayName)
+	return err
 }

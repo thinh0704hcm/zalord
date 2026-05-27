@@ -20,30 +20,38 @@ type profileService struct {
 	profileRepo repository.ProfileRepository
 }
 
-func (p profileService) ConsumeProfileCreated(ctx context.Context, body []byte) error {
+func (p *profileService) ConsumeProfileCreated(ctx context.Context, body []byte) error {
 	var payload event.UserCreatedPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		logger.Log.Error("unmarshal UserRegistered failed", zap.Error(err))
 		return err
 	}
-	logger.Log.Info(
-		"User registered successfully",
-		zap.String("userId", payload.UserID),
-		zap.String("displayName", payload.DisplayName))
-	err := p.CreateProfile(ctx, uuid.MustParse(payload.UserID), payload.DisplayName)
+
+	userId, err := uuid.Parse(payload.UserID)
+	if err != nil {
+		logger.Log.Error("parse UserRegistered failed", zap.Error(err))
+		return err
+	}
+
+	err = p.CreateProfile(ctx, userId, payload.DisplayName)
 	if err != nil {
 		return err
 	}
+	logger.Log.Debug(
+		"CreateProfile succeeded",
+		zap.String("userId", payload.UserID),
+		zap.String("displayName", payload.DisplayName))
+
 	return nil
 }
 
-func (p profileService) CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) error {
-	prof, err := p.profileRepo.CreateProfile(ctx, userId, displayName)
+func (p *profileService) CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) error {
+	err := p.profileRepo.CreateProfile(ctx, userId, displayName)
 	if err != nil {
 		logger.Log.Error("create profile failed", zap.Error(err))
 		return err
 	}
-	logger.Log.Info("create profile succeed", zap.Any("prof", prof))
+	logger.Log.Info("create profile succeed")
 	return nil
 }
 

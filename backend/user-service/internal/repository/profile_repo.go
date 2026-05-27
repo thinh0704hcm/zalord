@@ -8,7 +8,7 @@ import (
 )
 
 type ProfileRepository interface {
-	CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) (*queries.Profile, error)
+	CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) error
 }
 
 type profileRepository struct {
@@ -19,13 +19,9 @@ func NewProfileRepository(queries *queries.Queries) ProfileRepository {
 	return &profileRepository{queries: queries}
 }
 
-func (r *profileRepository) CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) (*queries.Profile, error) {
-	profile, err := r.queries.CreateProfile(ctx, queries.CreateProfileParams{
+func (r *profileRepository) CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) error {
+	return r.queries.CreateProfile(ctx, queries.CreateProfileParams{
 		UserID:      userId,
 		DisplayName: displayName,
 	})
-	if err != nil {
-		return nil, err
-	}
-	return &profile, nil
 }

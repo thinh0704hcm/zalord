@@ -1,5 +1,5 @@
--- name: CreateProfile :one
+-- name: CreateProfile :exec
 INSERT INTO profiles (
     user_id, display_name
 ) VALUES ($1, $2)
-    RETURNING *;
+ON CONFLICT (user_id) DO NOTHING;
