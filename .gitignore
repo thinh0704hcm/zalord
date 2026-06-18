@@ -51,6 +51,8 @@ dist-ssr
 .AppleDouble
 .LSOverride
 
+.idea/
+
 # Icon must end with two \r
 Icon
 
@@ -320,3 +322,7 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/node,visualstudiocode,windows,macos,linux,test
 .vscode/
+
+CLAUDE.md
+.claude/
+docs/only-me/

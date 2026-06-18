@@ -1,0 +1,239 @@
+name: zalord
+
+networks:
+  zalord-net:
+    driver: bridge
+
+volumes:
+  pgdata_auth:
+  pgdata_user:
+  redisdata:
+  rabbitdata:
+
+services:
+  # ── Postgres: auth-service's database ─────────────────────────────────────
+  auth-pg:
+    image: postgres:16-alpine
+    container_name: zalord-auth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: auth-db          
+    ports:
+      - "${POSTGRES_AUTH_HOST_PORT}:5432"
+    volumes:
+      - pgdata_auth:/var/lib/postgresql/data
+      - ./infra/postgres/init-auth.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
+    command: ["postgres", "-c", "shared_buffers=64MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d auth-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── Postgres: user-service's database ─────────────────────────────────────
+  user-pg:
+    image: postgres:16-alpine
+    container_name: zalord-user-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: user-db
+    ports:
+      - "${POSTGRES_USER_HOST_PORT}:5432"
+    volumes:
+      - pgdata_user:/var/lib/postgresql/data
+      - ./infra/postgres/init-user.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
+    command: ["postgres", "-c", "shared_buffers=64MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d user-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: zalord-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - redisdata:/data
+      - ./infra/redis/redis.conf:/etc/redis/redis.conf:ro
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── RabbitMQ (event bus — outbox publisher → consumers) ───────────────────
+  # Management UI on host port ${RABBITMQ_MGMT_HOST_PORT:-15672}.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: zalord-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${RABBITMQ_HOST_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_HOST_PORT:-15672}:15672"
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 384m
+    networks: [zalord-net]
+
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: zalord-auth
+    restart: unless-stopped
+    depends_on:
+      auth-pg:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: "8081"
+      POSTGRES_HOST: auth-pg      # hardcoded — this service only knows its own DB
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES}
+      REFRESH_EXPIRY_DAYS: ${REFRESH_EXPIRY_DAYS}
+      JWT_ISSUER: ${JWT_ISSUER}      # must equal kong.yml consumer key ("zalord")
+    ports:
+      - "${AUTH_SERVICE_HOST_PORT}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    mem_limit: 512m
+    networks: [zalord-net]
+  
+  user-service:
+    build:
+      context: ./backend/user-service
+      dockerfile: Dockerfile
+    container_name: zalord-user
+    restart: unless-stopped
+    depends_on:
+      user-pg:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      # redis:
+      #   condition: service_healthy
+    environment:
+      SERVER_PORT: "8082"
+      DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@user-pg:5432/user-db
+      MQ_URI: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      # REDIS_HOST: redis
+      # REDIS_PORT: "6379"
+    ports:
+      - "${USER_SERVICE_HOST_PORT}:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    mem_limit: 128m
+    networks: [zalord-net]
+
+  # ── Kong (API Gateway, DB-less) ───────────────────────────────────────────
+  # Validates JWT at the edge and injects X-User-Id so backend services never
+  # parse a token. Declarative config in infra/kong/kong.yml.
+  #   Proxy : host ${KONG_PROXY_HOST_PORT:-8080} -> 8000  (client traffic)
+  #   Admin : host ${KONG_ADMIN_HOST_PORT:-8001} -> 8001  (config/debug; keep off public)
+  kong:
+    image: kong:3.7
+    container_name: zalord-kong
+    restart: unless-stopped
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: "off"
+      # Read the SUBSTITUTED config (see `command` below), not the raw mounted one.
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_LOG_LEVEL: notice
+      # Serverless pre-function (X-User-Id injection) needs the Lua sandbox.
+      KONG_UNTRUSTED_LUA: "sandbox"
+      # Allow the pre-function to `require("cjson.safe")` inside the sandbox.
+      KONG_UNTRUSTED_LUA_SANDBOX_REQUIRES: "cjson.safe"
+      # JWT secret, kept out of git. The `command` below substitutes it into the
+      # config at startup; the value lives only in .env. (Kong's env vault can't
+      # be used here — its nginx workers don't inherit the env var at request
+      # time, so signature verification fails.)
+      JWT_SECRET: ${JWT_SECRET}
+    # Substitute the __JWT_SECRET__ placeholder in the read-only mounted config
+    # into a writable copy, then hand off to Kong's normal entrypoint. `$$`
+    # escapes compose interpolation so the shell reads JWT_SECRET from the
+    # container env at runtime (secret never appears in the compose file).
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed "s|__JWT_SECRET__|$$JWT_SECRET|g" /kong/kong.yml > /tmp/kong.yml
+        exec /docker-entrypoint.sh kong docker-start
+    ports:
+      - "${KONG_PROXY_HOST_PORT:-8080}:8000"
+      - "${KONG_ADMIN_HOST_PORT:-8001}:8001"
+    volumes:
+      - ./infra/kong:/kong:ro
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    mem_limit: 512m
+    networks: [zalord-net]
+
+  # ── Swagger UI (dev only — aggregated API docs) ───────────────────────────
+  # Single UI with a dropdown over every service's OpenAPI spec. Not exposed to
+  # the host: reached only through Kong at http://localhost:${KONG_PROXY_HOST_PORT}/docs.
+  # URLS are origin-relative (same origin as the UI via Kong) → no CORS.
+  # Add an entry to URLS for each new service whose /v3/api-docs you route.
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: zalord-swagger
+    restart: unless-stopped
+    environment:
+      BASE_URL: /docs                         # must match the Kong route path
+      URLS: '[{"url":"/api-docs/auth","name":"auth-service"}]'
+      URLS_PRIMARY_NAME: auth-service
+    mem_limit: 64m
+    networks: [zalord-net]
