@@ -231,6 +231,33 @@ services:
     mem_limit: 512m
     networks: [zalord-net]
 
+  # ── chat-service (Go, WebSocket gateway) ──────────────────────────────────
+  # Consumes message.created from RabbitMQ and pushes via WebSocket to online
+  # recipients. In-memory session registry (single-instance for now; Redis
+  # planned for multi-instance per docs/architecture.md).
+  chat-service:
+    build:
+      context: ./backend/chat-service
+      dockerfile: Dockerfile
+    container_name: zalord-chat
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: "8084"
+      MQ_URI: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    ports:
+      - "${CHAT_SERVICE_HOST_PORT}:8084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    mem_limit: 128m
+    networks: [zalord-net]
+
   # ── Kong (API Gateway, DB-less) ───────────────────────────────────────────
   # Validates JWT at the edge and injects X-User-Id so backend services never
   # parse a token. Declarative config in infra/kong/kong.yml.

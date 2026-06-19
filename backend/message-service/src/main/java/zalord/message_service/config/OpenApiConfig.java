@@ -1,6 +1,7 @@
 package zalord.message_service.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
@@ -18,11 +19,15 @@ public class OpenApiConfig {
 
     @Bean
     public ObjectMapper objectMapper() {
-        // findAndRegisterModules picks up jackson-datatype-jsr310 from the
-        // classpath so Instant/LocalDateTime serialize as ISO-8601 strings
-        // instead of throwing. Required because MessageCreatedEvent uses Instant.
+        // findAndRegisterModules picks up jackson-datatype-jsr310. Disable
+        // WRITE_DATES_AS_TIMESTAMPS so Instant serialises to ISO-8601 strings,
+        // not epoch-nano numbers — Go's time.Time JSON unmarshal only accepts
+        // RFC 3339 strings, so cross-language event consumers (chat-service Go)
+        // need this. Without it, Java <-> Java works but the wire contract
+        // silently breaks for any non-JVM consumer.
         ObjectMapper m = new ObjectMapper();
         m.findAndRegisterModules();
+        m.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         return m;
     }
 

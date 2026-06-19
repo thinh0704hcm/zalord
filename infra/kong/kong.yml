@@ -113,6 +113,31 @@ services:
           - <<: *identity-def
             enabled: true
 
+  # ── chat-service: WebSocket gateway ───────────────────────────────────────
+  # /ws/chat is an HTTP upgrade. The jwt plugin runs on the handshake; once
+  # upgraded, Kong proxies bytes both ways. Browsers can't set custom headers
+  # on a WebSocket connection — jwt plugin is configured to ALSO accept the
+  # token via ?token=... query param.
+  - name: chat-service
+    url: http://chat-service:8084
+    routes:
+      - name: chat-ws
+        strip_path: false
+        paths:
+          - "/ws/chat"
+        plugins:
+          - name: jwt
+            enabled: true
+            config:
+              claims_to_verify:
+                - exp
+              uri_param_names:
+                - token
+              header_names:
+                - authorization
+          - <<: *identity-def
+            enabled: true
+
   # ── message-service: protected — conversations + messages + inbox (CQRS) ──
   - name: message-service
     url: http://message-service:8083
