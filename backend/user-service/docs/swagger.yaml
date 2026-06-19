@@ -1,0 +1,63 @@
+basePath: /
+definitions:
+  handler.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  handler.ProfileResponse:
+    properties:
+      avatarUrl:
+        type: string
+      createdAt:
+        type: string
+      displayName:
+        type: string
+      id:
+        type: string
+      userId:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Profile management for the Zalord chat system. Endpoints are reached
+    through the Kong gateway (http://localhost:8080); Kong validates the JWT and injects
+    the X-User-Id header that the service reads.
+  title: User Service API
+  version: v1
+paths:
+  /api/v1/users/me:
+    get:
+      description: Returns the profile of the authenticated caller. Identity is taken
+        from the Kong-injected X-User-Id header (derived from the verified JWT).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ProfileResponse'
+        "401":
+          description: missing identity (no token / not via Kong)
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: profile not found
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get my profile
+      tags:
+      - profile
+securityDefinitions:
+  BearerAuth:
+    description: Paste the access token only — Swagger adds the "Bearer " prefix.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

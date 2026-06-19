@@ -134,6 +134,14 @@ services:
         paths:
           - "/api-docs/auth"
 
+  - name: user-docs
+    url: http://user-service:8082/v3/api-docs
+    routes:
+      - name: user-docs-route
+        strip_path: true
+        paths:
+          - "/api-docs/user"
+
 # Consumer + JWT credential. `key` must equal the `iss` claim in issued tokens.
 # The secret is NOT stored here — __JWT_SECRET__ is a placeholder that the Kong
 # container substitutes at startup from the JWT_SECRET env var (see the kong

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	queries "github.com/thinh0704hcm/zalord/backend/user-service/db/sqlc"
+	docs "github.com/thinh0704hcm/zalord/backend/user-service/docs"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/database"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/handler"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/middleware"
@@ -19,6 +20,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// @title           User Service API
+// @version         v1
+// @description     Profile management for the Zalord chat system. Endpoints are reached through the Kong gateway (http://localhost:8080); Kong validates the JWT and injects the X-User-Id header that the service reads.
+// @BasePath        /
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                 Paste the access token only — Swagger adds the "Bearer " prefix.
 func main() {
 	cfg := config.Load()
 
@@ -72,6 +81,13 @@ func main() {
 	// HTTP
 	r := gin.Default()
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
+
+	// OpenAPI spec (raw JSON). Public — the aggregated Swagger UI fetches it
+	// through Kong (/api-docs/user). Same-origin via Kong → no CORS.
+	docs.SwaggerInfo.BasePath = "/"
+	r.GET("/v3/api-docs", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/json", []byte(docs.SwaggerInfo.ReadDoc()))
+	})
 
 	api := r.Group("/api/v1/users")
 	api.Use(middleware.Identity())
