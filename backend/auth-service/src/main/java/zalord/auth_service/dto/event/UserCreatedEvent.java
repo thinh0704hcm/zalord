@@ -4,6 +4,7 @@ import java.util.UUID;
 
 public record UserCreatedEvent(
         UUID userId,
-        String displayName
+        String displayName,
+        String phoneNumber
 ) {
 }

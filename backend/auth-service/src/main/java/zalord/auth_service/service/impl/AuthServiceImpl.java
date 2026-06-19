@@ -137,7 +137,7 @@ public class AuthServiceImpl implements IAuthService {
         User user = createUser(phoneNumber, password);
         assignRole(user, roleName);
 
-        UserCreatedEvent event = new UserCreatedEvent(user.getId(), displayName);
+        UserCreatedEvent event = new UserCreatedEvent(user.getId(), displayName, phoneNumber);
         createOutboxEvent(event);
 
         log.info("Register success userId={} phoneNumber={} role={}", user.getId(), phoneNumber, roleName);

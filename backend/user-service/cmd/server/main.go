@@ -93,6 +93,8 @@ func main() {
 	api.Use(middleware.Identity())
 	{
 		api.GET("/me", profileHandler.GetMe)
+		api.GET("/by-phone/:phone", profileHandler.GetByPhone)
+		api.GET("", middleware.RequireRole("ADMIN"), profileHandler.List)
 	}
 
 	logger.Log.Info("starting http server", zap.String("port", cfg.ServerPort))

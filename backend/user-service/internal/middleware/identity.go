@@ -34,3 +34,20 @@ func Identity() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RequireRole enforces that the caller has the given role. Must run AFTER
+// Identity. Roles come from the JWT (via the X-User-Roles header Kong injects),
+// so a client can't forge them — only auth-service's signed token can grant them.
+func RequireRole(role string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		raw, _ := c.Get(CtxRoles)
+		roles, _ := raw.([]string)
+		for _, r := range roles {
+			if r == role {
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": role + " role required"})
+	}
+}

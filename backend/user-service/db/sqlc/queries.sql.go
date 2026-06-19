@@ -11,25 +11,58 @@ import (
 	"github.com/google/uuid"
 )
 
+const countProfiles = `-- name: CountProfiles :one
+SELECT COUNT(*) FROM profiles WHERE deleted_at IS NULL
+`
+
+func (q *Queries) CountProfiles(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countProfiles)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProfile = `-- name: CreateProfile :exec
 INSERT INTO profiles (
-    user_id, display_name
-) VALUES ($1, $2)
+    user_id, display_name, phone_number
+) VALUES ($1, $2, $3)
 ON CONFLICT (user_id) DO NOTHING
 `
 
 type CreateProfileParams struct {
 	UserID      uuid.UUID `json:"user_id"`
 	DisplayName string    `json:"display_name"`
+	PhoneNumber string    `json:"phone_number"`
 }
 
 func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) error {
-	_, err := q.db.Exec(ctx, createProfile, arg.UserID, arg.DisplayName)
+	_, err := q.db.Exec(ctx, createProfile, arg.UserID, arg.DisplayName, arg.PhoneNumber)
 	return err
 }
 
+const getProfileByPhone = `-- name: GetProfileByPhone :one
+SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+  FROM profiles
+ WHERE phone_number = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetProfileByPhone(ctx context.Context, phoneNumber string) (Profile, error) {
+	row := q.db.QueryRow(ctx, getProfileByPhone, phoneNumber)
+	var i Profile
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DisplayName,
+		&i.PhoneNumber,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getProfileByUserID = `-- name: GetProfileByUserID :one
-SELECT id, user_id, display_name, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
   FROM profiles
  WHERE user_id = $1 AND deleted_at IS NULL
 `
@@ -41,9 +74,51 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID uuid.UUID) (Pro
 		&i.ID,
 		&i.UserID,
 		&i.DisplayName,
+		&i.PhoneNumber,
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const listProfiles = `-- name: ListProfiles :many
+SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+  FROM profiles
+ WHERE deleted_at IS NULL
+ ORDER BY created_at DESC
+ LIMIT $1 OFFSET $2
+`
+
+type ListProfilesParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListProfiles(ctx context.Context, arg ListProfilesParams) ([]Profile, error) {
+	rows, err := q.db.Query(ctx, listProfiles, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Profile{}
+	for rows.Next() {
+		var i Profile
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DisplayName,
+			&i.PhoneNumber,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
