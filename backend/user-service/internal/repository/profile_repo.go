@@ -9,6 +9,7 @@ import (
 
 type ProfileRepository interface {
 	CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) error
+	GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error)
 }
 
 type profileRepository struct {
@@ -24,4 +25,12 @@ func (r *profileRepository) CreateProfile(ctx context.Context, userId uuid.UUID,
 		UserID:      userId,
 		DisplayName: displayName,
 	})
+}
+
+func (r *profileRepository) GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error) {
+	prof, err := r.queries.GetProfileByUserID(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+	return &prof, nil
 }

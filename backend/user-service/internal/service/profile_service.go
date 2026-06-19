@@ -3,17 +3,21 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
+	queries "github.com/thinh0704hcm/zalord/backend/user-service/db/sqlc"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/event"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/repository"
 	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/logger"
+	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/mq"
 	"go.uber.org/zap"
 )
 
 type ProfileService interface {
 	ConsumeProfileCreated(ctx context.Context, body []byte) error
 	CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) error
+	GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error)
 }
 
 type profileService struct {
@@ -23,36 +27,33 @@ type profileService struct {
 func (p *profileService) ConsumeProfileCreated(ctx context.Context, body []byte) error {
 	var payload event.UserCreatedPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
-		logger.Log.Error("unmarshal UserRegistered failed", zap.Error(err))
-		return err
+		return &mq.PermanentError{Err: fmt.Errorf("unmarshal UserCreated: %w", err)}
 	}
 
-	userId, err := uuid.Parse(payload.UserID)
+	userID, err := uuid.Parse(payload.UserID)
 	if err != nil {
-		logger.Log.Error("parse UserRegistered failed", zap.Error(err))
-		return err
+		return &mq.PermanentError{Err: fmt.Errorf("invalid userId %q: %w", payload.UserID, err)}
 	}
 
-	err = p.CreateProfile(ctx, userId, payload.DisplayName)
-	if err != nil {
-		return err
-	}
-	logger.Log.Debug(
-		"CreateProfile succeeded",
-		zap.String("userId", payload.UserID),
-		zap.String("displayName", payload.DisplayName))
+	logger.Log.Info("received UserCreated",
+		zap.String("user_id", userID.String()),
+		zap.String("display_name", payload.DisplayName))
 
-	return nil
+	return p.CreateProfile(ctx, userID, payload.DisplayName)
 }
 
 func (p *profileService) CreateProfile(ctx context.Context, userId uuid.UUID, displayName string) error {
-	err := p.profileRepo.CreateProfile(ctx, userId, displayName)
-	if err != nil {
+	if err := p.profileRepo.CreateProfile(ctx, userId, displayName); err != nil {
 		logger.Log.Error("create profile failed", zap.Error(err))
 		return err
 	}
-	logger.Log.Info("create profile succeed")
+	logger.Log.Info("profile created (or already existed)",
+		zap.String("user_id", userId.String()))
 	return nil
+}
+
+func (p *profileService) GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error) {
+	return p.profileRepo.GetByUserID(ctx, userId)
 }
 
 func NewProfileService(profileRepo repository.ProfileRepository) ProfileService {

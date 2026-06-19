@@ -27,3 +27,23 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) er
 	_, err := q.db.Exec(ctx, createProfile, arg.UserID, arg.DisplayName)
 	return err
 }
+
+const getProfileByUserID = `-- name: GetProfileByUserID :one
+SELECT id, user_id, display_name, avatar_url, created_at, deleted_at
+  FROM profiles
+ WHERE user_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetProfileByUserID(ctx context.Context, userID uuid.UUID) (Profile, error) {
+	row := q.db.QueryRow(ctx, getProfileByUserID, userID)
+	var i Profile
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
