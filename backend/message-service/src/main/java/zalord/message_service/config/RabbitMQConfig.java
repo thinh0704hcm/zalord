@@ -33,6 +33,13 @@ public class RabbitMQConfig {
     // in the same service for now.
     public static final String INBOX_PROJECTOR_QUEUE = "message.inbox.projector.queue";
 
+    // group-service publishes group.* events here. message-service projects
+    // a Conversation (id = groupId) and its ConversationMember rows so the
+    // existing message-send / inbox flow works transparently for groups.
+    public static final String GROUP_EXCHANGE = "group.exchange";
+    public static final String GROUP_EVENTS_QUEUE = "message.group.events.queue";
+    public static final String GROUP_BINDING_KEY = "group.#";
+
     @Bean
     public TopicExchange messageExchange() {
         return new TopicExchange(MESSAGE_EXCHANGE, true, false);
@@ -56,6 +63,21 @@ public class RabbitMQConfig {
     @Bean
     public Binding inboxProjectorBinding(Queue inboxProjectorQueue, TopicExchange messageExchange) {
         return BindingBuilder.bind(inboxProjectorQueue).to(messageExchange).with(MESSAGE_CREATED_ROUTING_KEY);
+    }
+
+    @Bean
+    public TopicExchange groupExchange() {
+        return new TopicExchange(GROUP_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue groupEventsQueue() {
+        return QueueBuilder.durable(GROUP_EVENTS_QUEUE).build();
+    }
+
+    @Bean
+    public Binding groupEventsBinding(Queue groupEventsQueue, TopicExchange groupExchange) {
+        return BindingBuilder.bind(groupEventsQueue).to(groupExchange).with(GROUP_BINDING_KEY);
     }
 
     @Bean
