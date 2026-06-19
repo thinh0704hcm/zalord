@@ -1,0 +1,151 @@
+basePath: /
+definitions:
+  handler.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  handler.ProfileListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/handler.ProfileResponse'
+        type: array
+      page:
+        type: integer
+      size:
+        type: integer
+      total:
+        type: integer
+      totalPages:
+        type: integer
+    type: object
+  handler.ProfileResponse:
+    properties:
+      avatarUrl:
+        type: string
+      createdAt:
+        type: string
+      displayName:
+        type: string
+      id:
+        type: string
+      phoneNumber:
+        type: string
+      userId:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Profile management for the Zalord chat system. Endpoints are reached
+    through the Kong gateway (http://localhost:8080); Kong validates the JWT and injects
+    the X-User-Id header that the service reads.
+  title: User Service API
+  version: v1
+paths:
+  /api/v1/users:
+    get:
+      description: ADMIN-only. Returns profiles ordered by created_at DESC. `page`
+        is 1-indexed; `size` is clamped to [1, 100].
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20, max 100)
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ProfileListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "403":
+          description: ADMIN role required
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all profiles (paginated)
+      tags:
+      - profile
+  /api/v1/users/by-phone/{phone}:
+    get:
+      description: Returns the profile whose phone_number matches. Open to any authenticated
+        user (user discovery feature).
+      parameters:
+      - description: Phone number (e.g. 0900000999)
+        in: path
+        name: phone
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: no profile with this phone
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Look up a profile by phone number
+      tags:
+      - profile
+  /api/v1/users/me:
+    get:
+      description: Returns the profile of the authenticated caller. Identity is taken
+        from the Kong-injected X-User-Id header (derived from the verified JWT).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ProfileResponse'
+        "401":
+          description: missing identity (no token / not via Kong)
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: profile not found
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get my profile
+      tags:
+      - profile
+securityDefinitions:
+  BearerAuth:
+    description: Paste the access token only — Swagger adds the "Bearer " prefix.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

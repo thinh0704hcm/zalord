@@ -233,7 +233,7 @@ services:
     restart: unless-stopped
     environment:
       BASE_URL: /docs                         # must match the Kong route path
-      URLS: '[{"url":"/api-docs/auth","name":"auth-service"}]'
+      URLS: '[{"url":"/api-docs/auth","name":"auth-service"},{"url":"/api-docs/user","name":"user-service"}]'
       URLS_PRIMARY_NAME: auth-service
     mem_limit: 64m
     networks: [zalord-net]

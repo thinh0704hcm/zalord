@@ -2,8 +2,11 @@ package mq
 
 import (
 	"context"
+	"errors"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/logger"
+	"go.uber.org/zap"
 )
 
 type HandlerFunc func(ctx context.Context, body []byte) error
@@ -22,10 +25,9 @@ func (c *Consumer) Consume(ctx context.Context, queue string, handler HandlerFun
 		return err
 	}
 
-	err = ch.Qos(1, 0, false)
-	if err != nil {
+	if err := ch.Qos(1, 0, false); err != nil {
 		return err
-	} // fair dispatch
+	}
 
 	msgs, err := ch.Consume(queue, "", false, false, false, false, nil)
 	if err != nil {
@@ -33,12 +35,7 @@ func (c *Consumer) Consume(ctx context.Context, queue string, handler HandlerFun
 	}
 
 	go func() {
-		defer func(ch *amqp.Channel) {
-			err := ch.Close()
-			if err != nil {
-				return
-			}
-		}(ch)
+		defer func() { _ = ch.Close() }()
 		for {
 			select {
 			case <-ctx.Done():
@@ -47,20 +44,30 @@ func (c *Consumer) Consume(ctx context.Context, queue string, handler HandlerFun
 				if !ok {
 					return
 				}
-				if err := handler(ctx, msg.Body); err != nil {
-					err := msg.Nack(false, true)
-					if err != nil {
-						return
-					} // requeue
-					continue
-				}
-				err := msg.Ack(false)
-				if err != nil {
-					return
-				}
+				c.dispatch(ctx, handler, msg)
 			}
 		}
 	}()
 
 	return nil
+}
+
+func (c *Consumer) dispatch(ctx context.Context, handler HandlerFunc, msg amqp.Delivery) {
+	err := handler(ctx, msg.Body)
+	if err == nil {
+		_ = msg.Ack(false)
+		return
+	}
+
+	var perm *PermanentError
+	if errors.As(err, &perm) {
+		// Won't fix by retry — drop it so the queue doesn't loop forever.
+		// Later: Nack(false, false) into a dead-letter queue for inspection.
+		logger.Log.Warn("permanent error, dropping", zap.Error(err))
+		_ = msg.Ack(false)
+		return
+	}
+
+	logger.Log.Warn("transient error, requeuing", zap.Error(err))
+	_ = msg.Nack(false, true)
 }
