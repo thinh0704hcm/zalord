@@ -14,10 +14,11 @@ CREATE TABLE conversations (
 );
 
 CREATE TABLE conversation_members (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     user_id          UUID NOT NULL,
     joined_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (conversation_id, user_id)
+    CONSTRAINT conv_members_unique UNIQUE (conversation_id, user_id)
 );
 
 CREATE INDEX idx_conv_members_user ON conversation_members (user_id);
@@ -39,6 +40,26 @@ CREATE TABLE messages (
 );
 
 CREATE INDEX idx_messages_conv_created ON messages (conversation_id, created_at DESC);
+
+-- ─── CQRS READ MODEL ─────────────────────────────────────────────────────────
+-- conversation_views denormalises the inbox: one row per (user, conversation),
+-- with cached last-message preview + unread_count. Updated by InboxProjector
+-- consuming the message.created event (async, eventual consistency).
+-- Frontend's inbox list reads from here with ONE indexed query.
+CREATE TABLE conversation_views (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id              UUID NOT NULL,
+    conversation_id      UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    other_user_id        UUID,                                  -- for DIRECT: the other party
+    last_message_preview VARCHAR(200),
+    last_message_at      TIMESTAMPTZ,
+    last_sender_id       UUID,
+    unread_count         INT NOT NULL DEFAULT 0,
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT conv_views_unique UNIQUE (user_id, conversation_id)
+);
+
+CREATE INDEX idx_view_user_last ON conversation_views (user_id, last_message_at DESC NULLS LAST);
 
 -- Transactional outbox — events are written here in the SAME tx as the
 -- business write, then a scheduler publishes them to RabbitMQ.

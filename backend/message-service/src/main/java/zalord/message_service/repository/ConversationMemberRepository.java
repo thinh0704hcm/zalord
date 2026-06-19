@@ -6,17 +6,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import zalord.message_service.model.ConversationMember;
-import zalord.message_service.model.ConversationMemberId;
 
 import java.util.List;
 import java.util.UUID;
 
-public interface ConversationMemberRepository extends JpaRepository<ConversationMember, ConversationMemberId> {
+public interface ConversationMemberRepository extends JpaRepository<ConversationMember, UUID> {
 
-    boolean existsByIdConversationIdAndIdUserId(UUID conversationId, UUID userId);
+    boolean existsByConversationIdAndUserId(UUID conversationId, UUID userId);
 
-    List<ConversationMember> findAllByIdConversationId(UUID conversationId);
+    List<ConversationMember> findAllByConversationId(UUID conversationId);
 
-    @Query("SELECT cm.id.conversationId FROM ConversationMember cm WHERE cm.id.userId = :userId")
+    @Query("SELECT cm.conversationId FROM ConversationMember cm WHERE cm.userId = :userId")
     Page<UUID> findConversationIdsByUserId(@Param("userId") UUID userId, Pageable pageable);
 }

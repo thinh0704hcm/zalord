@@ -47,11 +47,11 @@ public class MessageServiceImpl implements IMessageService {
     @Override
     @Transactional
     public MessageResponse send(UUID caller, SendMessageRequest req) {
-        List<ConversationMember> members = memberRepo.findAllByIdConversationId(req.conversationId());
+        List<ConversationMember> members = memberRepo.findAllByConversationId(req.conversationId());
         if (members.isEmpty()) {
             throw new NotMemberException("Conversation not found or you are not a member");
         }
-        List<UUID> memberIds = members.stream().map(m -> m.getId().getUserId()).toList();
+        List<UUID> memberIds = members.stream().map(ConversationMember::getUserId).toList();
         if (!memberIds.contains(caller)) {
             throw new NotMemberException("You are not a member of this conversation");
         }
@@ -85,7 +85,7 @@ public class MessageServiceImpl implements IMessageService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<MessageResponse> history(UUID caller, UUID conversationId, int page, int size) {
-        boolean isMember = memberRepo.existsByIdConversationIdAndIdUserId(conversationId, caller);
+        boolean isMember = memberRepo.existsByConversationIdAndUserId(conversationId, caller);
         if (!isMember) {
             throw new NotMemberException("You are not a member of this conversation");
         }

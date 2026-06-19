@@ -16,10 +16,10 @@ import zalord.message_service.exception.InvalidRequestException;
 import zalord.message_service.exception.NotMemberException;
 import zalord.message_service.model.Conversation;
 import zalord.message_service.model.ConversationMember;
-import zalord.message_service.model.ConversationMemberId;
 import zalord.message_service.model.DirectLookup;
 import zalord.message_service.repository.ConversationMemberRepository;
 import zalord.message_service.repository.ConversationRepository;
+import zalord.message_service.repository.ConversationViewRepository;
 import zalord.message_service.repository.DirectLookupRepository;
 import zalord.message_service.service.IConversationService;
 
@@ -34,13 +34,16 @@ public class ConversationServiceImpl implements IConversationService {
     private final ConversationRepository convRepo;
     private final ConversationMemberRepository memberRepo;
     private final DirectLookupRepository directRepo;
+    private final ConversationViewRepository viewRepo;
 
     public ConversationServiceImpl(ConversationRepository convRepo,
                                    ConversationMemberRepository memberRepo,
-                                   DirectLookupRepository directRepo) {
+                                   DirectLookupRepository directRepo,
+                                   ConversationViewRepository viewRepo) {
         this.convRepo = convRepo;
         this.memberRepo = memberRepo;
         this.directRepo = directRepo;
+        this.viewRepo = viewRepo;
     }
 
     @Override
@@ -59,6 +62,10 @@ public class ConversationServiceImpl implements IConversationService {
         if (existing.isPresent()) {
             UUID convId = existing.get().getConversationId();
             log.debug("DIRECT conv already exists for pair, returning convId={}", convId);
+            // Defensive: ensure read-model rows exist even for legacy conversations
+            // created before the CQRS read model was added.
+            viewRepo.initView(caller, convId, req.memberUserId());
+            viewRepo.initView(req.memberUserId(), convId, caller);
             return toResponse(convRepo.findById(convId).orElseThrow(
                     () -> new ConversationNotFoundException("Conversation referenced by direct_lookup missing: " + convId)),
                     List.of(caller, req.memberUserId()));
@@ -77,6 +84,12 @@ public class ConversationServiceImpl implements IConversationService {
         lookup.setConversationId(conv.getId());
         directRepo.save(lookup);
 
+        // CQRS: seed empty read-model rows so the conv shows up in inbox right
+        // away, even before any message. The projector will fill in preview +
+        // unread later when messages arrive.
+        viewRepo.initView(caller, conv.getId(), req.memberUserId());
+        viewRepo.initView(req.memberUserId(), conv.getId(), caller);
+
         log.info("DIRECT conversation created id={} between {} and {}", conv.getId(), caller, req.memberUserId());
         return toResponse(conv, List.of(caller, req.memberUserId()));
     }
@@ -86,8 +99,8 @@ public class ConversationServiceImpl implements IConversationService {
     public ConversationResponse get(UUID caller, UUID conversationId) {
         Conversation conv = convRepo.findById(conversationId)
                 .orElseThrow(() -> new ConversationNotFoundException("Conversation not found: " + conversationId));
-        List<UUID> members = memberRepo.findAllByIdConversationId(conversationId).stream()
-                .map(m -> m.getId().getUserId())
+        List<UUID> members = memberRepo.findAllByConversationId(conversationId).stream()
+                .map(ConversationMember::getUserId)
                 .toList();
         if (!members.contains(caller)) {
             throw new NotMemberException("You are not a member of this conversation");
@@ -110,8 +123,8 @@ public class ConversationServiceImpl implements IConversationService {
                 .map(id -> {
                     Conversation conv = convRepo.findById(id).orElse(null);
                     if (conv == null) return null;
-                    List<UUID> members = memberRepo.findAllByIdConversationId(id).stream()
-                            .map(m -> m.getId().getUserId())
+                    List<UUID> members = memberRepo.findAllByConversationId(id).stream()
+                            .map(ConversationMember::getUserId)
                             .toList();
                     return toResponse(conv, members);
                 })
@@ -123,7 +136,8 @@ public class ConversationServiceImpl implements IConversationService {
 
     private void addMember(UUID conversationId, UUID userId) {
         ConversationMember m = new ConversationMember();
-        m.setId(new ConversationMemberId(conversationId, userId));
+        m.setConversationId(conversationId);
+        m.setUserId(userId);
         memberRepo.save(m);
     }
 

@@ -113,7 +113,7 @@ services:
           - <<: *identity-def
             enabled: true
 
-  # ── message-service: protected — conversations + messages ─────────────────
+  # ── message-service: protected — conversations + messages + inbox (CQRS) ──
   - name: message-service
     url: http://message-service:8083
     routes:
@@ -122,6 +122,7 @@ services:
         paths:
           - "/api/v1/conversations"
           - "/api/v1/messages"
+          - "/api/v1/inbox"
         plugins:
           - <<: *jwt-def
             enabled: true

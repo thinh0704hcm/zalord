@@ -22,10 +22,16 @@ public class RabbitMQConfig {
     // Routing key for "a message was created" events.
     public static final String MESSAGE_CREATED_ROUTING_KEY = "message.created";
 
-    // Reserved for fan-out wiring. We don't bind/consume here — chat-service
-    // (Sprint Core-2) will declare its own queue + binding when it joins.
+    // Smoke-test queue — chat-service (Sprint Core-2) will declare its own.
     public static final String MESSAGE_QUEUE = "message.queue";
     public static final String MESSAGE_BINDING_KEY = "message.#";
+
+    // CQRS inbox projector queue — message-service consumes its OWN
+    // message.created events to update the conversation_views read model.
+    // This is what makes it CQRS: write side (POST /messages) and read side
+    // (GET /inbox) are separated by an event boundary, even though they live
+    // in the same service for now.
+    public static final String INBOX_PROJECTOR_QUEUE = "message.inbox.projector.queue";
 
     @Bean
     public TopicExchange messageExchange() {
@@ -40,6 +46,16 @@ public class RabbitMQConfig {
     @Bean
     public Binding messageBinding(Queue messageQueue, TopicExchange messageExchange) {
         return BindingBuilder.bind(messageQueue).to(messageExchange).with(MESSAGE_BINDING_KEY);
+    }
+
+    @Bean
+    public Queue inboxProjectorQueue() {
+        return QueueBuilder.durable(INBOX_PROJECTOR_QUEUE).build();
+    }
+
+    @Bean
+    public Binding inboxProjectorBinding(Queue inboxProjectorQueue, TopicExchange messageExchange) {
+        return BindingBuilder.bind(inboxProjectorQueue).to(messageExchange).with(MESSAGE_CREATED_ROUTING_KEY);
     }
 
     @Bean
