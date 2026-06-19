@@ -7,6 +7,7 @@ networks:
 volumes:
   pgdata_auth:
   pgdata_user:
+  pgdata_message:
   redisdata:
   rabbitdata:
 
@@ -28,6 +29,30 @@ services:
     command: ["postgres", "-c", "shared_buffers=64MB"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d auth-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── Postgres: message-service's database ──────────────────────────────────
+  message-pg:
+    image: postgres:16-alpine
+    container_name: zalord-message-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: message-db
+    ports:
+      - "${POSTGRES_MESSAGE_HOST_PORT}:5432"
+    volumes:
+      - pgdata_message:/var/lib/postgresql/data
+      - ./infra/postgres/init-message.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: ["postgres", "-c", "shared_buffers=64MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d message-db"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -171,6 +196,41 @@ services:
     mem_limit: 128m
     networks: [zalord-net]
 
+  # ── message-service ────────────────────────────────────────────────────────
+  # Java/Spring. Owns conversations + messages. Publishes message.created via
+  # outbox → RabbitMQ for downstream consumers (chat-service WebSocket, etc).
+  message-service:
+    build:
+      context: ./backend/message-service
+      dockerfile: Dockerfile
+    container_name: zalord-message
+    restart: unless-stopped
+    depends_on:
+      message-pg:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: "8083"
+      POSTGRES_HOST: message-pg
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${MESSAGE_SERVICE_HOST_PORT}:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    mem_limit: 512m
+    networks: [zalord-net]
+
   # ── Kong (API Gateway, DB-less) ───────────────────────────────────────────
   # Validates JWT at the edge and injects X-User-Id so backend services never
   # parse a token. Declarative config in infra/kong/kong.yml.
@@ -233,7 +293,7 @@ services:
     restart: unless-stopped
     environment:
       BASE_URL: /docs                         # must match the Kong route path
-      URLS: '[{"url":"/api-docs/auth","name":"auth-service"},{"url":"/api-docs/user","name":"user-service"}]'
+      URLS: '[{"url":"/api-docs/auth","name":"auth-service"},{"url":"/api-docs/user","name":"user-service"},{"url":"/api-docs/message","name":"message-service"}]'
       URLS_PRIMARY_NAME: auth-service
     mem_limit: 64m
     networks: [zalord-net]

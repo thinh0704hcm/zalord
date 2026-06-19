@@ -113,6 +113,21 @@ services:
           - <<: *identity-def
             enabled: true
 
+  # ── message-service: protected — conversations + messages ─────────────────
+  - name: message-service
+    url: http://message-service:8083
+    routes:
+      - name: message-all
+        strip_path: false
+        paths:
+          - "/api/v1/conversations"
+          - "/api/v1/messages"
+        plugins:
+          - <<: *jwt-def
+            enabled: true
+          - <<: *identity-def
+            enabled: true
+
   # ── API docs (dev only, public) ───────────────────────────────────────────
   # Aggregated Swagger UI lives in its own container; Kong serves it at /docs
   # and exposes each service's raw OpenAPI JSON at /api-docs/<service>. All
@@ -141,6 +156,14 @@ services:
         strip_path: true
         paths:
           - "/api-docs/user"
+
+  - name: message-docs
+    url: http://message-service:8083/v3/api-docs
+    routes:
+      - name: message-docs-route
+        strip_path: true
+        paths:
+          - "/api-docs/message"
 
 # Consumer + JWT credential. `key` must equal the `iss` claim in issued tokens.
 # The secret is NOT stored here — __JWT_SECRET__ is a placeholder that the Kong
