@@ -1,21 +1,27 @@
 import { Search, UserPlus, Users, MoreHorizontal, ChevronDown } from 'lucide-react';
 
-export default function ChatList() {
-  const mockChats = [
-    { id: 1, name: 'PREP | Workshop Lộ trìn...', message: 'Trịnh Vũ Thu Hà đã tham gia cộng ...', time: '2 phút', unread: 0, avatar: 'P' },
-    { id: 2, name: 'P 1201E2', message: 'Trần Tiến: Hiện trên web ktx có Thông...', time: '20 phút', unread: 5, avatar: 'P', group: true },
-    { id: 3, name: 'ĐIỂM THI TRƯỜNG ĐẠI...', message: 'Trung Tâm Dv Sinh Viên - Isinhvien ...', time: '6 giờ', unread: 99, avatar: 'Đ', group: true },
-    { id: 4, name: 'SV E2 - BỮA CƠM YÊU TH...', message: 'Các em vào đăng ký suất ăn...', time: '9 giờ', unread: 55, avatar: 'S', group: true },
-    { id: 5, name: 'NHÀ XE C5-C6(NHÓM 1)', message: 'Vũ Lê Thanh Bình: Nhà xe 9G xin ...', time: '23 giờ', unread: 0, avatar: '96', group: true },
-    { id: 6, name: 'HỌC IELTS MIỄN PH...', message: 'Tuyết Anh: @All CẢNH BÁO CÓ ...', time: 'Hôm qua', unread: 0, avatar: 'H', group: true },
-    { id: 7, name: 'KTPM2023.3', message: 'Ngọc Quí: Mấy e tham khảo thử nhé', time: 'Hôm qua', unread: 0, avatar: 'K', group: true, active: true },
-    { id: 8, name: 'MIXUE KTX KHU B -...', message: 'Linh Nguyen: ...', time: 'Hôm qua', unread: 0, avatar: 'M', group: true },
-  ];
+interface Chat {
+  id: number;
+  name: string;
+  message: string;
+  time: string;
+  unread: number;
+  avatar: string;
+  group?: boolean;
+}
+
+interface ChatListProps {
+  chats: Chat[];
+  activeChatId: number;
+  onSelectChat: (id: number) => void;
+}
+
+export default function ChatList({ chats, activeChatId, onSelectChat }: ChatListProps) {
 
   return (
-    <div className="w-[344px] h-screen bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+    <div className="w-[344px] h-screen bg-white border-r border-[#d6dbe1] flex flex-col flex-shrink-0">
       {/* Search Header */}
-      <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-100">
+      <div className="px-4 py-3 flex items-center gap-2 border-b border-[#d6dbe1]">
         <div className="flex-1 bg-[#eaedf0] rounded-md flex items-center px-2.5 py-1.5 gap-1.5">
           <Search size={15} className="text-gray-500" />
           <input 
@@ -33,7 +39,7 @@ export default function ChatList() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-gray-100">
+      <div className="flex items-center justify-between px-4 py-1.5 border-b border-[#d6dbe1]">
         <div className="flex items-center gap-4 text-[13px] font-medium">
           <span className="text-[#0068ff] border-b-2 border-[#0068ff] pb-1 cursor-pointer">Tất cả</span>
           <span className="text-gray-600 pb-1 cursor-pointer hover:text-gray-900">Chưa đọc</span>
@@ -49,10 +55,11 @@ export default function ChatList() {
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto">
-        {mockChats.map(chat => (
+        {chats.map(chat => (
           <div 
             key={chat.id} 
-            className={`flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors ${chat.active ? 'bg-[#e5efff]' : 'hover:bg-gray-50'}`}
+            onClick={() => onSelectChat(chat.id)}
+            className={`flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors ${chat.id === activeChatId ? 'bg-[#e5efff]' : 'hover:bg-gray-50'}`}
           >
             <div className="relative mt-0.5">
               <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
