@@ -54,14 +54,15 @@ export default function ChatList({ chats, activeChatId, onSelectChat }: ChatList
       </div>
 
       {/* Chat List */}
-      <div className="flex-1 overflow-y-auto">
-        {chats.map(chat => (
-          <div 
-            key={chat.id} 
-            onClick={() => onSelectChat(chat.id)}
-            className={`flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors ${chat.id === activeChatId ? 'bg-[#e5efff]' : 'hover:bg-gray-50'}`}
-          >
-            <div className="relative mt-0.5">
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        <div className="flex flex-col gap-1">
+          {chats.map(chat => (
+            <div 
+              key={chat.id} 
+              onClick={() => onSelectChat(chat.id)}
+              className={`flex items-start gap-3 px-2.5 py-2.5 cursor-pointer rounded-lg transition-all border ${chat.id === activeChatId ? 'bg-[#e5efff] border-transparent' : 'bg-white border-transparent hover:bg-[#f3f5f6] hover:border-[#eef0f1]'}`}
+            >
+              <div className="relative mt-0.5">
               <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
                 {chat.avatar}
               </div>
@@ -80,7 +81,8 @@ export default function ChatList({ chats, activeChatId, onSelectChat }: ChatList
               <p className="text-[13px] text-gray-500 truncate leading-snug">{chat.message}</p>
             </div>
           </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

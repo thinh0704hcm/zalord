@@ -101,14 +101,16 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
         {/* Date Divider */}
         <Daystamp date={new Date(Date.now() - 86400000).toISOString()} />
 
-        {/* Message 1 */}
+        {/* Incoming Message Group */}
         <div className="flex items-start gap-2.5 max-w-[65%]">
-          <div className="w-[38px] h-[38px] rounded-full bg-gray-300 flex-shrink-0 overflow-hidden mt-1">
-            <img src="https://ui-avatars.com/api/?name=Ngoc+Qui&background=random" alt="Avatar" className="w-full h-full object-cover" />
+          <div className="w-[38px] h-[38px] rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold flex-shrink-0 mt-0.5">
+            NQ
           </div>
-          <div className="flex flex-col relative group">
-            <span className="text-[12px] text-gray-500 mb-0.5 ml-1">Ngọc Quí</span>
-            <div className="bg-white rounded-lg p-2.5 shadow-sm border border-[#82b2ff] relative">
+          <div className="flex flex-col gap-[2px]">
+            {/* Message 1 */}
+            <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm border border-gray-200 relative group mb-3">
+              <div className="text-[12px] text-gray-500 mb-1">Ngọc Quí</div>
+              
               {/* Link Preview */}
               <div className="mb-2">
                 <a href="#" className="text-[#0068ff] hover:underline break-all text-[14px] leading-relaxed">
@@ -123,51 +125,30 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
 
               {/* Reactions */}
               <div className="absolute -bottom-3 right-2 flex items-center gap-1">
-                 {/* Reaction Pill */}
                  <div className="bg-white rounded-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-gray-100 px-1.5 py-0.5 flex items-center gap-1.5 h-[22px]">
                      <div className="flex items-center">
                          <span className="text-[14px] leading-none">❤️</span>
                      </div>
                      <span className="text-[#001a33] font-medium text-[11px] pr-0.5">1</span>
                  </div>
-                 
-                 {/* Quick React Button */}
                  <div className="relative group/react flex items-center justify-end">
-                    {/* Transparent Hitbox */}
                     <div className="absolute bottom-0 right-0 w-[240px] h-[30px] hidden group-hover/react:block"></div>
-                    
-                    <div className="w-[22px] h-[22px] bg-white rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-50 text-gray-500 relative z-10">
+                    <div className="w-[22px] h-[22px] bg-white rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-50 text-gray-500 relative z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                         <ThumbsUp size={12} strokeWidth={2} />
-                    </div>
-                    
-                    {/* Hover Popup */}
-                    <div className="absolute bottom-full right-0 pb-1.5 hidden group-hover/react:flex z-20 w-max">
-                       <div className="bg-white rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.15)] border border-gray-200 px-2 py-1.5 flex items-center gap-1.5">
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">👍</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">❤️</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😂</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😮</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😭</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😡</span>
-                       </div>
                     </div>
                  </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Message 2 */}
-        <div className="flex items-start gap-2.5 max-w-[65%] mt-2">
-          <div className="w-[38px] h-[38px] rounded-full flex-shrink-0 opacity-0"></div>
-          <div className="flex flex-col relative group">
-            <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm border border-[#82b2ff] relative">
+            {/* Message 2 */}
+            <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm border border-gray-200 relative group mb-3">
               <div className="text-[14px] text-gray-800 leading-snug">
                 Mấy e tham khảo thử nhé
               </div>
-              <div className="text-[11px] text-gray-400 mt-1">
+              <div className="text-[11px] text-gray-500 mt-1">
                 15:10
               </div>
+              
               
               {/* Reactions */}
               <div className="absolute -bottom-3 right-2 flex items-center gap-1">
