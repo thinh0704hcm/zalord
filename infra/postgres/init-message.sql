@@ -41,6 +41,18 @@ CREATE TABLE messages (
 
 CREATE INDEX idx_messages_conv_created ON messages (conversation_id, created_at DESC);
 
+-- Join table for media attachments. media_id is NOT a FK — media-service owns
+-- its own database. Ownership/state of each media_id is validated synchronously
+-- via media-service's ValidateAttachments gRPC before the message row lands.
+CREATE TABLE message_attachments (
+    message_id  UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    media_id    UUID NOT NULL,
+    position    SMALLINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (message_id, media_id)
+);
+
+CREATE INDEX idx_msg_att_message ON message_attachments (message_id);
+
 -- ─── CQRS READ MODEL ─────────────────────────────────────────────────────────
 -- conversation_views denormalises the inbox: one row per (user, conversation),
 -- with cached last-message preview + unread_count. Updated by InboxProjector

@@ -81,7 +81,7 @@ public class InboxProjector {
             return;
         }
 
-        String preview = truncate(event.content(), 200);
+        String preview = previewOf(event);
 
         for (ConversationMember m : members) {
             UUID memberId = m.getUserId();
@@ -112,5 +112,15 @@ public class InboxProjector {
     private String truncate(String s, int max) {
         if (s == null) return null;
         return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    private String previewOf(MessageCreatedEvent event) {
+        String content = event.content();
+        int n = event.attachmentIds() == null ? 0 : event.attachmentIds().size();
+        if (content != null && !content.isBlank()) {
+            return truncate(content, 200);
+        }
+        if (n > 0) return "📎 " + n + (n == 1 ? " tệp đính kèm" : " tệp đính kèm");
+        return null;
     }
 }

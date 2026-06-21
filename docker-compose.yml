@@ -386,6 +386,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      media-service:
+        condition: service_healthy
     environment:
       SERVER_PORT: "8083"
       POSTGRES_HOST: message-pg
@@ -402,6 +404,9 @@ services:
       # and notification-service so they all read from the same broker.
       EVENT_BUS: ${EVENT_BUS:-rabbitmq}
       KAFKA_BOOTSTRAP: kafka:9092
+      # Sync gRPC into media-service to validate attachment ids before
+      # persisting a message with attached files.
+      ZALORD_MEDIA_SERVICE_GRPC_TARGET: media-service:9086
     ports:
       - "${MESSAGE_SERVICE_HOST_PORT}:8083"
     healthcheck:
@@ -477,6 +482,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_AVATARS: avatars
       MINIO_BUCKET_ATTACHMENTS: attachments
+      # Internal gRPC server (ValidateAttachments) — message-service calls in
+      # over the docker network; not routed through Kong.
+      ZALORD_GRPC_PORT: "9086"
     ports:
       - "${MEDIA_SERVICE_HOST_PORT}:8086"
     healthcheck:

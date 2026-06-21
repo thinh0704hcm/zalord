@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-FROM eclipse-temurin:21-jdk-alpine AS build
+# jammy (glibc) not alpine (musl) — protobuf-maven-plugin downloads glibc-linked
+# protoc binaries; on alpine the build fails with "protoc-gen-grpc-java: not found".
+FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /workspace
 
 COPY mvnw .
@@ -13,10 +15,10 @@ RUN ./mvnw -B -DskipTests clean package \
     && mkdir -p target/extracted \
     && java -Djarmode=layertools -jar target/*.jar extract --destination target/extracted
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-RUN addgroup -S spring && adduser -S spring -G spring
+RUN groupadd -r spring && useradd -r -g spring spring
 USER spring:spring
 
 ARG EXTRACTED=/workspace/target/extracted
