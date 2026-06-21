@@ -2,43 +2,32 @@ package mq
 
 import amqp "github.com/rabbitmq/amqp091-go"
 
-// We're a consumer for both message.exchange and group.exchange. Each gets
-// its own queue so the two streams can be drained independently and so a
-// stuck event in one stream doesn't head-of-line block the other.
+// Topology constants. After the EventBus refactor, the message.created path
+// is owned by pkg/eventbus (which declares its own queue+binding). Only the
+// group.* path still uses this raw mq package.
 const (
-	MessageExchange = "message.exchange"
+	MessageExchange = "message.exchange" // kept for back-compat / future raw use
 	GroupExchange   = "group.exchange"
 
-	MessageQueue = "notification.message.queue"
+	MessageQueue = "notification.message.queue" // legacy — no longer subscribed
 	GroupQueue   = "notification.group.queue"
 
 	MessageBindingKey = "message.created"
 	GroupBindingKey   = "group.#"
 )
 
-func SetupTopology(ch *amqp.Channel) error {
-	// Exchanges (idempotent — match upstream producers).
-	if err := ch.ExchangeDeclare(MessageExchange, "topic", true, false, false, false, nil); err != nil {
-		return err
-	}
+// SetupGroupTopology declares only the group.* path (the part still using
+// raw RabbitMQ). The message.created queue/binding is created by the
+// eventbus.rabbitConsumer at subscribe time.
+func SetupGroupTopology(ch *amqp.Channel) error {
 	if err := ch.ExchangeDeclare(GroupExchange, "topic", true, false, false, false, nil); err != nil {
 		return err
 	}
-
-	// Message queue + binding.
-	if _, err := ch.QueueDeclare(MessageQueue, true, false, false, false, nil); err != nil {
-		return err
-	}
-	if err := ch.QueueBind(MessageQueue, MessageBindingKey, MessageExchange, false, nil); err != nil {
-		return err
-	}
-
-	// Group queue + binding.
 	if _, err := ch.QueueDeclare(GroupQueue, true, false, false, false, nil); err != nil {
 		return err
 	}
-	if err := ch.QueueBind(GroupQueue, GroupBindingKey, GroupExchange, false, nil); err != nil {
-		return err
-	}
-	return nil
+	return ch.QueueBind(GroupQueue, GroupBindingKey, GroupExchange, false, nil)
 }
+
+// SetupTopology kept for back-compat; equivalent to SetupGroupTopology now.
+func SetupTopology(ch *amqp.Channel) error { return SetupGroupTopology(ch) }
