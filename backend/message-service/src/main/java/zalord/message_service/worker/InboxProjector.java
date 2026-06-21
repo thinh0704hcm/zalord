@@ -7,10 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import zalord.message_service.cache.ConversationTypeCache;
 import zalord.message_service.dto.event.MessageCreatedEvent;
 import zalord.message_service.enums.ConversationType;
 import zalord.message_service.eventbus.EventConsumer;
-import zalord.message_service.model.Conversation;
 import zalord.message_service.model.ConversationMember;
 import zalord.message_service.repository.ConversationMemberRepository;
 import zalord.message_service.repository.ConversationRepository;
@@ -36,6 +36,7 @@ public class InboxProjector {
     private final ConversationViewRepository viewRepo;
     private final ConversationMemberRepository memberRepo;
     private final ConversationRepository convRepo;
+    private final ConversationTypeCache convTypeCache;
     private final ObjectMapper objectMapper;
     private final EventConsumer eventConsumer;
     private final InboxProjector self;
@@ -43,12 +44,14 @@ public class InboxProjector {
     public InboxProjector(ConversationViewRepository viewRepo,
                           ConversationMemberRepository memberRepo,
                           ConversationRepository convRepo,
+                          ConversationTypeCache convTypeCache,
                           ObjectMapper objectMapper,
                           EventConsumer eventConsumer,
                           @Lazy @Autowired InboxProjector self) {
         this.viewRepo = viewRepo;
         this.memberRepo = memberRepo;
         this.convRepo = convRepo;
+        this.convTypeCache = convTypeCache;
         this.objectMapper = objectMapper;
         this.eventConsumer = eventConsumer;
         this.self = self;
@@ -70,8 +73,11 @@ public class InboxProjector {
             return;
         }
 
-        Conversation conv = convRepo.findById(event.conversationId()).orElse(null);
-        if (conv == null) {
+        // Cached: conv type is immutable, so this avoids hitting Postgres for
+        // every single message.created event after the first one per conv.
+        ConversationType convType = convTypeCache.getOrLoad(event.conversationId(),
+                () -> convRepo.findById(event.conversationId()).map(c -> c.getType()).orElse(null));
+        if (convType == null) {
             log.warn("InboxProjector: conversation {} not found, skipping", event.conversationId());
             return;
         }
@@ -85,7 +91,7 @@ public class InboxProjector {
 
         for (ConversationMember m : members) {
             UUID memberId = m.getUserId();
-            UUID otherUserId = conv.getType() == ConversationType.DIRECT
+            UUID otherUserId = convType == ConversationType.DIRECT
                     ? pickOther(members, memberId)
                     : null;
             viewRepo.upsertOnNewMessage(
