@@ -1,14 +1,10 @@
 package zalord.message_service.worker;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.AmqpException;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageBuilder;
-import org.springframework.amqp.core.MessagePropertiesBuilder;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import zalord.message_service.eventbus.EventPublisher;
 import zalord.message_service.model.OutboxEvent;
 import zalord.message_service.repository.OutboxEventRepository;
 
@@ -17,9 +13,9 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Polls the outbox table every 3s for unpublished rows and ships them to
- * RabbitMQ. Each row is locked with FOR UPDATE SKIP LOCKED so multiple
- * instances of the service can run safely without double-publishing.
+ * Polls outbox table every 3s and ships pending events via the EventPublisher
+ * abstraction — backend (RabbitMQ or Kafka) is chosen at startup by the
+ * zalord.event-bus property. FOR UPDATE SKIP LOCKED enables multi-instance.
  */
 @Component
 @Slf4j
@@ -28,11 +24,11 @@ public class OutboxScheduler {
     private static final int BATCH_SIZE = 100;
 
     private final OutboxEventRepository outboxRepo;
-    private final RabbitTemplate rabbitTemplate;
+    private final EventPublisher eventBus;
 
-    public OutboxScheduler(OutboxEventRepository outboxRepo, RabbitTemplate rabbitTemplate) {
+    public OutboxScheduler(OutboxEventRepository outboxRepo, EventPublisher eventBus) {
         this.outboxRepo = outboxRepo;
-        this.rabbitTemplate = rabbitTemplate;
+        this.eventBus = eventBus;
     }
 
     @Scheduled(fixedDelay = 3000)
@@ -46,19 +42,15 @@ public class OutboxScheduler {
         int failed = 0;
         for (OutboxEvent e : batch) {
             try {
-                Message msg = MessageBuilder
-                        .withBody(e.getPayload().getBytes(StandardCharsets.UTF_8))
-                        .andProperties(MessagePropertiesBuilder.newInstance()
-                                .setContentType("application/json")
-                                .setContentEncoding("UTF-8")
-                                .build())
-                        .build();
-                rabbitTemplate.send(e.getTopicExchange(), e.getRoutingKey(), msg);
+                // routingKey is the canonical event name ("message.created");
+                // EventPublisher impl maps it to RabbitMQ exchange or Kafka topic.
+                eventBus.publish(e.getRoutingKey(), e.getPayload().getBytes(StandardCharsets.UTF_8));
                 e.setPublishedAt(now);
                 published++;
-            } catch (AmqpException ex) {
+            } catch (Exception ex) {
                 failed++;
-                log.error("Outbox publish failed id={}: {}", e.getId(), ex.getMessage());
+                log.error("Outbox publish failed id={} eventName={}: {}",
+                        e.getId(), e.getRoutingKey(), ex.getMessage());
             }
         }
         log.info("Outbox: batch done published={} failed={}", published, failed);

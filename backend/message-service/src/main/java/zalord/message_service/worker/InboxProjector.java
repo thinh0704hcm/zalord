@@ -1,14 +1,15 @@
 package zalord.message_service.worker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import zalord.message_service.config.RabbitMQConfig;
 import zalord.message_service.dto.event.MessageCreatedEvent;
 import zalord.message_service.enums.ConversationType;
+import zalord.message_service.eventbus.EventConsumer;
 import zalord.message_service.model.Conversation;
 import zalord.message_service.model.ConversationMember;
 import zalord.message_service.repository.ConversationMemberRepository;
@@ -19,43 +20,52 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * CQRS projector: consumes the message.created event published by
- * MessageServiceImpl (via outbox → RabbitMQ → back here) and updates the
- * conversation_views read model.
- *
- * Eventual consistency: a few hundred ms after POST /messages, inbox reflects
- * the new last-message preview and unread count. This decoupling — write does
- * NOT directly touch the read model — is the heart of CQRS.
+ * CQRS projector for "message.created" → conversation_views read model.
+ * Subscribes through the EventConsumer interface so it works on whichever
+ * broker (RabbitMQ or Kafka) is active at startup — the listener-container
+ * is created dynamically at PostConstruct, no @RabbitListener / @KafkaListener
+ * annotations to pre-bind it to one backend.
  */
 @Component
 @Slf4j
 public class InboxProjector {
 
+    private static final String EVENT_NAME = "message.created";
+    private static final String CONSUMER_GROUP = "message-inbox-projector";
+
     private final ConversationViewRepository viewRepo;
     private final ConversationMemberRepository memberRepo;
     private final ConversationRepository convRepo;
     private final ObjectMapper objectMapper;
+    private final EventConsumer eventConsumer;
+    private final InboxProjector self;
 
     public InboxProjector(ConversationViewRepository viewRepo,
                           ConversationMemberRepository memberRepo,
                           ConversationRepository convRepo,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          EventConsumer eventConsumer,
+                          @Lazy @Autowired InboxProjector self) {
         this.viewRepo = viewRepo;
         this.memberRepo = memberRepo;
         this.convRepo = convRepo;
         this.objectMapper = objectMapper;
+        this.eventConsumer = eventConsumer;
+        this.self = self;
     }
 
-    @RabbitListener(queues = RabbitMQConfig.INBOX_PROJECTOR_QUEUE)
+    @PostConstruct
+    void register() {
+        eventConsumer.subscribe(EVENT_NAME, CONSUMER_GROUP, self::project);
+    }
+
     @Transactional
-    public void onMessageCreated(Message message) {
-        // Take the raw Message (avoids Spring's auto-conversion which would try
-        // to map the JSON body to byte[] — type mismatch and fail). We deserialize
-        // ourselves using the same ObjectMapper that has JavaTimeModule registered.
+    public void project(byte[] body) {
         MessageCreatedEvent event;
         try {
-            event = objectMapper.readValue(message.getBody(), MessageCreatedEvent.class);
+            event = objectMapper.readValue(body, MessageCreatedEvent.class);
         } catch (Exception ex) {
+            // Permanent: swallow so the broker doesn't requeue forever.
             log.warn("InboxProjector: failed to parse event, dropping: {}", ex.getMessage());
             return;
         }

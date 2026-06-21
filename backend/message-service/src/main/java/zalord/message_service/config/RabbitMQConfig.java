@@ -26,12 +26,10 @@ public class RabbitMQConfig {
     public static final String MESSAGE_QUEUE = "message.queue";
     public static final String MESSAGE_BINDING_KEY = "message.#";
 
-    // CQRS inbox projector queue — message-service consumes its OWN
-    // message.created events to update the conversation_views read model.
-    // This is what makes it CQRS: write side (POST /messages) and read side
-    // (GET /inbox) are separated by an event boundary, even though they live
-    // in the same service for now.
-    public static final String INBOX_PROJECTOR_QUEUE = "message.inbox.projector.queue";
+    // (InboxProjector's queue/binding is now declared dynamically by
+    // RabbitMQEventConsumer when zalord.event-bus = rabbitmq; the static
+    // @Bean approach below was removed so swapping to Kafka doesn't leave
+    // an orphan binding.)
 
     // group-service publishes group.* events here. message-service projects
     // a Conversation (id = groupId) and its ConversationMember rows so the
@@ -53,16 +51,6 @@ public class RabbitMQConfig {
     @Bean
     public Binding messageBinding(Queue messageQueue, TopicExchange messageExchange) {
         return BindingBuilder.bind(messageQueue).to(messageExchange).with(MESSAGE_BINDING_KEY);
-    }
-
-    @Bean
-    public Queue inboxProjectorQueue() {
-        return QueueBuilder.durable(INBOX_PROJECTOR_QUEUE).build();
-    }
-
-    @Bean
-    public Binding inboxProjectorBinding(Queue inboxProjectorQueue, TopicExchange messageExchange) {
-        return BindingBuilder.bind(inboxProjectorQueue).to(messageExchange).with(MESSAGE_CREATED_ROUTING_KEY);
     }
 
     @Bean

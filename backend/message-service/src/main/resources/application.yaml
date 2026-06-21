@@ -23,10 +23,16 @@ spring:
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:kafka:9092}
+
   data:
     redis:
       host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
+
+zalord:
+  event-bus: ${EVENT_BUS:rabbitmq}   # rabbitmq | kafka — for message.created chain
 
 server:
   port: ${SERVER_PORT:8083}
