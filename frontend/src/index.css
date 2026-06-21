@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+/* Custom modern scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c5c8;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8adb1;
+}
+
+/* Hide scrollbar buttons (chevrons) */
+::-webkit-scrollbar-button {
+  display: none;
+}

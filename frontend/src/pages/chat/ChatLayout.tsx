@@ -4,7 +4,7 @@ import ChatList from '../../components/chat/ChatList';
 import ChatWindow from '../../components/chat/ChatWindow';
 
 export const mockChats = [
-  { id: 0, name: 'Mocker', message: 'Bắt đầu chat với Mocker', time: 'Vừa xong', unread: 0, avatar: 'M' },
+  { id: 0, name: 'Nguyễn Phúc Thịnh', message: 'Bắt đầu chat với Thịnh', time: 'Vừa xong', unread: 0, avatar: 'NT' },
   { id: 1, name: 'PREP | Workshop Lộ trìn...', message: 'Trịnh Vũ Thu Hà đã tham gia cộng ...', time: '2 phút', unread: 0, avatar: 'P', group: true },
   { id: 2, name: 'P 1201E2', message: 'Trần Tiến: Hiện trên web ktx có Thông...', time: '20 phút', unread: 5, avatar: 'P', group: true },
   { id: 3, name: 'ĐIỂM THI TRƯỜNG ĐẠI...', message: 'Trung Tâm Dv Sinh Viên - Isinhvien ...', time: '6 giờ', unread: 99, avatar: 'Đ', group: true },

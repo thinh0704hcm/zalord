@@ -45,6 +45,31 @@ export const ZalordSettingsFilledIcon = (props: React.SVGProps<SVGSVGElement>) =
   </svg>
 );
 
+export const ZalordSearchIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="7" cy="7" r="5.5" />
+    <path d="M11 11L15 15" />
+  </svg>
+);
+
+export const ZalordAddUserIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="10" cy="8" r="4" />
+    <path d="M10 15c-3.5 0-6.5 1.8-7.5 4.5" />
+    <path d="M17 15c1 0 2 .5 2.5 1.2" />
+    <path d="M16 4v6M13 7h6" />
+  </svg>
+);
+
+export const ZalordAddGroupIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="8.5" cy="11.5" r="3.5" />
+    <path d="M2.5 20c.5-3 2.5-4.5 6-4.5s5.5 1.5 6 4.5" />
+    <circle cx="16" cy="13" r="2.5" />
+    <path d="M13 20c.5-1.5 2-2.5 3-2.5s2.5 1 3 2.5" />
+    <path d="M16 4v5M13.5 6.5h5" />
+  </svg>
+);
 
 export const ZalordStickerIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>

@@ -35,12 +35,12 @@ export default function SidebarNav() {
 
   return (
     <div className="w-[64px] h-screen bg-[#005ae0] flex flex-col items-center py-4 justify-between z-10 flex-shrink-0">
-      <div className="flex flex-col items-center gap-4 w-full relative">
+      <div className="flex flex-col items-center w-full relative">
         {/* Avatar Area */}
-        <div className="relative" ref={popupRef}>
+        <div className="relative mt-2" ref={popupRef}>
           <div 
             onClick={() => setShowProfilePopup(!showProfilePopup)}
-            className="w-11 h-11 rounded-full bg-gradient-to-b from-[#87baff] to-[#0068ff] flex items-center justify-center text-white font-semibold text-base overflow-hidden cursor-pointer shadow-sm"
+            className="w-10 h-10 rounded-full bg-gradient-to-b from-[#87baff] to-[#0068ff] flex items-center justify-center text-white font-medium text-[14px] overflow-hidden cursor-pointer transition-colors shadow-sm hover:opacity-90"
           >
             {getInitials(userName)}
           </div>
@@ -73,7 +73,7 @@ export default function SidebarNav() {
         </div>
         
         {/* Top Icons */}
-        <div className="flex flex-col w-full mt-4 items-center gap-1.5">
+        <div className="flex flex-col w-full mt-6 items-center gap-0.5">
           <div 
             onClick={() => setActiveTab('message')}
             className={`w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${activeTab === 'message' ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
