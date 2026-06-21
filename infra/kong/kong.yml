@@ -113,6 +113,20 @@ services:
           - <<: *identity-def
             enabled: true
 
+  # ── notification-service: protected — bell-icon feed ──────────────────────
+  - name: notification-service
+    url: http://notification-service:8087
+    routes:
+      - name: notification-all
+        strip_path: false
+        paths:
+          - "/api/v1/notifications"
+        plugins:
+          - <<: *jwt-def
+            enabled: true
+          - <<: *identity-def
+            enabled: true
+
   # ── media-service: protected — presigned upload/download URLs ─────────────
   - name: media-service
     url: http://media-service:8086
@@ -234,6 +248,14 @@ services:
         strip_path: true
         paths:
           - "/api-docs/media"
+
+  - name: notification-docs
+    url: http://notification-service:8087/v3/api-docs
+    routes:
+      - name: notification-docs-route
+        strip_path: true
+        paths:
+          - "/api-docs/notification"
 
 # Consumer + JWT credential. `key` must equal the `iss` claim in issued tokens.
 # The secret is NOT stored here — __JWT_SECRET__ is a placeholder that the Kong
