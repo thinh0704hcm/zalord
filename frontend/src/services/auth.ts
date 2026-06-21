@@ -3,11 +3,11 @@
 // Can be easily swapped with real fetch/axios calls later.
 
 export const authService = {
-  login: async (username: string, password: string) => {
+  login: async (username: string, _password: string) => {
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 800));
 
-    if (username === 'mock' && password === 'mock123') {
+    if (username === 'mock' && _password === 'mock123') {
       return {
         success: true,
         token: 'mock-jwt-token-xyz',

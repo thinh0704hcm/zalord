@@ -3,15 +3,7 @@ import EmojiPicker, { Categories } from 'emoji-picker-react';
 import { UserPlus, Search, PanelRight, Smile, Users, ThumbsUp } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon, ZalordDuoCheckIcon } from './ZalordIcons';
 
-interface Chat {
-  id: number;
-  name: string;
-  message: string;
-  time: string;
-  unread: number;
-  avatar: string;
-  group?: boolean;
-}
+import type { Chat } from '../../pages/chat/ChatLayout';
 
 interface ChatWindowProps {
   chat?: Chat;
@@ -103,9 +95,9 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
 
         {/* Incoming Message Group */}
         <div className="flex items-start gap-2.5 max-w-[65%]">
-          <div className="w-[38px] h-[38px] rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold flex-shrink-0 mt-0.5">
-            NQ
-          </div>
+              <div className="w-[48px] h-[48px] rounded-full bg-[#eaedf0] flex items-center justify-center text-[#0068ff] font-semibold text-lg flex-shrink-0">
+                {typeof chat.avatar === 'string' ? chat.avatar : (chat.avatar[0] || 'G')}
+              </div>
           <div className="flex flex-col gap-[2px]">
             {/* Message 1 */}
             <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm border border-gray-200 relative group mb-3">

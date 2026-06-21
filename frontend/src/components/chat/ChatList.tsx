@@ -3,23 +3,16 @@ import { XCircle } from 'lucide-react';
 import { ZalordAddGroupIcon, ZalordSearchIcon } from './ZalordIcons';
 import CreateGroupModal from './CreateGroupModal';
 
-interface Chat {
-  id: number;
-  name: string;
-  message: string;
-  time: string;
-  unread: number;
-  avatar: string;
-  group?: boolean;
-}
+import type { Chat } from '../../pages/chat/ChatLayout';
 
 interface ChatListProps {
   chats: Chat[];
   activeChatId: number;
   onSelectChat: (id: number) => void;
+  onCreateGroup?: (groupName: string, selectedAvatars: string[], totalMembers: number) => void;
 }
 
-export default function ChatList({ chats, activeChatId, onSelectChat }: ChatListProps) {
+export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGroup }: ChatListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
@@ -142,9 +135,7 @@ export default function ChatList({ chats, activeChatId, onSelectChat }: ChatList
                 className={`flex items-start gap-3 px-2.5 py-2.5 cursor-pointer rounded-lg transition-all border ${chat.id === activeChatId ? 'bg-[#e5efff] border-transparent' : 'bg-white border-transparent hover:bg-[#f3f5f6] hover:border-[#eef0f1]'}`}
               >
                 <div className="relative mt-0.5">
-                  <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
-                    {chat.avatar}
-                  </div>
+                  {renderAvatar(chat)}
                   {chat.unread > 0 && (
                     <div className="absolute -bottom-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold h-[16px] min-w-[16px] px-1 rounded-full border border-white flex items-center justify-center leading-none">
                       {chat.unread > 9 ? '9+' : chat.unread}
@@ -167,10 +158,71 @@ export default function ChatList({ chats, activeChatId, onSelectChat }: ChatList
         )}
       </div>
 
-      <CreateGroupModal 
-        isOpen={isCreateGroupModalOpen} 
-        onClose={() => setIsCreateGroupModalOpen(false)} 
+      <CreateGroupModal
+        isOpen={isCreateGroupModalOpen}
+        onClose={() => setIsCreateGroupModalOpen(false)}
+        onCreateGroup={(name, avatars, total) => {
+          onCreateGroup?.(name, avatars, total);
+          setIsCreateGroupModalOpen(false);
+        }}
       />
     </div>
   );
 }
+
+const renderAvatar = (chat: Chat) => {
+  if (typeof chat.avatar === 'string') {
+    return (
+      <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
+        {chat.avatar}
+      </div>
+    );
+  }
+
+  const avatars = chat.avatar;
+  const total = chat.totalMembers || avatars.length;
+
+  if (total === 3) {
+    return (
+      <div className="w-[46px] h-[46px] relative flex-shrink-0">
+        <div className="absolute bottom-0 right-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-10 overflow-hidden">
+          {avatars[2] || 'Bạn'}
+        </div>
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
+          {avatars[1] || 'B'}
+        </div>
+        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-30 overflow-hidden">
+          {avatars[0] || 'A'}
+        </div>
+      </div>
+    );
+  }
+
+  if (total >= 4) {
+    const remaining = total - 3;
+    return (
+      <div className="w-[46px] h-[46px] relative flex-shrink-0">
+        <div className="absolute top-0 left-0 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-10 overflow-hidden">
+          {avatars[0] || 'A'}
+        </div>
+        <div className="absolute top-0 right-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
+          {avatars[1] || 'B'}
+        </div>
+        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
+          {avatars[2] || 'C'}
+        </div>
+        <div className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-semibold border-[1.5px] border-white z-30 overflow-hidden ${
+          total === 4 ? 'bg-[#4a90e2] text-white' : 'bg-[#eaedf0] text-[#081c36]'
+        }`}>
+          {total === 4 ? (avatars[3] || 'D') : remaining}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
+      {avatars[0] || 'G'}
+    </div>
+  );
+};
