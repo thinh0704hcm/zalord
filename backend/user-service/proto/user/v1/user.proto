@@ -1,0 +1,37 @@
+// SHARED PROTO — copy this file into:
+//   backend/user-service/proto/user/v1/user.proto       (Go gRPC server)
+//   backend/auth-service/src/main/proto/user/v1/user.proto  (Java gRPC client)
+// Keep all 3 copies in sync. When the contract changes, regen both sides.
+//
+// Why this RPC is sync (not async event): registration is a low-volume,
+// strong-consistency flow — user expects a working profile immediately
+// after register. Sync gRPC gives that at the cost of coupling auth-service
+// to user-service availability. Acceptable trade-off for this flow.
+
+syntax = "proto3";
+
+package zalord.user.v1;
+
+option go_package = "github.com/thinh0704hcm/zalord/backend/user-service/proto/user/v1;userv1";
+option java_package = "zalord.user.v1";
+option java_multiple_files = true;
+
+// Internal-only service exposed by user-service on a gRPC port distinct from
+// its public REST port. Not routed through Kong — service-to-service traffic
+// stays on the docker network.
+service UserInternal {
+  // Idempotent: re-calling with the same userId is a no-op (UNIQUE constraint
+  // on profiles.user_id). Returns the existing profile if it was already created.
+  rpc CreateProfile(CreateProfileRequest) returns (CreateProfileResponse);
+}
+
+message CreateProfileRequest {
+  string user_id      = 1;
+  string display_name = 2;
+  string phone_number = 3;
+}
+
+message CreateProfileResponse {
+  string profile_id = 1;
+  string user_id    = 2;
+}

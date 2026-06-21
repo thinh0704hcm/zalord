@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -10,14 +12,16 @@ import (
 	queries "github.com/thinh0704hcm/zalord/backend/user-service/db/sqlc"
 	docs "github.com/thinh0704hcm/zalord/backend/user-service/docs"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/database"
+	grpcserver "github.com/thinh0704hcm/zalord/backend/user-service/internal/grpc"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/handler"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/middleware"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/repository"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/service"
 	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/config"
 	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/logger"
-	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/mq"
+	userv1 "github.com/thinh0704hcm/zalord/backend/user-service/proto/user/v1"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 // @title           User Service API
@@ -47,36 +51,31 @@ func main() {
 	}
 	defer pool.Close()
 
-	// RabbitMQ
-	rmq, err := mq.NewRabbitMQ(cfg.MqUri)
-	if err != nil {
-		logger.Log.Fatal("rabbitmq connect failed", zap.Error(err))
-	}
-	defer func() { _ = rmq.Close() }()
-
-	// Topology — declared on a one-shot channel so we don't keep it open.
-	{
-		ch, err := rmq.Channel()
-		if err != nil {
-			logger.Log.Fatal("rabbitmq: open channel failed", zap.Error(err))
-		}
-		if err := mq.SetupTopology(ch); err != nil {
-			logger.Log.Fatal("rabbitmq: setup topology failed", zap.Error(err))
-		}
-		_ = ch.Close()
-	}
-
 	// Wiring
 	query := queries.New(pool)
 	profileRepo := repository.NewProfileRepository(query)
 	profileService := service.NewProfileService(profileRepo)
 	profileHandler := handler.NewProfileHandler(profileService)
 
-	// Consumer (background goroutine; respects ctx)
-	consumer := mq.NewConsumer(rmq)
-	if err := consumer.Consume(ctx, mq.UserQueue, profileService.ConsumeProfileCreated); err != nil {
-		logger.Log.Fatal("rabbitmq: consume profile failed", zap.Error(err))
+	// ── gRPC server (internal API — auth-service → CreateProfile) ──────────
+	// Sync replacement for the old user.created event. Listens on a separate
+	// port from HTTP (default 9082) so it's not routed through Kong.
+	grpcPort := os.Getenv("GRPC_PORT")
+	if grpcPort == "" {
+		grpcPort = "9082"
 	}
+	go func() {
+		lis, err := net.Listen("tcp", ":"+grpcPort)
+		if err != nil {
+			logger.Log.Fatal("grpc listen failed", zap.Error(err))
+		}
+		s := grpc.NewServer()
+		userv1.RegisterUserInternalServer(s, grpcserver.NewUserServer(profileService))
+		logger.Log.Info("grpc server listening", zap.String("port", grpcPort))
+		if err := s.Serve(lis); err != nil {
+			logger.Log.Fatal("grpc serve failed", zap.Error(err))
+		}
+	}()
 
 	// HTTP
 	r := gin.Default()

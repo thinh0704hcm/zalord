@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------- Build stage ----------
-FROM eclipse-temurin:21-jdk-alpine AS build
+# NOT alpine: the protobuf-maven-plugin downloads pre-built protoc + grpc-java
+# binaries that are linked against glibc. Alpine uses musl → "program not found".
+FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /workspace
 
 # Cache Maven dependencies separately from source
