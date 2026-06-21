@@ -22,6 +22,7 @@ import zalord.media_service.exception.MediaNotFoundException;
 import zalord.media_service.model.Media;
 import zalord.media_service.repository.MediaRepository;
 import zalord.media_service.service.IMediaService;
+import zalord.media_service.service.MediaCache;
 import zalord.media_service.service.MembershipCache;
 
 import java.time.Duration;
@@ -40,17 +41,20 @@ public class MediaServiceImpl implements IMediaService {
     private final S3Client s3;
     private final S3Presigner presigner;
     private final MembershipCache membership;
+    private final MediaCache mediaCache;
 
     public MediaServiceImpl(MediaRepository repo,
                             MinioProperties props,
                             S3Client s3,
                             S3Presigner presigner,
-                            MembershipCache membership) {
+                            MembershipCache membership,
+                            MediaCache mediaCache) {
         this.repo = repo;
         this.props = props;
         this.s3 = s3;
         this.presigner = presigner;
         this.membership = membership;
+        this.mediaCache = mediaCache;
     }
 
     @Override
@@ -116,6 +120,9 @@ public class MediaServiceImpl implements IMediaService {
             if (head.contentType() != null) m.setMimeType(head.contentType());
             m.setStatus(MediaStatus.READY);
             m.setFinalizedAt(Instant.now());
+            // Warm the cache with the post-finalize snapshot — next validate or
+            // download URL request avoids the DB round trip.
+            mediaCache.put(MediaCache.Snapshot.of(m));
             log.info("Finalized media={} size={} mime={}", mediaId, head.contentLength(), head.contentType());
             return toResponse(m);
         } catch (NoSuchKeyException ex) {
@@ -163,6 +170,9 @@ public class MediaServiceImpl implements IMediaService {
             throw new ForbiddenException("Only the owner can delete this media");
         }
         m.setStatus(MediaStatus.DELETED);
+        // Evict cache so in-flight validate calls don't pass on a stale READY
+        // snapshot. Subsequent reads see DELETED via Postgres (and re-cache it).
+        mediaCache.evict(mediaId);
         // Soft delete only — leaves bytes in MinIO. A separate cron could
         // sweep DELETED rows >N days old and call s3.deleteObject(). Out of scope.
         log.info("Soft-deleted media={}", mediaId);

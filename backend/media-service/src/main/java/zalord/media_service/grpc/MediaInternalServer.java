@@ -16,6 +16,7 @@ import zalord.media_service.enums.MediaKind;
 import zalord.media_service.enums.MediaStatus;
 import zalord.media_service.model.Media;
 import zalord.media_service.repository.MediaRepository;
+import zalord.media_service.service.MediaCache;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,12 +36,15 @@ import java.util.stream.Collectors;
 public class MediaInternalServer {
 
     private final MediaRepository mediaRepo;
+    private final MediaCache cache;
     private final int port;
     private Server server;
 
     public MediaInternalServer(MediaRepository mediaRepo,
+                               MediaCache cache,
                                @Value("${zalord.grpc.port:9086}") int port) {
         this.mediaRepo = mediaRepo;
+        this.cache = cache;
         this.port = port;
     }
 
@@ -102,12 +106,23 @@ public class MediaInternalServer {
                 }
             }
 
-            Map<UUID, Media> found = mediaRepo.findByIdIn(requested).stream()
-                    .collect(Collectors.toMap(Media::getId, m -> m, (a, b) -> a, HashMap::new));
+            // Read-through cache: hit Redis first, fall back to Postgres for misses,
+            // then populate the cache so subsequent validates skip the DB entirely.
+            Map<UUID, MediaCache.Snapshot> cached = cache.getMany(requested);
+            List<UUID> misses = requested.stream().filter(id -> !cached.containsKey(id)).toList();
+            Map<UUID, MediaCache.Snapshot> all = new HashMap<>(cached);
+            if (!misses.isEmpty()) {
+                List<MediaCache.Snapshot> loaded = mediaRepo.findByIdIn(misses).stream()
+                        .map(MediaCache.Snapshot::of)
+                        .toList();
+                cache.putAll(loaded);
+                loaded.forEach(s -> all.put(s.id(), s));
+            }
+            log.debug("ValidateAttachments cache hit={}/{} miss={}",
+                    cached.size(), requested.size(), misses.size());
 
             for (UUID id : requested) {
-                Media m = found.get(id);
-                String reason = checkOne(m, caller, conversation);
+                String reason = checkOne(all.get(id), caller, conversation);
                 if (reason != null) {
                     invalid.add(InvalidAttachment.newBuilder()
                             .setMediaId(id.toString()).setReason(reason).build());
@@ -120,15 +135,15 @@ public class MediaInternalServer {
                     .build();
         }
 
-        private String checkOne(Media m, UUID caller, UUID conversation) {
+        private String checkOne(MediaCache.Snapshot m, UUID caller, UUID conversation) {
             if (m == null) return "NOT_FOUND";
-            if (m.getStatus() == MediaStatus.DELETED) return "DELETED";
-            if (m.getKind() != MediaKind.ATTACHMENT) return "NOT_ATTACHMENT";
-            if (!caller.equals(m.getOwnerId())) return "NOT_OWNED";
-            if (m.getConversationId() == null || !conversation.equals(m.getConversationId())) {
+            if (MediaStatus.DELETED.name().equals(m.status())) return "DELETED";
+            if (!MediaKind.ATTACHMENT.name().equals(m.kind())) return "NOT_ATTACHMENT";
+            if (!caller.equals(m.ownerId())) return "NOT_OWNED";
+            if (m.conversationId() == null || !conversation.equals(m.conversationId())) {
                 return "WRONG_CONVERSATION";
             }
-            if (m.getStatus() != MediaStatus.READY) return "NOT_READY";
+            if (!MediaStatus.READY.name().equals(m.status())) return "NOT_READY";
             return null;
         }
     }
