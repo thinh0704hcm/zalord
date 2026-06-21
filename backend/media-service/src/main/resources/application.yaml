@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: media-service
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/media-db
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8086}
+
+logging:
+  level:
+    zalord.media_service: ${LOG_LEVEL:DEBUG}
+
+minio:
+  internal-endpoint: ${MINIO_INTERNAL_ENDPOINT:http://minio:9000}
+  public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  bucket:
+    avatars: ${MINIO_BUCKET_AVATARS:avatars}
+    attachments: ${MINIO_BUCKET_ATTACHMENTS:attachments}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

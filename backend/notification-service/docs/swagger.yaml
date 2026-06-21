@@ -1,0 +1,149 @@
+basePath: /
+definitions:
+  handler.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  handler.ListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/handler.NotificationResponse'
+        type: array
+      page:
+        type: integer
+      size:
+        type: integer
+      total:
+        type: integer
+      totalPages:
+        type: integer
+    type: object
+  handler.NotificationResponse:
+    properties:
+      body:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      isRead:
+        type: boolean
+      payload:
+        description: raw JSON string; FE parses
+        type: string
+      readAt:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  handler.UnreadCountResponse:
+    properties:
+      unread:
+        type: integer
+    type: object
+info:
+  contact: {}
+  description: Per-user notification feed (the bell icon). Built by consuming message.created
+    + group.* events; distinct from CQRS inbox.
+  title: Notification Service API
+  version: v1
+paths:
+  /api/v1/notifications:
+    get:
+      parameters:
+      - description: Page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Size (default 20, max 100)
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List my notifications (paginated, newest first)
+      tags:
+      - notification
+  /api/v1/notifications/{id}/read:
+    post:
+      parameters:
+      - description: Notification id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: '{\"updated\": true|false}'
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark a single notification as read
+      tags:
+      - notification
+  /api/v1/notifications/read-all:
+    post:
+      responses:
+        "200":
+          description: '{\"updated\": n}'
+          schema:
+            additionalProperties:
+              format: int64
+              type: integer
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark all my notifications as read
+      tags:
+      - notification
+  /api/v1/notifications/unread-count:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UnreadCountResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get my unread count (for the bell badge)
+      tags:
+      - notification
+securityDefinitions:
+  BearerAuth:
+    description: Paste the access token only — Swagger adds "Bearer ".
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
