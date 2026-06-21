@@ -6,9 +6,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import zalord.media_service.model.Media;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 public interface MediaRepository extends JpaRepository<Media, UUID> {
+
+    /** Bulk fetch by ids — used by the ValidateAttachments gRPC. */
+    List<Media> findByIdIn(Collection<UUID> ids);
 
     /**
      * Native INSERT with explicit id — service needs to control the id so the

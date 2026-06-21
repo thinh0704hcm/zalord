@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-FROM eclipse-temurin:21-jdk-alpine AS build
+# jammy (glibc) not alpine (musl) — protobuf-maven-plugin downloads glibc-linked
+# protoc binaries; on alpine the build fails with "protoc-gen-grpc-java: not found".
+FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /workspace
 COPY mvnw .
 COPY .mvn .mvn
@@ -11,16 +13,16 @@ RUN ./mvnw -B -DskipTests clean package \
     && mkdir -p target/extracted \
     && java -Djarmode=layertools -jar target/*.jar extract --destination target/extracted
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
-RUN apk add --no-cache wget
-RUN addgroup -S spring && adduser -S spring -G spring
+RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+RUN groupadd -r spring && useradd -r -g spring spring
 USER spring:spring
 ARG EXTRACTED=/workspace/target/extracted
 COPY --from=build ${EXTRACTED}/dependencies/ ./
 COPY --from=build ${EXTRACTED}/spring-boot-loader/ ./
 COPY --from=build ${EXTRACTED}/snapshot-dependencies/ ./
 COPY --from=build ${EXTRACTED}/application/ ./
-EXPOSE 8086
+EXPOSE 8086 9086
 ENV JAVA_OPTS=""
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
