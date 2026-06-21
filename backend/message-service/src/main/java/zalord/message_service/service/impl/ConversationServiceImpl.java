@@ -17,6 +17,7 @@ import zalord.message_service.exception.NotMemberException;
 import zalord.message_service.model.Conversation;
 import zalord.message_service.model.ConversationMember;
 import zalord.message_service.model.DirectLookup;
+import zalord.message_service.cache.ConversationMembersCache;
 import zalord.message_service.repository.ConversationMemberRepository;
 import zalord.message_service.repository.ConversationRepository;
 import zalord.message_service.repository.ConversationViewRepository;
@@ -35,15 +36,18 @@ public class ConversationServiceImpl implements IConversationService {
     private final ConversationMemberRepository memberRepo;
     private final DirectLookupRepository directRepo;
     private final ConversationViewRepository viewRepo;
+    private final ConversationMembersCache membersCache;
 
     public ConversationServiceImpl(ConversationRepository convRepo,
                                    ConversationMemberRepository memberRepo,
                                    DirectLookupRepository directRepo,
-                                   ConversationViewRepository viewRepo) {
+                                   ConversationViewRepository viewRepo,
+                                   ConversationMembersCache membersCache) {
         this.convRepo = convRepo;
         this.memberRepo = memberRepo;
         this.directRepo = directRepo;
         this.viewRepo = viewRepo;
+        this.membersCache = membersCache;
     }
 
     @Override
@@ -66,6 +70,8 @@ public class ConversationServiceImpl implements IConversationService {
             // created before the CQRS read model was added.
             viewRepo.initView(caller, convId, req.memberUserId());
             viewRepo.initView(req.memberUserId(), convId, caller);
+            // Defensive: re-populate Redis members cache (SADD is idempotent).
+            membersCache.addMembers(convId, List.of(caller, req.memberUserId()));
             return toResponse(convRepo.findById(convId).orElseThrow(
                     () -> new ConversationNotFoundException("Conversation referenced by direct_lookup missing: " + convId)),
                     List.of(caller, req.memberUserId()));
@@ -89,6 +95,9 @@ public class ConversationServiceImpl implements IConversationService {
         // unread later when messages arrive.
         viewRepo.initView(caller, conv.getId(), req.memberUserId());
         viewRepo.initView(req.memberUserId(), conv.getId(), caller);
+
+        // Redis cache for cross-service authz (media-service reads this).
+        membersCache.addMembers(conv.getId(), List.of(caller, req.memberUserId()));
 
         log.info("DIRECT conversation created id={} between {} and {}", conv.getId(), caller, req.memberUserId());
         return toResponse(conv, List.of(caller, req.memberUserId()));

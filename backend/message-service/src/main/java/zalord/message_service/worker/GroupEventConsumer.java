@@ -13,6 +13,7 @@ import zalord.message_service.dto.event.GroupMemberRemovedEvent;
 import zalord.message_service.enums.ConversationType;
 import zalord.message_service.model.Conversation;
 import zalord.message_service.model.ConversationMember;
+import zalord.message_service.cache.ConversationMembersCache;
 import zalord.message_service.repository.ConversationMemberRepository;
 import zalord.message_service.repository.ConversationRepository;
 import zalord.message_service.repository.ConversationViewRepository;
@@ -39,15 +40,18 @@ public class GroupEventConsumer {
     private final ConversationRepository convRepo;
     private final ConversationMemberRepository memberRepo;
     private final ConversationViewRepository viewRepo;
+    private final ConversationMembersCache membersCache;
 
     public GroupEventConsumer(ObjectMapper objectMapper,
                               ConversationRepository convRepo,
                               ConversationMemberRepository memberRepo,
-                              ConversationViewRepository viewRepo) {
+                              ConversationViewRepository viewRepo,
+                              ConversationMembersCache membersCache) {
         this.objectMapper = objectMapper;
         this.convRepo = convRepo;
         this.memberRepo = memberRepo;
         this.viewRepo = viewRepo;
+        this.membersCache = membersCache;
     }
 
     @RabbitListener(queues = RabbitMQConfig.GROUP_EVENTS_QUEUE)
@@ -90,6 +94,8 @@ public class GroupEventConsumer {
             // CQRS view: otherUserId is null for groups (no single "other party").
             viewRepo.initView(userId, e.groupId(), null);
         }
+        // Bulk SADD to Redis for media-service authz cache.
+        membersCache.addMembers(e.groupId(), members);
         log.info("Projected group {} ({}) with {} members",
                 e.groupId(), e.name(), members.size());
     }
@@ -105,6 +111,7 @@ public class GroupEventConsumer {
         m.setUserId(e.userId());
         memberRepo.save(m);
         viewRepo.initView(e.userId(), e.groupId(), null);
+        membersCache.addMember(e.groupId(), e.userId());
         log.info("Projected member-added group={} user={}", e.groupId(), e.userId());
     }
 
@@ -120,6 +127,9 @@ public class GroupEventConsumer {
 
         // Drop the user's view of this group from their inbox.
         viewRepo.deleteUserConversationView(e.userId(), e.groupId());
+
+        // Evict from Redis cache — they can no longer download attachments here.
+        membersCache.removeMember(e.groupId(), e.userId());
 
         log.info("Projected member-removed group={} user={}", e.groupId(), e.userId());
     }

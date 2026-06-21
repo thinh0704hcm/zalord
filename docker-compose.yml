@@ -9,6 +9,8 @@ volumes:
   pgdata_user:
   pgdata_message:
   pgdata_group:
+  pgdata_media:
+  miniodata:
   redisdata:
   rabbitdata:
 
@@ -35,6 +37,55 @@ services:
       retries: 12
       start_period: 15s
     mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── Postgres: media-service's database (metadata only) ────────────────────
+  media-pg:
+    image: postgres:16-alpine
+    container_name: zalord-media-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: media-db
+    ports:
+      - "${POSTGRES_MEDIA_HOST_PORT}:5432"
+    volumes:
+      - pgdata_media:/var/lib/postgresql/data
+      - ./infra/postgres/init-media.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: ["postgres", "-c", "shared_buffers=64MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d media-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── MinIO (S3-compatible object storage) ──────────────────────────────────
+  # API on 9000, console UI on 9001. Buckets are created by media-service at
+  # startup. Browser uploads/downloads hit localhost:9000 via presigned URLs.
+  minio:
+    image: minio/minio:latest
+    container_name: zalord-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_HOST_PORT}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    mem_limit: 384m
     networks: [zalord-net]
 
   # ── Postgres: group-service's database ────────────────────────────────────
@@ -235,6 +286,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       SERVER_PORT: "8083"
       POSTGRES_HOST: message-pg
@@ -245,10 +298,55 @@ services:
       RABBITMQ_PORT: "5672"
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     ports:
       - "${MESSAGE_SERVICE_HOST_PORT}:8083"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    mem_limit: 512m
+    networks: [zalord-net]
+
+  # ── media-service ──────────────────────────────────────────────────────────
+  # Issues presigned PUT/GET URLs to MinIO. For ATTACHMENT downloads, checks
+  # conversation membership via Redis (cache populated by message-service).
+  media-service:
+    build:
+      context: ./backend/media-service
+      dockerfile: Dockerfile
+    container_name: zalord-media
+    restart: unless-stopped
+    depends_on:
+      media-pg:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: "8086"
+      POSTGRES_HOST: media-pg
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Internal endpoint (in-container API calls like headObject).
+      MINIO_INTERNAL_ENDPOINT: http://minio:9000
+      # PUBLIC endpoint baked into presigned URLs (must be reachable from browser).
+      MINIO_PUBLIC_ENDPOINT: http://localhost:${MINIO_API_HOST_PORT}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_AVATARS: avatars
+      MINIO_BUCKET_ATTACHMENTS: attachments
+    ports:
+      - "${MEDIA_SERVICE_HOST_PORT}:8086"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/actuator/health >/dev/null 2>&1"]
       interval: 10s
       timeout: 3s
       retries: 6
@@ -381,7 +479,7 @@ services:
     restart: unless-stopped
     environment:
       BASE_URL: /docs                         # must match the Kong route path
-      URLS: '[{"url":"/api-docs/auth","name":"auth-service"},{"url":"/api-docs/user","name":"user-service"},{"url":"/api-docs/message","name":"message-service"},{"url":"/api-docs/group","name":"group-service"}]'
+      URLS: '[{"url":"/api-docs/auth","name":"auth-service"},{"url":"/api-docs/user","name":"user-service"},{"url":"/api-docs/message","name":"message-service"},{"url":"/api-docs/group","name":"group-service"},{"url":"/api-docs/media","name":"media-service"}]'
       URLS_PRIMARY_NAME: auth-service
     mem_limit: 64m
     networks: [zalord-net]
