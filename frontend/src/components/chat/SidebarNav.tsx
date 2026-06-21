@@ -1,7 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, Contact2, CheckSquare, Cloud, Briefcase, Settings, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import { 
+  ZalordMessageFilledIcon,
+  ZalordContactFilledIcon,
+  ZalordMessageOutlineIcon, 
+  ZalordContactOutlineIcon, 
+  ZalordSettingsOutlineIcon,
+  ZalordSettingsFilledIcon
+} from './ZalordIcons';
 
 export default function SidebarNav() {
+  const [activeTab, setActiveTab] = useState('message');
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
 
@@ -64,29 +73,30 @@ export default function SidebarNav() {
         </div>
         
         {/* Top Icons */}
-        <div className="flex flex-col w-full mt-2 items-center">
-          <div className="w-[64px] h-[64px] flex items-center justify-center bg-[#004bb9] cursor-pointer text-white">
-            <MessageCircle size={26} strokeWidth={1.5} />
+        <div className="flex flex-col w-full mt-4 items-center gap-1.5">
+          <div 
+            onClick={() => setActiveTab('message')}
+            className={`w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${activeTab === 'message' ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
+          >
+            {activeTab === 'message' ? <ZalordMessageFilledIcon /> : <ZalordMessageOutlineIcon />}
           </div>
-          <div className="w-[64px] h-[64px] flex items-center justify-center hover:bg-[#004bb9] cursor-pointer text-white/80 hover:text-white transition-colors">
-            <Contact2 size={26} strokeWidth={1.5} />
-          </div>
-          <div className="w-[64px] h-[64px] flex items-center justify-center hover:bg-[#004bb9] cursor-pointer text-white/80 hover:text-white transition-colors">
-            <CheckSquare size={26} strokeWidth={1.5} />
+          <div 
+            onClick={() => setActiveTab('contact')}
+            className={`w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${activeTab === 'contact' ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
+          >
+            {activeTab === 'contact' ? <ZalordContactFilledIcon /> : <ZalordContactOutlineIcon />}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col items-center w-full mb-2">
+      <div className="flex flex-col items-center w-full mb-2 gap-1.5">
         {/* Bottom Icons */}
-        <div className="w-[64px] h-[64px] flex items-center justify-center hover:bg-[#004bb9] cursor-pointer text-white/80 hover:text-white transition-colors">
-          <Cloud size={26} strokeWidth={1.5} />
-        </div>
-        <div className="w-[64px] h-[64px] flex items-center justify-center hover:bg-[#004bb9] cursor-pointer text-white/80 hover:text-white transition-colors">
-          <Briefcase size={26} strokeWidth={1.5} />
-        </div>
-        <div className="w-[64px] h-[64px] flex items-center justify-center hover:bg-[#004bb9] cursor-pointer text-white/80 hover:text-white transition-colors">
-          <Settings size={26} strokeWidth={1.5} />
+
+        <div 
+          onClick={() => setActiveTab('settings')}
+          className={`w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${activeTab === 'settings' ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
+        >
+          {activeTab === 'settings' ? <ZalordSettingsFilledIcon /> : <ZalordSettingsOutlineIcon />}
         </div>
       </div>
     </div>
