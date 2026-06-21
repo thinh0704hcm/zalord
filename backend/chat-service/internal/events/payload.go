@@ -14,5 +14,6 @@ type MessageCreatedEvent struct {
 	SenderId       uuid.UUID   `json:"senderId"`
 	RecipientIds   []uuid.UUID `json:"recipientIds"`
 	Content        string      `json:"content"`
+	AttachmentIds  []uuid.UUID `json:"attachmentIds"`
 	CreatedAt      time.Time   `json:"createdAt"`
 }

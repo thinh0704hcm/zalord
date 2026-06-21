@@ -85,12 +85,16 @@ func (s *notificationService) HandleMessageEvent(ctx context.Context, routingKey
 		"conversationId": e.ConversationId,
 		"messageId":      e.MessageId,
 		"senderId":       e.SenderId,
+		"attachmentIds":  e.AttachmentIds,
 	})
+
+	// Plain text wins for the preview; if the message is attachments-only,
+	// fall back to a count badge so the bell shows something meaningful.
+	preview := messagePreview(e.Content, len(e.AttachmentIds))
 
 	// One notification per recipient. (No "you sent this" notification for the sender.)
 	for _, recipient := range e.RecipientIds {
-		body := truncate(e.Content, 200)
-		if err := s.repo.Insert(ctx, recipient, "NEW_MESSAGE", "New message", body, payload); err != nil {
+		if err := s.repo.Insert(ctx, recipient, "NEW_MESSAGE", "New message", preview, payload); err != nil {
 			// Transient DB error — let consumer requeue.
 			return err
 		}
@@ -143,6 +147,16 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max]
+}
+
+func messagePreview(content string, attachmentCount int) string {
+	if content != "" {
+		return truncate(content, 200)
+	}
+	if attachmentCount > 0 {
+		return fmt.Sprintf("📎 %d tệp đính kèm", attachmentCount)
+	}
+	return ""
 }
 
 func mustJson(v any) []byte {
