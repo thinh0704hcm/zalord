@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { XCircle, UserPlus } from 'lucide-react';
 import { ZalordAddGroupIcon, ZalordSearchIcon } from './ZalordIcons';
 import type { Chat } from '../../pages/chat/ChatLayout';
 import CreateGroupModal from './CreateGroupModal';
 import FindUserModal from './FindUserModal';
+import { userService } from '../../services/user';
+import type { UserProfile } from '../../services/user';
 
 interface ChatListProps {
   chats: Chat[];
@@ -19,8 +21,37 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [isFindUserModalOpen, setIsFindUserModalOpen] = useState(false);
+  const [searchedUser, setSearchedUser] = useState<UserProfile | null>(null);
+  const [isSearchingApi, setIsSearchingApi] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const displayedChats = activeFilter === 'unread' ? chats.filter(c => c.unread > 0) : chats;
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchedUser(null);
+      setSearchError('');
+      setIsSearchingApi(false);
+      return;
+    }
+
+    setIsSearchingApi(true);
+    setSearchError('');
+    setSearchedUser(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const profile = await userService.findByPhone(searchQuery.trim());
+        setSearchedUser(profile);
+      } catch (err: any) {
+        setSearchError(err.message || 'Không tìm thấy kết quả');
+      } finally {
+        setIsSearchingApi(false);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const handleSearchFocus = () => {
     setIsSearching(true);
@@ -112,29 +143,38 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {isSearching ? (
-          searchQuery === '0817920271' ? (
-            <div className="p-4">
-              <h3 className="font-semibold text-[14px] text-[#081c36] mb-4">Tìm bạn qua số điện thoại:</h3>
-              <div
-                className="flex items-center gap-3 cursor-pointer hover:bg-[#f3f5f6] p-2 -ml-2 rounded-md"
-                onClick={() => {
-                  onSelectChat(0);
-                }}
-              >
-                <div className="w-[48px] h-[48px] rounded-full bg-[#0068ff] flex items-center justify-center text-white font-medium text-[16px] flex-shrink-0">
-                  NT
+          <div className="p-4">
+            {isSearchingApi ? (
+              <div className="text-center text-gray-500 text-[13px]">Đang tìm kiếm...</div>
+            ) : searchedUser ? (
+              <>
+                <h3 className="font-semibold text-[14px] text-[#081c36] mb-4">Tìm bạn qua số điện thoại:</h3>
+                <div
+                  className="flex items-center gap-3 cursor-pointer hover:bg-[#f3f5f6] p-2 -ml-2 rounded-md"
+                  onClick={() => {
+                    onStartDirectChat?.(searchedUser.id);
+                    closeSearch();
+                  }}
+                >
+                  {searchedUser.avatarUrl ? (
+                    <img src={searchedUser.avatarUrl} alt="avatar" className="w-[48px] h-[48px] rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-[48px] h-[48px] rounded-full bg-[#0068ff] flex items-center justify-center text-white font-medium text-[16px] flex-shrink-0">
+                      {searchedUser.displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex flex-col">
+                    <span className="text-[15px] text-[#081c36] font-medium mb-0.5">{searchedUser.displayName}</span>
+                    <span className="text-[13px] text-gray-700">Số điện thoại: <span className="text-[#0068ff]">{searchedUser.phoneNumber}</span></span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[15px] text-[#081c36] font-medium mb-0.5">Nguyễn Phúc Thịnh</span>
-                  <span className="text-[13px] text-gray-700">Số điện thoại: <span className="text-[#0068ff]">0817920271</span></span>
-                </div>
+              </>
+            ) : (
+              <div className="text-center text-gray-500 text-[13px]">
+                {searchQuery ? searchError || 'Không tìm thấy kết quả' : 'Nhập số điện thoại để tìm kiếm'}
               </div>
-            </div>
-          ) : (
-            <div className="p-4 text-center text-gray-500 text-[13px]">
-              {searchQuery ? 'Không tìm thấy kết quả' : 'Nhập từ khóa để tìm kiếm'}
-            </div>
-          )
+            )}
+          </div>
         ) : (
           <div className="flex flex-col">
             {displayedChats.map(chat => (

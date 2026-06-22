@@ -41,9 +41,16 @@ export default function ChatLayout() {
       navigate('/account/login');
       return;
     }
-    
+
+    const handleAuthExpired = () => {
+      navigate('/account/login');
+    };
+    window.addEventListener('auth-expired', handleAuthExpired);
+
     wsService.connect(token);
+    
     return () => {
+      window.removeEventListener('auth-expired', handleAuthExpired);
       wsService.disconnect();
     };
   }, []);

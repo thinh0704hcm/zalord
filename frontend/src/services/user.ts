@@ -12,8 +12,8 @@ export const userService = {
   findByPhone: async (phone: string): Promise<UserProfile> => {
     try {
       const response = await api.get(`/users/by-phone/${phone}`);
-      // Assuming response.data.data contains the profile object
-      return response.data.data;
+      // The backend returns the profile object directly
+      return response.data;
     } catch (error: any) {
       if (error.response?.data?.message) {
         throw new Error(error.response.data.message);
