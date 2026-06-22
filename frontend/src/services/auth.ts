@@ -1,45 +1,59 @@
-// src/services/auth.ts
-// Mock API service for authentication. 
-// Can be easily swapped with real fetch/axios calls later.
+import api from './api';
 
 export const authService = {
-  login: async (username: string, _password: string) => {
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
+  login: async (phone: string, _password: string) => {
+    try {
+      const response = await api.post('/auth/login', {
+        phoneNumber: phone,
+        password: _password
+      });
 
-    if (username === 'mock' && _password === 'mock123') {
-      return {
-        success: true,
-        token: 'mock-jwt-token-xyz',
-        user: {
-          id: '1',
-          username: 'mock',
-          displayName: 'Mock User',
-          avatarUrl: 'https://ui-avatars.com/api/?name=Mock+User&background=0068ff&color=fff'
-        }
-      };
+      if (response.data.status === 'success') {
+        return {
+          success: true,
+          token: response.data.data.accessToken,
+          user: {
+            id: response.data.data.user?.id,
+            username: phone,
+            displayName: response.data.data.user?.displayName || phone,
+            avatarUrl: response.data.data.user?.avatarUrl || `https://ui-avatars.com/api/?name=${phone}&background=0068ff&color=fff`
+          }
+        };
+      }
+      throw new Error(response.data.message || 'Đăng nhập thất bại');
+    } catch (error: any) {
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      if (error.message) {
+        throw error;
+      }
+      throw new Error('Tài khoản hoặc mật khẩu không chính xác');
     }
-    
-    throw new Error('Tài khoản hoặc mật khẩu không chính xác');
   },
 
-  signup: async (username: string, password: string, displayName: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
+  signup: async (phone: string, password: string, displayName: string) => {
+    try {
+      const response = await api.post('/auth/register', {
+        phoneNumber: phone,
+        password: password,
+        displayName: displayName
+      });
 
-    // For mocking purposes, only allow registering 'mock'
-    if (username === 'mock') {
-      return {
-        success: true,
-        token: 'mock-jwt-token-xyz',
-        user: {
-          id: '1',
-          username: 'mock',
-          displayName: displayName,
-          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0068ff&color=fff`
-        }
-      };
+      if (response.data.status === 'success') {
+        return {
+          success: true
+        };
+      }
+      throw new Error(response.data.message || 'Đăng ký thất bại');
+    } catch (error: any) {
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      if (error.message) {
+        throw error;
+      }
+      throw new Error('Lỗi mạng hoặc server không phản hồi (Mã lỗi: 999)');
     }
-
-    throw new Error('Tên đăng nhập đã tồn tại');
   }
 };

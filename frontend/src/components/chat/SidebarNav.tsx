@@ -65,7 +65,13 @@ export default function SidebarNav() {
                  </div>
                </div>
                <div className="h-px bg-gray-200 my-1"></div>
-               <div className="px-4 py-2.5 hover:bg-gray-100 cursor-pointer text-[14px] text-gray-700 transition-colors">
+               <div 
+                 onClick={() => {
+                   localStorage.removeItem('token');
+                   window.location.href = '/account/login';
+                 }}
+                 className="px-4 py-2.5 hover:bg-gray-100 cursor-pointer text-[14px] text-gray-700 transition-colors"
+               >
                  Đăng xuất
                </div>
              </div>

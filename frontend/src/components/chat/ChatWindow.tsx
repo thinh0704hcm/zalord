@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import EmojiPicker, { Categories } from 'emoji-picker-react';
 import { UserPlus, Search, PanelRight, Smile, Users, ThumbsUp } from 'lucide-react';
-import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon, ZalordDuoCheckIcon } from './ZalordIcons';
+import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 
 import type { Chat } from '../../pages/chat/ChatLayout';
+import { messageService } from '../../services/message';
+import { wsService } from '../../services/websocket';
 
 interface ChatWindowProps {
   chat?: Chat;
@@ -45,14 +47,57 @@ const Daystamp = ({ date }: { date: string }) => {
 export default function ChatWindow({ chat }: ChatWindowProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [inputText, setInputText] = useState("");
-  const [userMessages, setUserMessages] = useState<{text: string, time: string}[]>([]);
+  const [userMessages, setUserMessages] = useState<{id?: string, text: string, time: string, isSender?: boolean}[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && inputText.trim()) {
+  useEffect(() => {
+    // Reset messages when chat changes
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUserMessages([]);
+    
+    // Auto scroll to bottom
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chat?.id]);
+
+  useEffect(() => {
+    // Listen to new messages via WebSocket
+    const unsubscribe = wsService.onMessage((msg) => {
+      // Basic check if the message belongs to current chat
+      if (msg.type === 'message.created' && msg.data?.conversationId === chat?.id) {
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        setUserMessages(prev => [...prev, { 
+          id: msg.data.messageId,
+          text: msg.data.content, 
+          time: timeStr,
+          isSender: false // Received message
+        }]);
+      }
+    });
+    
+    return unsubscribe;
+  }, [chat?.id]);
+
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && inputText.trim() && chat) {
+      const text = inputText.trim();
+      setInputText("");
+      
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      setUserMessages([...userMessages, { text: inputText.trim(), time: timeStr }]);
-      setInputText("");
+      
+      // Optimistic update
+      setUserMessages(prev => [...prev, { text: text, time: timeStr, isSender: true }]);
+      
+      // Send via API
+      try {
+        await messageService.send({
+          conversationId: String(chat.id),
+          content: text
+        });
+      } catch (error) {
+        console.error('Failed to send message', error);
+      }
     }
   };
 
@@ -91,6 +136,7 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
           <>
 
         {/* Date Divider */}
+        {/* eslint-disable-next-line react-hooks/purity */}
         <Daystamp date={new Date(Date.now() - 86400000).toISOString()} />
 
         {/* Incoming Message Group */}
@@ -188,25 +234,15 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
         
         {/* Dynamic User Messages Container */}
         <div className="flex flex-col gap-[2px] w-full">
-          {userMessages.map((msg, idx) => (
-            <div key={idx} className="flex flex-col items-end w-full">
-              <div className="bg-[#e5efff] rounded-lg px-3 py-2.5 shadow-sm border border-[#a6c8ff] relative max-w-[65%] min-w-[60px]">
-                <div className="text-[14px] text-gray-800 leading-snug whitespace-pre-wrap">
-                  {msg.text}
-                </div>
-                {idx === userMessages.length - 1 && (
-                  <div className="text-[11px] text-gray-500 mt-1">
-                    {msg.time}
-                  </div>
-                )}
+          {userMessages.map((msg, index) => (
+            <div key={index} className={`flex w-full ${msg.isSender !== false ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[70%] ${msg.isSender !== false ? 'bg-[#e5efff] border-[#cce1ff]' : 'bg-white border-[#e5e7eb]'} rounded-lg px-3 py-2 shadow-sm border`}>
+                <div className="text-[#081c36] text-[15px]">{msg.text}</div>
+                <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
               </div>
-              {idx === userMessages.length - 1 && (
-                <div className="bg-[#c2c8d0] text-white rounded-full px-2 py-0.5 text-[10px] flex items-center gap-1 mt-1 mr-1 font-medium">
-                  <ZalordDuoCheckIcon className="w-3.5 h-3.5" /> Đã nhận
-                </div>
-              )}
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
       </div>
 

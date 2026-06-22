@@ -20,6 +20,31 @@ _format_version: "3.0"
 # merge (`<<:` + `enabled: true`). Defining them here — not inside a route —
 # means deleting any single route never breaks the others' plugins.
 plugins:
+  - name: cors
+    enabled: true
+    config:
+      origins:
+        - "*"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Accept-Version
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - Authorization
+      exposed_headers:
+        - Authorization
+      credentials: true
+      max_age: 3600
+
   - &jwt-def
     name: jwt
     enabled: false
@@ -42,9 +67,15 @@ plugins:
           kong.service.request.clear_header("X-User-Roles")
 
           local auth = kong.request.get_header("authorization")
-          if not auth then return end
+          local token
+          if auth then
+            token = auth:match("^[Bb]earer%s+(.+)$")
+          end
+          
+          if not token then
+            token = kong.request.get_query_arg("token")
+          end
 
-          local token = auth:match("^[Bb]earer%s+(.+)$")
           if not token then return end
 
           local payload_b64 = token:match("^[^.]+%.([^.]+)%.[^.]+$")

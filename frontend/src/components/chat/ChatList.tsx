@@ -1,22 +1,24 @@
 import { useState } from 'react';
-import { XCircle } from 'lucide-react';
+import { XCircle, UserPlus } from 'lucide-react';
 import { ZalordAddGroupIcon, ZalordSearchIcon } from './ZalordIcons';
-import CreateGroupModal from './CreateGroupModal';
-
 import type { Chat } from '../../pages/chat/ChatLayout';
+import CreateGroupModal from './CreateGroupModal';
+import FindUserModal from './FindUserModal';
 
 interface ChatListProps {
   chats: Chat[];
-  activeChatId: number;
-  onSelectChat: (id: number) => void;
+  activeChatId: string | number;
+  onSelectChat: (id: string | number) => void;
   onCreateGroup?: (groupName: string, selectedAvatars: string[], totalMembers: number) => void;
+  onStartDirectChat?: (userId: string) => void;
 }
 
-export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGroup }: ChatListProps) {
+export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGroup, onStartDirectChat }: ChatListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [isFindUserModalOpen, setIsFindUserModalOpen] = useState(false);
 
   const displayedChats = activeFilter === 'unread' ? chats.filter(c => c.unread > 0) : chats;
 
@@ -61,6 +63,13 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
             </button>
           ) : (
             <div className="flex items-center">
+              <button
+                title="Thêm bạn/Tìm người"
+                onClick={() => setIsFindUserModalOpen(true)}
+                className="h-[32px] w-[32px] flex items-center justify-center text-[#081c36] hover:bg-[#eaedf0] rounded-md transition-colors"
+              >
+                <UserPlus size={18} strokeWidth={1.5} />
+              </button>
               <button
                 title="Tạo nhóm chat"
                 onClick={() => setIsCreateGroupModalOpen(true)}
@@ -166,6 +175,17 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
           setIsCreateGroupModalOpen(false);
         }}
       />
+
+      {isFindUserModalOpen && (
+        <FindUserModal
+          isOpen={isFindUserModalOpen}
+          onClose={() => setIsFindUserModalOpen(false)}
+          onStartChat={(userId) => {
+            onStartDirectChat?.(userId);
+            setIsFindUserModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -211,9 +231,8 @@ const renderAvatar = (chat: Chat) => {
         <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
           {avatars[2] || 'C'}
         </div>
-        <div className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-semibold border-[1.5px] border-white z-30 overflow-hidden ${
-          total === 4 ? 'bg-[#4a90e2] text-white' : 'bg-[#eaedf0] text-[#081c36]'
-        }`}>
+        <div className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-semibold border-[1.5px] border-white z-30 overflow-hidden ${total === 4 ? 'bg-[#4a90e2] text-white' : 'bg-[#eaedf0] text-[#081c36]'
+          }`}>
           {total === 4 ? (avatars[3] || 'D') : remaining}
         </div>
       </div>

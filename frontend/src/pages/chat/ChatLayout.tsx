@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import SidebarNav from '../../components/chat/SidebarNav';
 import ChatList from '../../components/chat/ChatList';
 import ChatWindow from '../../components/chat/ChatWindow';
+import { wsService } from '../../services/websocket';
+
+import { conversationService } from '../../services/conversation';
 
 export interface Chat {
-  id: number;
+  id: string | number;
   name: string;
   message: string;
   time: string;
@@ -26,9 +30,23 @@ const initialChats: Chat[] = [
 ];
 
 export default function ChatLayout() {
+  const navigate = useNavigate();
   const [chats, setChats] = useState<Chat[]>(initialChats);
-  const [activeChatId, setActiveChatId] = useState(7);
+  const [activeChatId, setActiveChatId] = useState<string | number>(7);
   const activeChat = chats.find(c => c.id === activeChatId);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/account/login');
+      return;
+    }
+    
+    wsService.connect(token);
+    return () => {
+      wsService.disconnect();
+    };
+  }, []);
 
   const handleCreateGroup = (groupName: string, selectedAvatars: string[], totalMembers: number) => {
     const newChat: Chat = {
@@ -45,10 +63,42 @@ export default function ChatLayout() {
     setActiveChatId(newChat.id);
   };
 
+  const handleStartDirectChat = async (userId: string) => {
+    try {
+      const conv = await conversationService.createDirect(userId);
+      // Check if this chat already exists in the list
+      const existingChat = chats.find(c => c.id === conv.id);
+      if (existingChat) {
+        setActiveChatId(existingChat.id);
+      } else {
+        // Add new chat to the top
+        const newChat: Chat = {
+          id: conv.id,
+          name: 'Cuộc trò chuyện mới', // We'll update this properly later
+          message: 'Bắt đầu trò chuyện',
+          time: 'Vừa xong',
+          unread: 0,
+          avatar: 'U'
+        };
+        setChats([newChat, ...chats]);
+        setActiveChatId(newChat.id);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Không thể tạo đoạn chat. Vui lòng thử lại.');
+    }
+  };
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-white">
       <SidebarNav />
-      <ChatList chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} onCreateGroup={handleCreateGroup} />
+      <ChatList 
+        chats={chats} 
+        activeChatId={activeChatId} 
+        onSelectChat={setActiveChatId} 
+        onCreateGroup={handleCreateGroup} 
+        onStartDirectChat={handleStartDirectChat}
+      />
       <ChatWindow chat={activeChat} />
     </div>
   );
