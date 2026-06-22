@@ -1,0 +1,44 @@
+// SHARED PROTO — copy this file into:
+//   backend/media-service/src/main/proto/media/v1/media.proto     (Java gRPC server)
+//   backend/message-service/src/main/proto/media/v1/media.proto   (Java gRPC client)
+// Keep all 3 copies in sync. When the contract changes, regen both sides.
+//
+// Why this RPC is sync (not an event): when a user sends a message with
+// attachments we must reject the request immediately if any mediaId is bogus
+// (not owned by sender, not in the same conversation, not finalized, or
+// already deleted). An async event would let bad rows reach the read model
+// and the WebSocket fan-out before the failure surfaces.
+
+syntax = "proto3";
+
+package zalord.media.v1;
+
+option java_package = "zalord.media.v1";
+option java_multiple_files = true;
+
+// Internal-only service exposed by media-service on a gRPC port distinct from
+// its public REST port. Not routed through Kong — service-to-service traffic
+// stays on the docker network.
+service MediaInternal {
+  // Validates that every media_id in the request can legally be attached to a
+  // message being sent by caller_user_id into conversation_id. All-or-nothing:
+  // returns the full list of offenders so the caller can build a useful 400.
+  rpc ValidateAttachments(ValidateAttachmentsRequest) returns (ValidateAttachmentsResponse);
+}
+
+message ValidateAttachmentsRequest {
+  string caller_user_id  = 1;
+  string conversation_id = 2;
+  repeated string media_id = 3;
+}
+
+message InvalidAttachment {
+  string media_id = 1;
+  string reason   = 2; // human-readable; one of: NOT_FOUND, NOT_ATTACHMENT,
+                       // WRONG_CONVERSATION, NOT_OWNED, NOT_READY, DELETED
+}
+
+message ValidateAttachmentsResponse {
+  bool                       valid    = 1;
+  repeated InvalidAttachment invalid  = 2;
+}

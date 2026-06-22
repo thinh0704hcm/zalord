@@ -1,0 +1,132 @@
+package zalord.message_service.worker;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import zalord.message_service.cache.ConversationTypeCache;
+import zalord.message_service.dto.event.MessageCreatedEvent;
+import zalord.message_service.enums.ConversationType;
+import zalord.message_service.eventbus.EventConsumer;
+import zalord.message_service.model.ConversationMember;
+import zalord.message_service.repository.ConversationMemberRepository;
+import zalord.message_service.repository.ConversationRepository;
+import zalord.message_service.repository.ConversationViewRepository;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * CQRS projector for "message.created" → conversation_views read model.
+ * Subscribes through the EventConsumer interface so it works on whichever
+ * broker (RabbitMQ or Kafka) is active at startup — the listener-container
+ * is created dynamically at PostConstruct, no @RabbitListener / @KafkaListener
+ * annotations to pre-bind it to one backend.
+ */
+@Component
+@Slf4j
+public class InboxProjector {
+
+    private static final String EVENT_NAME = "message.created";
+    private static final String CONSUMER_GROUP = "message-inbox-projector";
+
+    private final ConversationViewRepository viewRepo;
+    private final ConversationMemberRepository memberRepo;
+    private final ConversationRepository convRepo;
+    private final ConversationTypeCache convTypeCache;
+    private final ObjectMapper objectMapper;
+    private final EventConsumer eventConsumer;
+    private final InboxProjector self;
+
+    public InboxProjector(ConversationViewRepository viewRepo,
+                          ConversationMemberRepository memberRepo,
+                          ConversationRepository convRepo,
+                          ConversationTypeCache convTypeCache,
+                          ObjectMapper objectMapper,
+                          EventConsumer eventConsumer,
+                          @Lazy @Autowired InboxProjector self) {
+        this.viewRepo = viewRepo;
+        this.memberRepo = memberRepo;
+        this.convRepo = convRepo;
+        this.convTypeCache = convTypeCache;
+        this.objectMapper = objectMapper;
+        this.eventConsumer = eventConsumer;
+        this.self = self;
+    }
+
+    @PostConstruct
+    void register() {
+        eventConsumer.subscribe(EVENT_NAME, CONSUMER_GROUP, self::project);
+    }
+
+    @Transactional
+    public void project(byte[] body) {
+        MessageCreatedEvent event;
+        try {
+            event = objectMapper.readValue(body, MessageCreatedEvent.class);
+        } catch (Exception ex) {
+            // Permanent: swallow so the broker doesn't requeue forever.
+            log.warn("InboxProjector: failed to parse event, dropping: {}", ex.getMessage());
+            return;
+        }
+
+        // Cached: conv type is immutable, so this avoids hitting Postgres for
+        // every single message.created event after the first one per conv.
+        ConversationType convType = convTypeCache.getOrLoad(event.conversationId(),
+                () -> convRepo.findById(event.conversationId()).map(c -> c.getType()).orElse(null));
+        if (convType == null) {
+            log.warn("InboxProjector: conversation {} not found, skipping", event.conversationId());
+            return;
+        }
+        List<ConversationMember> members = memberRepo.findAllByConversationId(event.conversationId());
+        if (members.isEmpty()) {
+            log.warn("InboxProjector: no members for conv {}", event.conversationId());
+            return;
+        }
+
+        String preview = previewOf(event);
+
+        for (ConversationMember m : members) {
+            UUID memberId = m.getUserId();
+            UUID otherUserId = convType == ConversationType.DIRECT
+                    ? pickOther(members, memberId)
+                    : null;
+            viewRepo.upsertOnNewMessage(
+                    memberId,
+                    event.conversationId(),
+                    otherUserId,
+                    preview,
+                    event.createdAt(),
+                    event.senderId());
+        }
+
+        log.debug("Inbox projected for conv={} message={} members={}",
+                event.conversationId(), event.messageId(), members.size());
+    }
+
+    private UUID pickOther(List<ConversationMember> members, UUID self) {
+        return members.stream()
+                .map(ConversationMember::getUserId)
+                .filter(id -> !id.equals(self))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    private String previewOf(MessageCreatedEvent event) {
+        String content = event.content();
+        int n = event.attachmentIds() == null ? 0 : event.attachmentIds().size();
+        if (content != null && !content.isBlank()) {
+            return truncate(content, 200);
+        }
+        if (n > 0) return "📎 " + n + (n == 1 ? " tệp đính kèm" : " tệp đính kèm");
+        return null;
+    }
+}

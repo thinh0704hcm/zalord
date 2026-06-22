@@ -17,6 +17,7 @@ import zalord.auth_service.dto.response.RefreshResponse;
 import zalord.auth_service.dto.response.RegisterResponse;
 import zalord.auth_service.exception.InvalidCredentialsException;
 import zalord.auth_service.exception.PhoneNumberAlreadyExistsException;
+import zalord.auth_service.grpc.UserGrpcClient;
 import zalord.auth_service.jwt.JwtUtil;
 import zalord.auth_service.model.CustomUserDetails;
 import zalord.auth_service.model.OutboxEvent;
@@ -48,6 +49,7 @@ public class AuthServiceImpl implements IAuthService {
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
     private final ISessionService sessionService;
+    private final UserGrpcClient userGrpcClient;
 
     public AuthServiceImpl(UserRepository userRepository,
                            RoleRepository roleRepository,
@@ -57,7 +59,8 @@ public class AuthServiceImpl implements IAuthService {
                            AuthenticationManager authenticationManager,
                            JwtUtil jwtUtil,
                            ObjectMapper objectMapper,
-                           ISessionService sessionService) {
+                           ISessionService sessionService,
+                           UserGrpcClient userGrpcClient) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.userRolesRepository = userRolesRepository;
@@ -67,6 +70,7 @@ public class AuthServiceImpl implements IAuthService {
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
         this.sessionService = sessionService;
+        this.userGrpcClient = userGrpcClient;
     }
 
     @Override
@@ -137,8 +141,12 @@ public class AuthServiceImpl implements IAuthService {
         User user = createUser(phoneNumber, password);
         assignRole(user, roleName);
 
-        UserCreatedEvent event = new UserCreatedEvent(user.getId(), displayName, phoneNumber);
-        createOutboxEvent(event);
+        // SYNC gRPC call to user-service to create the profile. Strong
+        // consistency: if user-service can't create the profile, the entire
+        // register transaction rolls back (caller sees 500). Trade-off: auth
+        // requires user-service to be reachable. Chosen for register because
+        // it's a low-volume flow where consistency matters more than coupling.
+        userGrpcClient.createProfile(user.getId(), displayName, phoneNumber);
 
         log.info("Register success userId={} phoneNumber={} role={}", user.getId(), phoneNumber, roleName);
         return RegisterResponse.builder()
