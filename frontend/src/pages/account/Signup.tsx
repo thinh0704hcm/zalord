@@ -19,15 +19,9 @@ export default function Signup() {
     try {
       const res = await authService.signup(username, password, displayName);
       console.log('Signup success:', res);
-      if (res.token) {
-        localStorage.setItem('token', res.token);
-        localStorage.setItem('user', JSON.stringify(res.user));
-        navigate('/');
-      } else {
-        // Successful signup but no token returned directly (needs manual login)
-        alert('Đăng ký thành công! Vui lòng đăng nhập.');
-        navigate('/account/login', { state: { phone: username, password: password } });
-      }
+      // Successful signup but no token returned directly (needs manual login)
+      alert('Đăng ký thành công! Vui lòng đăng nhập.');
+      navigate('/account/login', { state: { phone: username, password: password } });
     } catch (err: any) {
       setError(err.message || 'Đã có lỗi xảy ra');
     } finally {
