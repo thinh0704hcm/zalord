@@ -7,11 +7,31 @@ import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
 import { conversationService } from '../../services/conversation';
 import { wsService } from '../../services/websocket';
+import { userService } from '../../services/user';
 
 interface ChatWindowProps {
   chat?: Chat;
   onConversationReady?: (temporaryId: string | number, conversationId: string, lastMessage?: string) => void;
 }
+
+type UserMessage = {
+  id?: string;
+  text: string;
+  time: string;
+  dateKey: string;
+  senderId?: string;
+  senderName?: string;
+  isSender?: boolean;
+};
+
+const getMessageDateKey = (date: Date) => date.toISOString().slice(0, 10);
+
+const getAvatarText = (value: string) => {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
+};
 
 const Daystamp = ({ date }: { date: string }) => {
   const getDaystampText = (dateStr: string) => {
@@ -49,10 +69,11 @@ const Daystamp = ({ date }: { date: string }) => {
 export default function ChatWindow({ chat, onConversationReady }: ChatWindowProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [inputText, setInputText] = useState("");
-  const [userMessages, setUserMessages] = useState<{id?: string, text: string, time: string, isSender?: boolean}[]>([]);
-  const preservedMessagesRef = useRef<{id?: string, text: string, time: string, isSender?: boolean}[]>([]);
+  const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
+  const preservedMessagesRef = useRef<UserMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousChatRef = useRef<Chat | undefined>(undefined);
+  const senderNameCacheRef = useRef<Record<string, string>>({});
 
   const currentUserId = (() => {
     try {
@@ -64,6 +85,21 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       return null;
     }
   })();
+
+  const resolveSenderName = async (senderId?: string) => {
+    if (!senderId) return '';
+    if (senderId === currentUserId) return 'Bạn';
+    if (!chat?.group) return chat?.name || '';
+    if (senderNameCacheRef.current[senderId]) return senderNameCacheRef.current[senderId];
+
+    try {
+      const profile = await userService.findByUserId(senderId);
+      senderNameCacheRef.current[senderId] = profile.displayName;
+      return profile.displayName;
+    } catch {
+      return `Người dùng ${senderId.slice(0, 8)}`;
+    }
+  };
 
   useEffect(() => {
     const previousChat = previousChatRef.current;
@@ -81,18 +117,22 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       }
 
       if (chat && typeof chat.id === 'string' && !chat.isPending) {
-        messageService.history(chat.id).then(res => {
+        messageService.history(chat.id).then(async res => {
           const responseItems = res.items || res.content || [];
-          const historyMsgs = responseItems.map((m: any) => {
+          const historyMsgs = (await Promise.all(responseItems.map(async (m: any) => {
             const msgDate = new Date(m.createdAt);
             const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
+            const isSender = currentUserId === m.senderId;
             return {
               id: m.messageId || m.id,
               text: m.content,
               time: timeStr,
-              isSender: currentUserId === m.senderId
+              dateKey: getMessageDateKey(msgDate),
+              senderId: m.senderId,
+              senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
+              isSender
             };
-          }).reverse();
+          }))).reverse();
 
           setUserMessages(prev => {
             const preserved = isSameTemporaryChatResolved ? preservedMessagesRef.current : [];
@@ -120,19 +160,23 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
   useEffect(() => {
     // Listen to new messages via WebSocket
-    const unsubscribe = wsService.onMessage((msg) => {
+    const unsubscribe = wsService.onMessage(async (msg) => {
       // Basic check if the message belongs to current chat
       if (msg.type === 'message.created' && msg.data?.conversationId === chat?.id) {
         if (msg.data.senderId === currentUserId) return;
 
         const createdAt = msg.data.createdAt ? new Date(msg.data.createdAt) : new Date();
         const timeStr = `${String(createdAt.getHours()).padStart(2, '0')}:${String(createdAt.getMinutes()).padStart(2, '0')}`;
+        const senderName = await resolveSenderName(msg.data.senderId);
         setUserMessages(prev => {
           if (prev.some(existing => existing.id === msg.data.messageId)) return prev;
           return [...prev, { 
             id: msg.data.messageId,
             text: msg.data.content, 
             time: timeStr,
+            dateKey: getMessageDateKey(createdAt),
+            senderId: msg.data.senderId,
+            senderName,
             isSender: false
           }];
         });
@@ -149,11 +193,12 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const dateKey = getMessageDateKey(now);
       
       const optimisticId = `optimistic-${Date.now()}`;
 
       // Optimistic update
-      setUserMessages(prev => [...prev, { id: optimisticId, text: text, time: timeStr, isSender: true }]);
+      setUserMessages(prev => [...prev, { id: optimisticId, text: text, time: timeStr, dateKey, senderId: currentUserId || undefined, senderName: 'Bạn', isSender: true }]);
       
       // Send via API. A searched user opens a temporary chat first; create the
       // real DIRECT conversation only when the first message is sent.
@@ -327,14 +372,53 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         
         {/* Dynamic User Messages Container */}
         <div className="flex flex-col gap-[2px] w-full">
-          {userMessages.map((msg, index) => (
-            <div key={index} className={`flex w-full ${msg.isSender !== false ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[70%] ${msg.isSender !== false ? 'bg-[#e5efff] border-[#cce1ff]' : 'bg-white border-[#e5e7eb]'} rounded-lg px-3 py-2 shadow-sm border`}>
-                <div className="text-[#081c36] text-[15px]">{msg.text}</div>
-                <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+          {userMessages.map((msg, index) => {
+            const isSender = msg.isSender !== false;
+            const previousMessage = userMessages[index - 1];
+            const isIncoming = !isSender;
+            const isFirstMessageInIncomingGroup = Boolean(
+              isIncoming &&
+              (!previousMessage ||
+                previousMessage.isSender !== false ||
+                previousMessage.dateKey !== msg.dateKey ||
+                previousMessage.senderId !== msg.senderId)
+            );
+            const shouldShowIncomingAvatar = Boolean(chat && isIncoming && isFirstMessageInIncomingGroup);
+            const shouldReserveIncomingAvatarSpace = Boolean(chat && isIncoming);
+            const avatarText = chat?.group ? (msg.senderName || '') : (typeof chat?.avatar === 'string' ? chat.avatar : getAvatarText(chat?.name || ''));
+
+            if (isSender) {
+              return (
+                <div key={index} className="flex w-full justify-end">
+                  <div className="max-w-[70%] bg-[#e5efff] border-[#cce1ff] rounded-lg px-3 py-2 shadow-sm border">
+                    <div className="text-[#081c36] text-[15px]">{msg.text}</div>
+                    <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={index} className="flex w-full justify-start items-start gap-2.5">
+                {shouldReserveIncomingAvatarSpace && (
+                  shouldShowIncomingAvatar ? (
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-[14px] flex-shrink-0 overflow-hidden">
+                      {getAvatarText(avatarText) || '??'}
+                    </div>
+                  ) : (
+                    <div className="w-10 flex-shrink-0" />
+                  )
+                )}
+                <div className="max-w-[70%] bg-white border-[#e5e7eb] rounded-lg px-3 py-2 shadow-sm border">
+                  {chat?.group && isFirstMessageInIncomingGroup && msg.senderName && (
+                    <div className="text-[#7589A3] text-[12px] font-medium mb-1">{msg.senderName}</div>
+                  )}
+                  <div className="text-[#081c36] text-[15px]">{msg.text}</div>
+                  <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
       </div>

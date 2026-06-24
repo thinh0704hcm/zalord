@@ -143,3 +143,45 @@ func (q *Queries) ListProfiles(ctx context.Context, arg ListProfilesParams) ([]P
 	}
 	return items, nil
 }
+
+const searchProfilesByName = `-- name: SearchProfilesByName :many
+SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+  FROM profiles
+ WHERE deleted_at IS NULL
+   AND display_name ILIKE '%' || $1 || '%'
+ ORDER BY display_name ASC, created_at DESC
+ LIMIT $2
+`
+
+type SearchProfilesByNameParams struct {
+	DisplayName string `json:"display_name"`
+	Limit       int32  `json:"limit"`
+}
+
+func (q *Queries) SearchProfilesByName(ctx context.Context, arg SearchProfilesByNameParams) ([]Profile, error) {
+	rows, err := q.db.Query(ctx, searchProfilesByName, arg.DisplayName, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Profile{}
+	for rows.Next() {
+		var i Profile
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DisplayName,
+			&i.PhoneNumber,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

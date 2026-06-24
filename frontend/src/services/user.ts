@@ -44,5 +44,17 @@ export const userService = {
       }
       throw new Error('Không tìm thấy người dùng này');
     }
+  },
+
+  searchByName: async (name: string): Promise<UserProfile[]> => {
+    try {
+      const response = await api.get('/users/search', { params: { name, limit: 10 } });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error('Không thể tìm người dùng');
+    }
   }
 };

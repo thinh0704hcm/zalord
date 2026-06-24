@@ -19,6 +19,7 @@ type ProfileService interface {
 	CreateProfile(ctx context.Context, userId uuid.UUID, displayName, phoneNumber string) error
 	GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error)
 	GetByPhone(ctx context.Context, phone string) (*queries.Profile, error)
+	SearchByName(ctx context.Context, name string, limit int) ([]queries.Profile, error)
 	List(ctx context.Context, page, size int) ([]queries.Profile, int64, error)
 }
 
@@ -68,6 +69,16 @@ func (p *profileService) GetByUserID(ctx context.Context, userId uuid.UUID) (*qu
 
 func (p *profileService) GetByPhone(ctx context.Context, phone string) (*queries.Profile, error) {
 	return p.profileRepo.GetByPhone(ctx, phone)
+}
+
+func (p *profileService) SearchByName(ctx context.Context, name string, limit int) ([]queries.Profile, error) {
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	return p.profileRepo.SearchByName(ctx, name, int32(limit))
 }
 
 // List returns a page of profiles + total count for pagination metadata.

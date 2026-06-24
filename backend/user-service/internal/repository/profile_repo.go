@@ -12,6 +12,7 @@ type ProfileRepository interface {
 	CreateProfile(ctx context.Context, userId uuid.UUID, displayName, phoneNumber string) error
 	GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error)
 	GetByPhone(ctx context.Context, phone string) (*queries.Profile, error)
+	SearchByName(ctx context.Context, name string, limit int32) ([]queries.Profile, error)
 	List(ctx context.Context, limit, offset int32) ([]queries.Profile, error)
 	Count(ctx context.Context) (int64, error)
 }
@@ -56,6 +57,10 @@ func (r *profileRepository) GetByPhone(ctx context.Context, phone string) (*quer
 		return nil, err
 	}
 	return &prof, nil
+}
+
+func (r *profileRepository) SearchByName(ctx context.Context, name string, limit int32) ([]queries.Profile, error) {
+	return r.queries.SearchProfilesByName(ctx, queries.SearchProfilesByNameParams{DisplayName: name, Limit: limit})
 }
 
 func (r *profileRepository) List(ctx context.Context, limit, offset int32) ([]queries.Profile, error) {

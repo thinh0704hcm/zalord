@@ -7,6 +7,7 @@ import { wsService } from '../../services/websocket';
 
 import { userService, type UserProfile } from '../../services/user';
 import { inboxService, type InboxItemResponse } from '../../services/inbox';
+import { groupService } from '../../services/group';
 
 export interface Chat {
   id: string | number;
@@ -43,6 +44,13 @@ const relativeTime = (value: string | null) => {
   return date.toLocaleDateString('vi-VN');
 };
 
+const getInitials = (name: string) => {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
+};
+
 const fallbackUserLabel = (userId: string | null) => {
   if (!userId) return 'Cuộc trò chuyện';
   return `Người dùng ${userId.slice(0, 8)}`;
@@ -69,17 +77,50 @@ const formatLastMessagePreview = (preview: string | null, lastSenderId: string |
 };
 
 const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | null): Promise<Chat> => {
-  let name = fallbackUserLabel(item.otherUserId);
-  let avatar: string | string[] = name.charAt(0).toUpperCase();
-
-  if (item.otherUserId) {
+  if (!item.otherUserId) {
     try {
-      const profile = await userService.findByUserId(item.otherUserId);
-      name = profile.displayName;
-      avatar = profile.avatarUrl || profile.displayName.charAt(0).toUpperCase();
+      const group = await groupService.get(item.conversationId);
+      const memberProfiles = await Promise.allSettled(
+        group.members.map(member => userService.findByUserId(member.userId))
+      );
+      const memberAvatars = memberProfiles
+        .map(result => result.status === 'fulfilled' ? getInitials(result.value.displayName) : '')
+        .filter(Boolean);
+
+      return {
+        id: item.conversationId,
+        name: group.name,
+        message: formatLastMessagePreview(item.lastMessagePreview, item.lastSenderId, currentUserId, group.name),
+        time: relativeTime(item.lastMessageAt),
+        unread: item.unreadCount || 0,
+        avatar: memberAvatars.length > 0 ? memberAvatars : [getInitials(group.name)],
+        totalMembers: group.members.length,
+        group: true
+      };
     } catch (error) {
-      console.warn('Failed to load profile for inbox item', item.otherUserId, error);
+      console.warn('Failed to load group for inbox item', item.conversationId, error);
+      return {
+        id: item.conversationId,
+        name: 'Nhóm chat',
+        message: item.lastMessagePreview || 'Bắt đầu trò chuyện',
+        time: relativeTime(item.lastMessageAt),
+        unread: item.unreadCount || 0,
+        avatar: ['NC', '??', '??'],
+        totalMembers: 3,
+        group: true
+      };
     }
+  }
+
+  let name = fallbackUserLabel(item.otherUserId);
+  let avatar: string | string[] = getInitials(name);
+
+  try {
+    const profile = await userService.findByUserId(item.otherUserId);
+    name = profile.displayName;
+    avatar = getInitials(profile.displayName);
+  } catch (error) {
+    console.warn('Failed to load profile for inbox item', item.otherUserId, error);
   }
 
   return {
@@ -202,18 +243,24 @@ export default function ChatLayout() {
     };
   }, [navigate]);
 
-  const handleCreateGroup = (groupName: string, selectedAvatars: string[], totalMembers: number) => {
-    const newChat: Chat = {
-      id: Date.now(),
+  const handleCreateGroup = async (groupName: string, memberIds: string[], selectedAvatars: string[], totalMembers: number) => {
+    const group = await groupService.create({
       name: groupName,
+      avatarUrl: null,
+      memberIds
+    });
+
+    const newChat: Chat = {
+      id: group.id,
+      name: group.name,
       message: 'Bạn vừa tạo nhóm',
       time: 'Vừa xong',
       unread: 0,
       avatar: selectedAvatars,
-      totalMembers,
+      totalMembers: group.members?.length || totalMembers,
       group: true
     };
-    setChats([newChat, ...chats]);
+    setChats(prev => [newChat, ...prev]);
     setActiveChatId(newChat.id);
   };
 
@@ -232,7 +279,7 @@ export default function ChatLayout() {
       message: 'Bắt đầu trò chuyện',
       time: 'Vừa xong',
       unread: 0,
-      avatar: user.avatarUrl || user.displayName.charAt(0).toUpperCase(),
+      avatar: getInitials(user.displayName),
       pendingDirectUserId: user.userId,
       isPending: true
     };

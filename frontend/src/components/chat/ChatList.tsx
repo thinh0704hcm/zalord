@@ -10,7 +10,7 @@ interface ChatListProps {
   chats: Chat[];
   activeChatId: string | number;
   onSelectChat: (id: string | number) => void;
-  onCreateGroup?: (groupName: string, selectedAvatars: string[], totalMembers: number) => void;
+  onCreateGroup?: (groupName: string, memberIds: string[], selectedAvatars: string[], totalMembers: number) => Promise<void> | void;
   onStartDirectChat?: (user: UserProfile) => void;
   isLoading?: boolean;
   error?: string;
@@ -153,7 +153,7 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
                     <img src={searchedUser.avatarUrl} alt="avatar" className="w-[48px] h-[48px] rounded-full object-cover flex-shrink-0" />
                   ) : (
                     <div className="w-[48px] h-[48px] rounded-full bg-[#0068ff] flex items-center justify-center text-white font-medium text-[16px] flex-shrink-0">
-                      {searchedUser.displayName.charAt(0).toUpperCase()}
+                      {normalizeAvatarText(searchedUser.displayName)}
                     </div>
                   )}
                   <div className="flex flex-col">
@@ -209,8 +209,8 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}
         onClose={() => setIsCreateGroupModalOpen(false)}
-        onCreateGroup={(name, avatars, total) => {
-          onCreateGroup?.(name, avatars, total);
+        onCreateGroup={async (name, memberIds, avatars, total) => {
+          await onCreateGroup?.(name, memberIds, avatars, total);
           setIsCreateGroupModalOpen(false);
         }}
       />
@@ -218,11 +218,19 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
   );
 }
 
+const normalizeAvatarText = (value?: string) => {
+  if (!value) return '';
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
+};
+
 const renderAvatar = (chat: Chat) => {
   if (typeof chat.avatar === 'string') {
     return (
       <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
-        {chat.avatar}
+        {normalizeAvatarText(chat.avatar)}
       </div>
     );
   }
@@ -234,13 +242,13 @@ const renderAvatar = (chat: Chat) => {
     return (
       <div className="w-[46px] h-[46px] relative flex-shrink-0">
         <div className="absolute bottom-0 right-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-10 overflow-hidden">
-          {avatars[2] || 'Bạn'}
+          {normalizeAvatarText(avatars[2]) || '??'}
         </div>
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
-          {avatars[1] || 'B'}
+          {normalizeAvatarText(avatars[1]) || '??'}
         </div>
         <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-30 overflow-hidden">
-          {avatars[0] || 'A'}
+          {normalizeAvatarText(avatars[0]) || '??'}
         </div>
       </div>
     );
@@ -251,17 +259,17 @@ const renderAvatar = (chat: Chat) => {
     return (
       <div className="w-[46px] h-[46px] relative flex-shrink-0">
         <div className="absolute top-0 left-0 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-10 overflow-hidden">
-          {avatars[0] || 'A'}
+          {normalizeAvatarText(avatars[0]) || '??'}
         </div>
         <div className="absolute top-0 right-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
-          {avatars[1] || 'B'}
+          {normalizeAvatarText(avatars[1]) || '??'}
         </div>
         <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
-          {avatars[2] || 'C'}
+          {normalizeAvatarText(avatars[2]) || '??'}
         </div>
         <div className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-semibold border-[1.5px] border-white z-30 overflow-hidden ${total === 4 ? 'bg-[#4a90e2] text-white' : 'bg-[#eaedf0] text-[#081c36]'
           }`}>
-          {total === 4 ? (avatars[3] || 'D') : remaining}
+          {total === 4 ? (normalizeAvatarText(avatars[3]) || '??') : remaining}
         </div>
       </div>
     );
@@ -269,7 +277,7 @@ const renderAvatar = (chat: Chat) => {
 
   return (
     <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
-      {avatars[0] || 'G'}
+      {normalizeAvatarText(avatars[0]) || '??'}
     </div>
   );
 };

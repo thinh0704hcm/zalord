@@ -127,6 +127,42 @@ func (h *ProfileHandler) GetByPhone(c *gin.Context) {
 	c.JSON(http.StatusOK, toResponse(prof))
 }
 
+// SearchByName godoc
+//
+//	@Summary      Search profiles by display name
+//	@Description  Returns profiles whose display_name contains the query. Names in this app do not contain digits; phone search uses /by-phone/{phone}.
+//	@Tags         profile
+//	@Security     BearerAuth
+//	@Produce      json
+//	@Param        name   query  string  true   "Display name query"
+//	@Param        limit  query  int     false  "Limit, default 10, max 20"
+//	@Success      200  {array}  ProfileResponse
+//	@Failure      400  {object}  ErrorResponse
+//	@Failure      401  {object}  ErrorResponse
+//	@Failure      500  {object}  ErrorResponse
+//	@Router       /api/v1/users/search [get]
+func (h *ProfileHandler) SearchByName(c *gin.Context) {
+	name := c.Query("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "name required"})
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	items, err := h.svc.SearchByName(c.Request.Context(), name, limit)
+	if err != nil {
+		logger.Log.Error("SearchByName failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal error"})
+		return
+	}
+
+	out := make([]ProfileResponse, len(items))
+	for i := range items {
+		out[i] = toResponse(&items[i])
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 // GetByUserID godoc
 //
 //	@Summary      Look up a profile by user id

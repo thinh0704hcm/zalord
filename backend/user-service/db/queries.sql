@@ -28,3 +28,11 @@ SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_
 
 -- name: CountProfiles :one
 SELECT COUNT(*) FROM profiles WHERE deleted_at IS NULL;
+
+-- name: SearchProfilesByName :many
+SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+  FROM profiles
+ WHERE deleted_at IS NULL
+   AND display_name ILIKE '%' || $1 || '%'
+ ORDER BY display_name ASC, created_at DESC
+ LIMIT $2;
