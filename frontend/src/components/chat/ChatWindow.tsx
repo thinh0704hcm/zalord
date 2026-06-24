@@ -10,7 +10,7 @@ import { wsService } from '../../services/websocket';
 
 interface ChatWindowProps {
   chat?: Chat;
-  onConversationReady?: (temporaryId: string | number, conversationId: string) => void;
+  onConversationReady?: (temporaryId: string | number, conversationId: string, lastMessage?: string) => void;
 }
 
 const Daystamp = ({ date }: { date: string }) => {
@@ -50,6 +50,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [inputText, setInputText] = useState("");
   const [userMessages, setUserMessages] = useState<{id?: string, text: string, time: string, isSender?: boolean}[]>([]);
+  const preservedMessagesRef = useRef<{id?: string, text: string, time: string, isSender?: boolean}[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousChatRef = useRef<Chat | undefined>(undefined);
 
@@ -81,17 +82,31 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
       if (chat && typeof chat.id === 'string' && !chat.isPending) {
         messageService.history(chat.id).then(res => {
-          const historyMsgs = (res.items || []).map((m: any) => {
+          const responseItems = res.items || res.content || [];
+          const historyMsgs = responseItems.map((m: any) => {
             const msgDate = new Date(m.createdAt);
             const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
             return {
-              id: m.messageId,
+              id: m.messageId || m.id,
               text: m.content,
               time: timeStr,
               isSender: currentUserId === m.senderId
             };
           }).reverse();
-          setUserMessages(historyMsgs);
+
+          setUserMessages(prev => {
+            const preserved = isSameTemporaryChatResolved ? preservedMessagesRef.current : [];
+            const merged = [...historyMsgs];
+
+            [...preserved, ...prev].forEach(message => {
+              if (message.id && merged.some(existing => existing.id === message.id)) return;
+              if (!message.id && merged.some(existing => existing.text === message.text && existing.isSender === message.isSender)) return;
+              merged.push(message);
+            });
+
+            return merged;
+          });
+          preservedMessagesRef.current = [];
           setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 100);
@@ -108,14 +123,19 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
     const unsubscribe = wsService.onMessage((msg) => {
       // Basic check if the message belongs to current chat
       if (msg.type === 'message.created' && msg.data?.conversationId === chat?.id) {
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        setUserMessages(prev => [...prev, { 
-          id: msg.data.messageId,
-          text: msg.data.content, 
-          time: timeStr,
-          isSender: msg.data.senderId === currentUserId
-        }]);
+        if (msg.data.senderId === currentUserId) return;
+
+        const createdAt = msg.data.createdAt ? new Date(msg.data.createdAt) : new Date();
+        const timeStr = `${String(createdAt.getHours()).padStart(2, '0')}:${String(createdAt.getMinutes()).padStart(2, '0')}`;
+        setUserMessages(prev => {
+          if (prev.some(existing => existing.id === msg.data.messageId)) return prev;
+          return [...prev, { 
+            id: msg.data.messageId,
+            text: msg.data.content, 
+            time: timeStr,
+            isSender: false
+          }];
+        });
       }
     });
     
@@ -130,8 +150,10 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       
+      const optimisticId = `optimistic-${Date.now()}`;
+
       // Optimistic update
-      setUserMessages(prev => [...prev, { text: text, time: timeStr, isSender: true }]);
+      setUserMessages(prev => [...prev, { id: optimisticId, text: text, time: timeStr, isSender: true }]);
       
       // Send via API. A searched user opens a temporary chat first; create the
       // real DIRECT conversation only when the first message is sent.
@@ -141,13 +163,31 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         if (chat.pendingDirectUserId) {
           const conversation = await conversationService.createDirect(chat.pendingDirectUserId);
           conversationId = conversation.id;
-          onConversationReady?.(chat.id, conversation.id);
         }
 
-        await messageService.send({
+        const sentMessage = await messageService.send({
           conversationId,
           content: text
         });
+
+        setUserMessages(prev => {
+          const next = prev.map(message => message.id === optimisticId
+            ? {
+                ...message,
+                id: sentMessage?.messageId || sentMessage?.id || optimisticId,
+                time: sentMessage?.createdAt
+                  ? `${String(new Date(sentMessage.createdAt).getHours()).padStart(2, '0')}:${String(new Date(sentMessage.createdAt).getMinutes()).padStart(2, '0')}`
+                  : message.time,
+              }
+            : message
+          );
+          preservedMessagesRef.current = next;
+          return next;
+        });
+
+        if (chat.pendingDirectUserId) {
+          onConversationReady?.(chat.id, conversationId, text);
+        }
       } catch (error) {
         console.error('Failed to send message', error);
       }

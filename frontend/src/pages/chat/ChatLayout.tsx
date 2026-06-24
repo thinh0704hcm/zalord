@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SidebarNav from '../../components/chat/SidebarNav';
 import ChatList from '../../components/chat/ChatList';
@@ -48,7 +48,27 @@ const fallbackUserLabel = (userId: string | null) => {
   return `Người dùng ${userId.slice(0, 8)}`;
 };
 
-const inboxItemToChat = async (item: InboxItemResponse): Promise<Chat> => {
+const getCurrentUserId = () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.sub as string;
+  } catch {
+    return null;
+  }
+};
+
+const formatLastMessagePreview = (preview: string | null, lastSenderId: string | null, currentUserId: string | null, otherUserName: string) => {
+  if (!preview) return 'Bắt đầu trò chuyện';
+  if (!lastSenderId || !currentUserId) return preview;
+
+  return lastSenderId === currentUserId
+    ? `Bạn: ${preview}`
+    : `${otherUserName}: ${preview}`;
+};
+
+const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | null): Promise<Chat> => {
   let name = fallbackUserLabel(item.otherUserId);
   let avatar: string | string[] = name.charAt(0).toUpperCase();
 
@@ -65,7 +85,7 @@ const inboxItemToChat = async (item: InboxItemResponse): Promise<Chat> => {
   return {
     id: item.conversationId,
     name,
-    message: item.lastMessagePreview || 'Bắt đầu trò chuyện',
+    message: formatLastMessagePreview(item.lastMessagePreview, item.lastSenderId, currentUserId, name),
     time: relativeTime(item.lastMessageAt),
     unread: item.unreadCount || 0,
     avatar
@@ -78,7 +98,12 @@ export default function ChatLayout() {
   const [activeChatId, setActiveChatId] = useState<string | number | null>(null);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [chatListError, setChatListError] = useState('');
+  const activeChatIdRef = useRef<string | number | null>(null);
   const activeChat = chats.find(c => c.id === activeChatId);
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -89,15 +114,18 @@ export default function ChatLayout() {
 
     let cancelled = false;
 
-    const loadInbox = async () => {
-      setIsLoadingChats(true);
+    const loadInbox = async (showLoading = true) => {
+      if (showLoading) {
+        setIsLoadingChats(true);
+      }
       setChatListError('');
 
       try {
         const page = await inboxService.list();
         if (cancelled) return;
 
-        const fetchedChats = await Promise.all(page.items.map(inboxItemToChat));
+        const currentUserId = getCurrentUserId();
+        const fetchedChats = await Promise.all(page.items.map(item => inboxItemToChat(item, currentUserId)));
         setChats(prev => {
           const pendingChats = prev.filter(chat => chat.isPending);
           return [...pendingChats, ...fetchedChats];
@@ -108,7 +136,7 @@ export default function ChatLayout() {
           setChatListError(error.message || 'Không thể tải danh sách chat');
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && showLoading) {
           setIsLoadingChats(false);
         }
       }
@@ -122,46 +150,47 @@ export default function ChatLayout() {
     wsService.connect(token);
     loadInbox();
     
+    const refreshInboxAfterNewMessage = () => {
+      loadInbox(false);
+      window.setTimeout(() => {
+        if (!cancelled) loadInbox(false);
+      }, 350);
+      window.setTimeout(() => {
+        if (!cancelled) loadInbox(false);
+      }, 1200);
+    };
+
     const unsubscribeWs = wsService.onMessage((msg) => {
-      if (msg.type === 'message.created') {
-        const { conversationId, content, createdAt } = msg.data;
-        
-        setChats(prevChats => {
-          const existingChatIndex = prevChats.findIndex(c => c.id === conversationId);
-          if (existingChatIndex !== -1) {
-            const updatedChats = [...prevChats];
-            const chat = updatedChats[existingChatIndex];
-            
-            // Increment unread if it's not the active chat.
-            // Since we don't have activeChatId in dependencies (to avoid reconnecting),
-            // we use a functional update approach if possible, but actually we can just
-            // rely on the user reading it later. For now, activeChatId from closure might be stale.
-            // To fix stale activeChatId, we can use setState callback safely:
-            setChats(latestChats => {
-              const idx = latestChats.findIndex(c => c.id === conversationId);
-              if (idx !== -1) {
-                const copy = [...latestChats];
-                const c = copy[idx];
-                // In setChats callback, we don't have the current activeChatId easily.
-                // We'll increment unread, and when the user clicks it, it resets.
-                copy[idx] = {
-                  ...c,
-                  message: content,
-                  time: relativeTime(createdAt),
-                  unread: c.unread + 1
-                };
-                const [moved] = copy.splice(idx, 1);
-                return [moved, ...copy];
-              }
-              return latestChats;
-            });
-            return prevChats; // hand off to the inner setChats
-          } else {
-            // New conversation
-            loadInbox();
-            return prevChats;
-          }
-        });
+      if (msg.type !== 'message.created') return;
+
+      const { conversationId, content, createdAt, senderId } = msg.data;
+      if (!conversationId) return;
+
+      let foundConversation = false;
+
+      setChats(prevChats => {
+        const existingChatIndex = prevChats.findIndex(c => c.id === conversationId);
+        if (existingChatIndex === -1) return prevChats;
+
+        foundConversation = true;
+        const updatedChats = [...prevChats];
+        const chat = updatedChats[existingChatIndex];
+        const currentUserId = getCurrentUserId();
+        const isCurrentUserSender = senderId === currentUserId;
+
+        updatedChats[existingChatIndex] = {
+          ...chat,
+          message: isCurrentUserSender ? `Bạn: ${content || '[Tin nhắn]'}` : `${chat.name}: ${content || '[Tin nhắn]'}`,
+          time: relativeTime(createdAt),
+          unread: activeChatIdRef.current === conversationId || isCurrentUserSender ? chat.unread : chat.unread + 1
+        };
+
+        const [moved] = updatedChats.splice(existingChatIndex, 1);
+        return [moved, ...updatedChats];
+      });
+
+      if (!foundConversation) {
+        refreshInboxAfterNewMessage();
       }
     });
 
@@ -212,7 +241,7 @@ export default function ChatLayout() {
     setActiveChatId(newChat.id);
   };
 
-  const handleConversationReady = (temporaryId: string | number, conversationId: string) => {
+  const handleConversationReady = (temporaryId: string | number, conversationId: string, lastMessage?: string) => {
     setChats(prev => {
       const existingRealChat = prev.find(chat => chat.id === conversationId);
       if (existingRealChat) {
@@ -220,7 +249,14 @@ export default function ChatLayout() {
       }
 
       return prev.map(chat => chat.id === temporaryId
-        ? { ...chat, id: conversationId, isPending: false, pendingDirectUserId: undefined }
+        ? {
+            ...chat,
+            id: conversationId,
+            message: lastMessage ? `Bạn: ${lastMessage}` : chat.message,
+            time: 'Vừa xong',
+            isPending: false,
+            pendingDirectUserId: undefined
+          }
         : chat
       );
     });
