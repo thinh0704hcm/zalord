@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import EmojiPicker, { Categories } from 'emoji-picker-react';
 import { UserPlus, Search, PanelRight, Smile, Users, ThumbsUp } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
+import AddMembersModal from './AddMembersModal';
 
 import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
 import { conversationService } from '../../services/conversation';
 import { wsService } from '../../services/websocket';
 import { userService } from '../../services/user';
+import { groupService } from '../../services/group';
 
 interface ChatWindowProps {
   chat?: Chat;
@@ -68,7 +70,10 @@ const Daystamp = ({ date }: { date: string }) => {
 
 export default function ChatWindow({ chat, onConversationReady }: ChatWindowProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isAddMembersModalOpen, setIsAddMembersModalOpen] = useState(false);
   const [inputText, setInputText] = useState("");
+  const [groupMemberCount, setGroupMemberCount] = useState<number | null>(null);
+  const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
   const preservedMessagesRef = useRef<UserMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -100,6 +105,39 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       return `Người dùng ${senderId.slice(0, 8)}`;
     }
   };
+
+  useEffect(() => {
+    if (!chat?.group || typeof chat.id !== 'string') {
+      setGroupMemberCount(null);
+      setGroupMemberIds([]);
+      return;
+    }
+
+    if (chat.totalMembers) {
+      setGroupMemberCount(chat.totalMembers);
+    }
+
+    let cancelled = false;
+    groupService.get(chat.id)
+      .then(group => {
+        if (!cancelled) {
+          setGroupMemberCount(group.members.length);
+          setGroupMemberIds(group.members.map(member => member.userId));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGroupMemberIds([]);
+          if (!chat.totalMembers) {
+            setGroupMemberCount(null);
+          }
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chat?.group, chat?.id, chat?.totalMembers]);
 
   useEffect(() => {
     const previousChat = previousChatRef.current;
@@ -239,6 +277,22 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
     }
   };
 
+
+  const handleAddMembers = async (memberIds: string[]) => {
+    if (!chat?.group || typeof chat.id !== 'string') return;
+
+    let updatedGroup = null;
+    for (const memberId of memberIds) {
+      updatedGroup = await groupService.addMember(chat.id, memberId);
+    }
+
+    if (updatedGroup) {
+      setGroupMemberCount(updatedGroup.members.length);
+      setGroupMemberIds(updatedGroup.members.map(member => member.userId));
+    }
+    setIsAddMembersModalOpen(false);
+  };
+
   if (!chat) {
     return <div className="flex-1 h-screen flex flex-col bg-[#eef0f1] relative items-center justify-center text-gray-500">Chọn một đoạn chat</div>;
   }
@@ -255,12 +309,20 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             <h2 className="font-semibold text-gray-900 text-[16px] leading-tight">{chat.name}</h2>
             <div className="flex items-center text-[13px] text-gray-500 mt-0.5">
               {chat.group ? <Users size={13} className="mr-1" /> : <UserPlus size={13} className="mr-1" />}
-              <span>{chat.group ? '79 thành viên' : 'Trực tuyến'}</span>
+              <span>{chat.group ? `${groupMemberCount ?? chat.totalMembers ?? 0} thành viên` : 'Trực tuyến'}</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-1 text-gray-600">
-          <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"><UserPlus size={18} /></button>
+          {chat.group && (
+            <button
+              onClick={() => setIsAddMembersModalOpen(true)}
+              className="p-1.5 rounded-md transition-colors hover:bg-gray-100"
+              title="Thêm thành viên"
+            >
+              <UserPlus size={18} />
+            </button>
+          )}
           <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"><Search size={18} /></button>
           <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"><PanelRight size={18} /></button>
         </div>
@@ -422,6 +484,13 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      <AddMembersModal
+        isOpen={isAddMembersModalOpen}
+        onClose={() => setIsAddMembersModalOpen(false)}
+        onConfirm={handleAddMembers}
+        existingMemberIds={groupMemberIds}
+      />
 
       {/* Input Area */}
       <div className="bg-white flex flex-col flex-shrink-0">

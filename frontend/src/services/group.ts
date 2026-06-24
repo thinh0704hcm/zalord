@@ -44,5 +44,17 @@ export const groupService = {
       }
       throw new Error('Không thể tải thông tin nhóm');
     }
+  },
+
+  addMember: async (groupId: string, userId: string): Promise<GroupResponse> => {
+    try {
+      const response = await api.post(`/groups/${groupId}/members`, { userId, role: 'MEMBER' });
+      return response.data.data;
+    } catch (error: any) {
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error('Không thể thêm thành viên');
+    }
   }
 };

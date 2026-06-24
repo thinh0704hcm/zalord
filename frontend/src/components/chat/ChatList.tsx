@@ -180,12 +180,12 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
               <div
                 key={chat.id}
                 onClick={() => onSelectChat(chat.id)}
-                className={`flex items-start gap-3 px-2.5 py-2.5 cursor-pointer rounded-lg transition-all border ${chat.id === activeChatId ? 'bg-[#e5efff] border-transparent' : 'bg-white border-transparent hover:bg-[#f3f5f6] hover:border-[#eef0f1]'}`}
+                className={`flex items-start gap-3 mx-2 my-1 px-2.5 py-2.5 cursor-pointer rounded-lg transition-all border ${chat.id === activeChatId ? 'bg-[#e5efff] border-transparent' : 'bg-white border-transparent hover:bg-[#f3f5f6] hover:border-[#eef0f1]'}`}
               >
                 <div className="relative mt-0.5">
                   {renderAvatar(chat)}
                   {chat.unread > 0 && (
-                    <div className="absolute -bottom-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold h-[16px] min-w-[16px] px-1 rounded-full border border-white flex items-center justify-center leading-none">
+                    <div className="absolute -bottom-0.5 -right-0.5 z-50 bg-red-500 text-white text-[10px] font-bold h-[16px] min-w-[16px] px-1 rounded-full border border-white flex items-center justify-center leading-none">
                       {chat.unread > 9 ? '9+' : chat.unread}
                     </div>
                   )}

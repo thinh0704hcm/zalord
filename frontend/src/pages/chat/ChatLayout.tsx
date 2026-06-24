@@ -14,6 +14,7 @@ export interface Chat {
   name: string;
   message: string;
   time: string;
+  lastMessageAt?: string | null;
   unread: number;
   avatar: string | string[];
   totalMembers?: number;
@@ -92,6 +93,7 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
         name: group.name,
         message: formatLastMessagePreview(item.lastMessagePreview, item.lastSenderId, currentUserId, group.name),
         time: relativeTime(item.lastMessageAt),
+        lastMessageAt: item.lastMessageAt,
         unread: item.unreadCount || 0,
         avatar: memberAvatars.length > 0 ? memberAvatars : [getInitials(group.name)],
         totalMembers: group.members.length,
@@ -104,6 +106,7 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
         name: 'Nhóm chat',
         message: item.lastMessagePreview || 'Bắt đầu trò chuyện',
         time: relativeTime(item.lastMessageAt),
+        lastMessageAt: item.lastMessageAt,
         unread: item.unreadCount || 0,
         avatar: ['NC', '??', '??'],
         totalMembers: 3,
@@ -128,6 +131,7 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
     name,
     message: formatLastMessagePreview(item.lastMessagePreview, item.lastSenderId, currentUserId, name),
     time: relativeTime(item.lastMessageAt),
+    lastMessageAt: item.lastMessageAt,
     unread: item.unreadCount || 0,
     avatar
   };
@@ -141,6 +145,17 @@ export default function ChatLayout() {
   const [chatListError, setChatListError] = useState('');
   const activeChatIdRef = useRef<string | number | null>(null);
   const activeChat = chats.find(c => c.id === activeChatId);
+
+  useEffect(() => {
+    const ticker = setInterval(() => {
+      setChats(prev => prev.map(chat =>
+        chat.lastMessageAt
+          ? { ...chat, time: relativeTime(chat.lastMessageAt) }
+          : chat
+      ));
+    }, 60_000);
+    return () => clearInterval(ticker);
+  }, []);
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -223,6 +238,7 @@ export default function ChatLayout() {
           ...chat,
           message: isCurrentUserSender ? `Bạn: ${content || '[Tin nhắn]'}` : `${chat.name}: ${content || '[Tin nhắn]'}`,
           time: relativeTime(createdAt),
+          lastMessageAt: createdAt,
           unread: activeChatIdRef.current === conversationId || isCurrentUserSender ? chat.unread : chat.unread + 1
         };
 
