@@ -11,4 +11,11 @@ public interface IMessageService {
     MessageResponse send(UUID callerUserId, SendMessageRequest request);
 
     PageResponse<MessageResponse> history(UUID callerUserId, UUID conversationId, int page, int size);
+
+    /**
+     * Recall ("thu hồi cho tất cả"): mark the message as retracted. Only the
+     * sender can recall their own message. Publishes message.recalled so live
+     * clients update + the inbox preview is recomputed.
+     */
+    void recall(UUID callerUserId, UUID messageId);
 }

@@ -13,6 +13,11 @@ public record MessageResponse(
         UUID senderId,
         String content,
         List<UUID> attachmentIds,
-        Instant createdAt
+        Instant createdAt,
+        // Recall: when non-null, content + attachmentIds are blanked; clients
+        // render "Tin nhắn đã được thu hồi" placeholder.
+        Instant recalledAt,
+        // Reply: snapshot of the quoted message (null for non-replies).
+        ReplyToSnippet replyTo
 ) {
 }

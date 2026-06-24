@@ -18,6 +18,12 @@ public class GlobalExceptionHandler {
                 .body(new ApiResponse<>(HttpStatus.FORBIDDEN, ex.getMessage(), null, "NOT_A_MEMBER"));
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<?>> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiResponse<>(HttpStatus.FORBIDDEN, ex.getMessage(), null, "FORBIDDEN"));
+    }
+
     @ExceptionHandler(ConversationNotFoundException.class)
     public ResponseEntity<ApiResponse<?>> handleNotFound(ConversationNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

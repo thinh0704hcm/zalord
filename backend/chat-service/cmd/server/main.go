@@ -66,6 +66,12 @@ func main() {
 		logger.Log.Fatal("subscribe message.read failed", zap.Error(err))
 	}
 
+	// Recalls — same rationale for the dedicated consumer group.
+	recallFanOut := events.NewRecallFanOut(reg, memCache)
+	if err := bus.Subscribe(ctx, "message.recalled", "chat-recall", recallFanOut.Handle); err != nil {
+		logger.Log.Fatal("subscribe message.recalled failed", zap.Error(err))
+	}
+
 	// Presence relay runs as a goroutine: listens to Redis pub/sub for
 	// transitions on ANY instance and pushes to local watchers.
 	relay := events.NewPresenceRelay(pres, router)

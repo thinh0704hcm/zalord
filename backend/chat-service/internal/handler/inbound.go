@@ -30,11 +30,12 @@ const (
 
 // Outbound types (kept in one place to match what frontend will key on):
 const (
-	OutTyping        = "typing"
-	OutPresence      = "presence"
-	OutPresenceState = "presence.state" // batch reply to presence.query
-	OutMessageRead   = "message.read"
-	OutMessageCreate = "message.created"
+	OutTyping          = "typing"
+	OutPresence        = "presence"
+	OutPresenceState   = "presence.state" // batch reply to presence.query
+	OutMessageRead     = "message.read"
+	OutMessageRecalled = "message.recalled"
+	OutMessageCreate   = "message.created"
 )
 
 // TypingPayload — both directions. isTyping=false signals manual stop;

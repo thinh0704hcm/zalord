@@ -18,6 +18,16 @@ public record MessageCreatedEvent(
         List<UUID> recipientIds,
         String content,
         List<UUID> attachmentIds,
-        Instant createdAt
+        Instant createdAt,
+        // Reply snapshot — null for non-replies. Embedded in the event so
+        // chat-service can render the quote without an extra DB round trip.
+        ReplyToSnippet replyTo
 ) {
+    /** Inline snippet to keep one event = one wire payload. */
+    public record ReplyToSnippet(
+            UUID messageId,
+            UUID senderId,
+            String preview
+    ) {
+    }
 }

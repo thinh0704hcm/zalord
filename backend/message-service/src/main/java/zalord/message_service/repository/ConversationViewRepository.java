@@ -72,4 +72,25 @@ public interface ConversationViewRepository extends JpaRepository<ConversationVi
     @Modifying
     @Query("DELETE FROM ConversationView v WHERE v.userId = :userId AND v.conversationId = :conversationId")
     int deleteUserConversationView(@Param("userId") UUID userId, @Param("conversationId") UUID conversationId);
+
+    /**
+     * Recall projection: rewrite preview only for views whose currently shown
+     * last message matches the recalled one (by created_at + sender_id). Other
+     * views — already pointing at a newer message — are left alone.
+     */
+    @Modifying
+    @Query("UPDATE ConversationView v " +
+           "SET v.lastMessagePreview = :preview, " +
+           "    v.lastMessageAt = :newAt, " +
+           "    v.lastSenderId = :newSender, " +
+           "    v.updatedAt = CURRENT_TIMESTAMP " +
+           "WHERE v.conversationId = :conversationId " +
+           "  AND v.lastMessageAt = :recalledAt " +
+           "  AND v.lastSenderId = :recalledSender")
+    int rewritePreviewForRecalled(@Param("conversationId") UUID conversationId,
+                                  @Param("recalledAt") Instant recalledCreatedAt,
+                                  @Param("recalledSender") UUID recalledSenderId,
+                                  @Param("preview") String preview,
+                                  @Param("newAt") Instant newAt,
+                                  @Param("newSender") UUID newSender);
 }
