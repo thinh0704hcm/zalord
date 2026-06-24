@@ -545,11 +545,17 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       SERVER_PORT: "8084"
       MQ_URI: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       EVENT_BUS: ${EVENT_BUS:-rabbitmq}
       KAFKA_BOOTSTRAP: kafka:9092
+      # Redis powers the membership-lookup cache + presence (online/offline)
+      # registry + presence pub/sub for cross-instance fan-out.
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     ports:
       - "${CHAT_SERVICE_HOST_PORT}:8084"
     healthcheck:
