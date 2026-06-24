@@ -12,14 +12,16 @@ export default function Signup() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Signup form submitted, version 2");
     setError('');
     setLoading(true);
 
     try {
       const res = await authService.signup(username, password, displayName);
       console.log('Signup success:', res);
-      // TODO: Save token/user to context/store
-      navigate('/');
+      // Successful signup but no token returned directly (needs manual login)
+      alert('Đăng ký thành công! Vui lòng đăng nhập.');
+      navigate('/account/login', { state: { phone: username, password: password } });
     } catch (err: any) {
       setError(err.message || 'Đã có lỗi xảy ra');
     } finally {
@@ -31,8 +33,8 @@ export default function Signup() {
     <div className="flex h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-sm border border-gray-100">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-[#0068ff] mb-2">Zalo</h1>
-          <p className="text-gray-600">Đăng ký tài khoản Zalord</p>
+          <h1 className="text-4xl font-bold text-[#0068ff] mb-2">Zalord</h1>
+          <p className="text-gray-600">Đăng ký tài khoản</p>
         </div>
 
         {error && (
@@ -55,7 +57,7 @@ export default function Signup() {
           <div>
             <input
               type="text"
-              placeholder="Số điện thoại / Tên đăng nhập"
+              placeholder="Số điện thoại"
               className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:border-[#0068ff] focus:ring-1 focus:ring-[#0068ff] transition-colors"
               value={username}
               onChange={(e) => setUsername(e.target.value)}

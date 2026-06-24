@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authService } from '../../services/auth';
 
 export default function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const location = useLocation();
+  const state = location.state as { phone?: string; password?: string } | null;
+
+  const [username, setUsername] = useState(state?.phone || '');
+  const [password, setPassword] = useState(state?.password || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -17,7 +20,10 @@ export default function Login() {
     try {
       const res = await authService.login(username, password);
       console.log('Login success:', res);
-      // TODO: Save token/user to context/store
+      if (res.token) {
+        localStorage.setItem('token', res.token);
+        localStorage.setItem('user', JSON.stringify(res.user));
+      }
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Đã có lỗi xảy ra');
@@ -30,9 +36,8 @@ export default function Login() {
     <div className="flex h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-sm border border-gray-100">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-[#0068ff] mb-2">Zalo</h1>
+          <h1 className="text-4xl font-bold text-[#0068ff] mb-2">Zalord</h1>
           <p className="text-gray-600">Đăng nhập tài khoản Zalord</p>
-          <p className="text-sm text-gray-400 mt-1">(Dùng mock / mock123)</p>
         </div>
 
         {error && (
@@ -45,7 +50,7 @@ export default function Login() {
           <div>
             <input
               type="text"
-              placeholder="Số điện thoại / Tên đăng nhập"
+              placeholder="Số điện thoại"
               className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:border-[#0068ff] focus:ring-1 focus:ring-[#0068ff] transition-colors"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
