@@ -127,6 +127,40 @@ func (h *ProfileHandler) GetByPhone(c *gin.Context) {
 	c.JSON(http.StatusOK, toResponse(prof))
 }
 
+// GetByUserID godoc
+//
+//	@Summary      Look up a profile by user id
+//	@Description  Returns the profile whose auth user_id matches. Open to any authenticated user so inbox items can be rendered with display names.
+//	@Tags         profile
+//	@Security     BearerAuth
+//	@Produce      json
+//	@Param        userId  path  string  true  "Auth user id"
+//	@Success      200  {object}  ProfileResponse
+//	@Failure      400  {object}  ErrorResponse  "invalid user id"
+//	@Failure      401  {object}  ErrorResponse
+//	@Failure      404  {object}  ErrorResponse  "profile not found"
+//	@Failure      500  {object}  ErrorResponse
+//	@Router       /api/v1/users/{userId} [get]
+func (h *ProfileHandler) GetByUserID(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid userId"})
+		return
+	}
+
+	prof, err := h.svc.GetByUserID(c.Request.Context(), userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "profile not found"})
+		return
+	}
+	if err != nil {
+		logger.Log.Error("GetByUserID failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal error"})
+		return
+	}
+	c.JSON(http.StatusOK, toResponse(prof))
+}
+
 // List godoc
 //
 //	@Summary      List all profiles (paginated)

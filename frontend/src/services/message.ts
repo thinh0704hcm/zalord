@@ -17,5 +17,16 @@ export const messageService = {
       }
       throw new Error('Không thể gửi tin nhắn');
     }
+  },
+  history: async (conversationId: string, page = 1, size = 50) => {
+    try {
+      const response = await api.get('/messages', {
+        params: { conversationId, page, size }
+      });
+      return response.data.data; // This is a PageResponse containing content
+    } catch (error: any) {
+      console.error('Failed to load message history:', error);
+      return { content: [], totalPages: 0 };
+    }
   }
 };

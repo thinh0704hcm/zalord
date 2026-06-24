@@ -5,10 +5,12 @@ import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIco
 
 import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
+import { conversationService } from '../../services/conversation';
 import { wsService } from '../../services/websocket';
 
 interface ChatWindowProps {
   chat?: Chat;
+  onConversationReady?: (temporaryId: string | number, conversationId: string) => void;
 }
 
 const Daystamp = ({ date }: { date: string }) => {
@@ -44,20 +46,62 @@ const Daystamp = ({ date }: { date: string }) => {
   );
 };
 
-export default function ChatWindow({ chat }: ChatWindowProps) {
+export default function ChatWindow({ chat, onConversationReady }: ChatWindowProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [inputText, setInputText] = useState("");
   const [userMessages, setUserMessages] = useState<{id?: string, text: string, time: string, isSender?: boolean}[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const previousChatRef = useRef<Chat | undefined>(undefined);
+
+  const currentUserId = (() => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub;
+    } catch {
+      return null;
+    }
+  })();
 
   useEffect(() => {
-    // Reset messages when chat changes
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUserMessages([]);
+    const previousChat = previousChatRef.current;
     
-    // Auto scroll to bottom
+    if (chat?.id !== previousChat?.id) {
+      const isSameTemporaryChatResolved = Boolean(
+        previousChat?.pendingDirectUserId &&
+        !chat?.pendingDirectUserId &&
+        previousChat?.name === chat?.name
+      );
+
+      if (!isSameTemporaryChatResolved) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setUserMessages([]);
+      }
+
+      if (chat && typeof chat.id === 'string' && !chat.isPending) {
+        messageService.history(chat.id).then(res => {
+          const historyMsgs = (res.items || []).map((m: any) => {
+            const msgDate = new Date(m.createdAt);
+            const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
+            return {
+              id: m.messageId,
+              text: m.content,
+              time: timeStr,
+              isSender: currentUserId === m.senderId
+            };
+          }).reverse();
+          setUserMessages(historyMsgs);
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        });
+      }
+    }
+
+    previousChatRef.current = chat;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chat?.id]);
+  }, [chat, currentUserId]);
 
   useEffect(() => {
     // Listen to new messages via WebSocket
@@ -70,13 +114,13 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
           id: msg.data.messageId,
           text: msg.data.content, 
           time: timeStr,
-          isSender: false // Received message
+          isSender: msg.data.senderId === currentUserId
         }]);
       }
     });
     
     return unsubscribe;
-  }, [chat?.id]);
+  }, [chat?.id, currentUserId]);
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputText.trim() && chat) {
@@ -89,10 +133,19 @@ export default function ChatWindow({ chat }: ChatWindowProps) {
       // Optimistic update
       setUserMessages(prev => [...prev, { text: text, time: timeStr, isSender: true }]);
       
-      // Send via API
+      // Send via API. A searched user opens a temporary chat first; create the
+      // real DIRECT conversation only when the first message is sent.
       try {
+        let conversationId = String(chat.id);
+
+        if (chat.pendingDirectUserId) {
+          const conversation = await conversationService.createDirect(chat.pendingDirectUserId);
+          conversationId = conversation.id;
+          onConversationReady?.(chat.id, conversation.id);
+        }
+
         await messageService.send({
-          conversationId: String(chat.id),
+          conversationId,
           content: text
         });
       } catch (error) {

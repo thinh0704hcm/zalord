@@ -2,7 +2,7 @@ export type MessageCallback = (message: any) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
-  private url = 'ws://localhost:8080/ws/chat';
+  private url = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws/chat';
   private messageCallbacks: MessageCallback[] = [];
 
   connect(token: string) {

@@ -9,6 +9,11 @@ SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_
   FROM profiles
  WHERE user_id = $1 AND deleted_at IS NULL;
 
+-- name: GetProfileByID :one
+SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+  FROM profiles
+ WHERE id = $1 AND deleted_at IS NULL;
+
 -- name: GetProfileByPhone :one
 SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
   FROM profiles

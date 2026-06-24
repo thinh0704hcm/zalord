@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { ExternalLink } from 'lucide-react';
+import { userService } from '../../services/user';
 import { 
   ZalordMessageFilledIcon,
   ZalordContactFilledIcon,
@@ -9,19 +10,71 @@ import {
   ZalordSettingsFilledIcon
 } from './ZalordIcons';
 
+type StoredUser = {
+  displayName?: string;
+  username?: string;
+  phoneNumber?: string;
+  avatarUrl?: string | null;
+};
+
+const getStoredUser = (): StoredUser => {
+  try {
+    const rawUser = localStorage.getItem('user');
+    return rawUser ? JSON.parse(rawUser) : {};
+  } catch {
+    return {};
+  }
+};
+
+const getStoredUserName = () => {
+  const user = getStoredUser();
+  return user.displayName || user.username || user.phoneNumber || 'Người dùng';
+};
+
+const getStoredAvatarUrl = () => getStoredUser().avatarUrl || null;
+
 export default function SidebarNav() {
   const [activeTab, setActiveTab] = useState('message');
   const [showProfilePopup, setShowProfilePopup] = useState(false);
+  const [userName, setUserName] = useState(getStoredUserName);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(getStoredAvatarUrl);
   const popupRef = useRef<HTMLDivElement>(null);
 
-  const userName = "Mockee";
-  
   const getInitials = (name: string) => {
     const words = name.trim().split(/\s+/);
     if (words.length === 0) return "";
     if (words.length === 1) return words[0].charAt(0).toUpperCase();
     return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    userService.me()
+      .then((profile) => {
+        if (cancelled) return;
+
+        setUserName(profile.displayName);
+        setAvatarUrl(profile.avatarUrl);
+
+        const storedUser = getStoredUser();
+        localStorage.setItem(
+          'user',
+          JSON.stringify({
+            ...storedUser,
+            ...profile,
+            username: profile.phoneNumber,
+          })
+        );
+      })
+      .catch(() => {
+        // Keep the cached identity when the profile endpoint is temporarily unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -42,7 +95,11 @@ export default function SidebarNav() {
             onClick={() => setShowProfilePopup(!showProfilePopup)}
             className="w-10 h-10 rounded-full bg-gradient-to-b from-[#87baff] to-[#0068ff] flex items-center justify-center text-white font-medium text-[14px] overflow-hidden cursor-pointer transition-colors shadow-sm hover:opacity-90"
           >
-            {getInitials(userName)}
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={userName} className="h-full w-full object-cover" />
+            ) : (
+              getInitials(userName)
+            )}
           </div>
 
           {/* Profile Popup */}
@@ -68,6 +125,8 @@ export default function SidebarNav() {
                <div 
                  onClick={() => {
                    localStorage.removeItem('token');
+                   localStorage.removeItem('refreshToken');
+                   localStorage.removeItem('user');
                    window.location.href = '/account/login';
                  }}
                  className="px-4 py-2.5 hover:bg-gray-100 cursor-pointer text-[14px] text-gray-700 transition-colors"

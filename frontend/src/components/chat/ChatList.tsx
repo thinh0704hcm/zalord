@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { XCircle, UserPlus } from 'lucide-react';
+import { XCircle } from 'lucide-react';
 import { ZalordAddGroupIcon, ZalordSearchIcon } from './ZalordIcons';
 import type { Chat } from '../../pages/chat/ChatLayout';
 import CreateGroupModal from './CreateGroupModal';
-import FindUserModal from './FindUserModal';
 import { userService } from '../../services/user';
 import type { UserProfile } from '../../services/user';
 
@@ -12,15 +11,16 @@ interface ChatListProps {
   activeChatId: string | number;
   onSelectChat: (id: string | number) => void;
   onCreateGroup?: (groupName: string, selectedAvatars: string[], totalMembers: number) => void;
-  onStartDirectChat?: (userId: string) => void;
+  onStartDirectChat?: (user: UserProfile) => void;
+  isLoading?: boolean;
+  error?: string;
 }
 
-export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGroup, onStartDirectChat }: ChatListProps) {
+export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGroup, onStartDirectChat, isLoading = false, error = '' }: ChatListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
-  const [isFindUserModalOpen, setIsFindUserModalOpen] = useState(false);
   const [searchedUser, setSearchedUser] = useState<UserProfile | null>(null);
   const [isSearchingApi, setIsSearchingApi] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -95,13 +95,6 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
           ) : (
             <div className="flex items-center">
               <button
-                title="Thêm bạn/Tìm người"
-                onClick={() => setIsFindUserModalOpen(true)}
-                className="h-[32px] w-[32px] flex items-center justify-center text-[#081c36] hover:bg-[#eaedf0] rounded-md transition-colors"
-              >
-                <UserPlus size={18} strokeWidth={1.5} />
-              </button>
-              <button
                 title="Tạo nhóm chat"
                 onClick={() => setIsCreateGroupModalOpen(true)}
                 className="h-[32px] w-[32px] flex items-center justify-center text-[#081c36] hover:bg-[#eaedf0] rounded-md transition-colors"
@@ -152,7 +145,7 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
                 <div
                   className="flex items-center gap-3 cursor-pointer hover:bg-[#f3f5f6] p-2 -ml-2 rounded-md"
                   onClick={() => {
-                    onStartDirectChat?.(searchedUser.id);
+                    onStartDirectChat?.(searchedUser);
                     closeSearch();
                   }}
                 >
@@ -175,6 +168,12 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
               </div>
             )}
           </div>
+        ) : isLoading ? (
+          <div className="p-4 text-center text-gray-500 text-[13px]">Đang tải danh sách chat...</div>
+        ) : error ? (
+          <div className="p-4 text-center text-red-500 text-[13px]">{error}</div>
+        ) : displayedChats.length === 0 ? (
+          <div className="p-4 text-center text-gray-500 text-[13px]">Chưa có cuộc trò chuyện</div>
         ) : (
           <div className="flex flex-col">
             {displayedChats.map(chat => (
@@ -215,17 +214,6 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
           setIsCreateGroupModalOpen(false);
         }}
       />
-
-      {isFindUserModalOpen && (
-        <FindUserModal
-          isOpen={isFindUserModalOpen}
-          onClose={() => setIsFindUserModalOpen(false)}
-          onStartChat={(userId) => {
-            onStartDirectChat?.(userId);
-            setIsFindUserModalOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }

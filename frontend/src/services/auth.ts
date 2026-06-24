@@ -12,6 +12,7 @@ export const authService = {
         return {
           success: true,
           token: response.data.data.accessToken,
+          refreshToken: response.data.data.refreshToken,
           user: {
             id: response.data.data.user?.id,
             username: phone,

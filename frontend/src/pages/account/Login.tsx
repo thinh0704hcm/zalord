@@ -22,6 +22,9 @@ export default function Login() {
       console.log('Login success:', res);
       if (res.token) {
         localStorage.setItem('token', res.token);
+        if (res.refreshToken) {
+          localStorage.setItem('refreshToken', res.refreshToken);
+        }
         localStorage.setItem('user', JSON.stringify(res.user));
       }
       navigate('/');
