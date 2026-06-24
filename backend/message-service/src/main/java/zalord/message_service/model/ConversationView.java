@@ -55,6 +55,12 @@ public class ConversationView {
     @Column(name = "unread_count", nullable = false)
     private Integer unreadCount = 0;
 
+    @Column(name = "last_read_message_id")
+    private UUID lastReadMessageId;
+
+    @Column(name = "last_read_at")
+    private Instant lastReadAt;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 }

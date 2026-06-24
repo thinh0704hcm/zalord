@@ -12,6 +12,8 @@ public record InboxItemResponse(
         String lastMessagePreview,
         Instant lastMessageAt,
         UUID lastSenderId,
-        int unreadCount
+        int unreadCount,
+        UUID lastReadMessageId,
+        Instant lastReadAt
 ) {
 }

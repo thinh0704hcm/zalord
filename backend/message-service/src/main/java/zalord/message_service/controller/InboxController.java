@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import zalord.message_service.dto.request.MarkReadRequest;
 import zalord.message_service.dto.response.InboxItemResponse;
 import zalord.message_service.dto.response.PageResponse;
 import zalord.message_service.model.ApiResponse;
@@ -45,11 +46,13 @@ public class InboxController {
     @PostMapping("/{conversationId}/read")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Mark a conversation as read",
-            description = "Resets unread_count to 0 for the caller's view of this conversation. No-op if no view exists yet.")
+            description = "Resets unread_count to 0 for the caller's view of this conversation and publishes a message.read event so other members' UIs can update their \"Seen\" markers. Optional body { messageId } pins which message was last read; if omitted, the latest message in the conversation is used. No-op if no view exists yet.")
     public ResponseEntity<ApiResponse<Void>> markRead(
             @Parameter(hidden = true) @RequestHeader("X-User-Id") UUID callerUserId,
-            @PathVariable UUID conversationId) {
-        service.markRead(callerUserId, conversationId);
+            @PathVariable UUID conversationId,
+            @RequestBody(required = false) MarkReadRequest body) {
+        UUID messageId = body == null ? null : body.messageId();
+        service.markRead(callerUserId, conversationId, messageId);
         return ResponseEntity.ok(new ApiResponse<>(HttpStatus.OK, "Marked read", null, null));
     }
 }

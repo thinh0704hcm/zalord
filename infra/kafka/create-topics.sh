@@ -32,6 +32,7 @@ echo "[kafka-init] broker up, creating topics ..."
 # backends without changing event names.
 create "user.created"              1
 create "message.created"           3
+create "message.read"              1
 create "group.created"             1
 create "group.member.added"        1
 create "group.member.removed"      1
