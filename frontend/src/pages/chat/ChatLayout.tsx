@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import SidebarNav from '../../components/chat/SidebarNav';
 import ChatList from '../../components/chat/ChatList';
 import ChatWindow from '../../components/chat/ChatWindow';
-import { wsService } from '../../services/websocket';
+import { isMessageCreatedFrame, wsService } from '../../services/websocket';
 
 import { userService, type UserProfile } from '../../services/user';
 import { inboxService, type InboxItemResponse } from '../../services/inbox';
@@ -203,9 +203,6 @@ export default function ChatLayout() {
     };
     window.addEventListener('auth-expired', handleAuthExpired);
 
-    wsService.connect(token);
-    loadInbox();
-    
     const refreshInboxAfterNewMessage = () => {
       loadInbox(false);
       window.setTimeout(() => {
@@ -216,10 +213,29 @@ export default function ChatLayout() {
       }, 1200);
     };
 
-    const unsubscribeWs = wsService.onMessage((msg) => {
-      if (msg.type !== 'message.created') return;
+    const connectWebSocket = () => {
+      const currentToken = localStorage.getItem('token');
+      if (currentToken) {
+        wsService.connect(currentToken);
+      }
+    };
 
-      const { conversationId, content, createdAt, senderId } = msg.data;
+    loadInbox().finally(() => {
+      if (!cancelled) {
+        connectWebSocket();
+      }
+    });
+
+    const handleTokenRefreshed = () => {
+      connectWebSocket();
+    };
+    window.addEventListener('auth-token-refreshed', handleTokenRefreshed);
+
+    const unsubscribeWs = wsService.onMessage((msg) => {
+      if (!isMessageCreatedFrame(msg)) return;
+
+      const data = msg.data;
+      const { conversationId, content, createdAt, senderId } = data;
       if (!conversationId) return;
 
       let foundConversation = false;
@@ -237,8 +253,8 @@ export default function ChatLayout() {
         updatedChats[existingChatIndex] = {
           ...chat,
           message: isCurrentUserSender ? `Bạn: ${content || '[Tin nhắn]'}` : `${chat.name}: ${content || '[Tin nhắn]'}`,
-          time: relativeTime(createdAt),
-          lastMessageAt: createdAt,
+          time: relativeTime(createdAt ?? null),
+          lastMessageAt: createdAt ?? null,
           unread: activeChatIdRef.current === conversationId || isCurrentUserSender ? chat.unread : chat.unread + 1
         };
 
@@ -254,6 +270,7 @@ export default function ChatLayout() {
     return () => {
       cancelled = true;
       window.removeEventListener('auth-expired', handleAuthExpired);
+      window.removeEventListener('auth-token-refreshed', handleTokenRefreshed);
       unsubscribeWs();
       wsService.disconnect();
     };

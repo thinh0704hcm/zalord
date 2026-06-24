@@ -69,6 +69,7 @@ api.interceptors.response.use(
       }
 
       localStorage.setItem('token', accessToken);
+      window.dispatchEvent(new CustomEvent('auth-token-refreshed', { detail: { token: accessToken } }));
       originalRequest.headers.Authorization = `Bearer ${accessToken}`;
       return api(originalRequest);
     } catch (refreshError) {

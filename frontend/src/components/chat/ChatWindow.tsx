@@ -7,7 +7,7 @@ import AddMembersModal from './AddMembersModal';
 import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
 import { conversationService } from '../../services/conversation';
-import { wsService } from '../../services/websocket';
+import { isMessageCreatedFrame, isTypingFrame, wsService } from '../../services/websocket';
 import { userService } from '../../services/user';
 import { groupService } from '../../services/group';
 
@@ -27,6 +27,9 @@ type UserMessage = {
 };
 
 const getMessageDateKey = (date: Date) => date.toISOString().slice(0, 10);
+const TYPING_REFRESH_MS = 2500;
+const TYPING_IDLE_MS = 3000;
+const REMOTE_TYPING_TTL_MS = 5500;
 
 const getAvatarText = (value: string) => {
   const words = value.trim().split(/\s+/).filter(Boolean);
@@ -75,10 +78,15 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const [groupMemberCount, setGroupMemberCount] = useState<number | null>(null);
   const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
+  const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const preservedMessagesRef = useRef<UserMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousChatRef = useRef<Chat | undefined>(undefined);
   const senderNameCacheRef = useRef<Record<string, string>>({});
+  const typingIdleTimeoutRef = useRef<number | null>(null);
+  const remoteTypingTimeoutsRef = useRef<Record<string, number>>({});
+  const lastTypingSentAtRef = useRef(0);
+  const isTypingSentRef = useRef(false);
 
   const currentUserId = (() => {
     try {
@@ -90,6 +98,58 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       return null;
     }
   })();
+
+  const clearTypingUser = (userId: string) => {
+    window.clearTimeout(remoteTypingTimeoutsRef.current[userId]);
+    delete remoteTypingTimeoutsRef.current[userId];
+    setTypingUsers(prev => {
+      if (!prev[userId]) return prev;
+      const next = { ...prev };
+      delete next[userId];
+      return next;
+    });
+  };
+
+  const clearAllTypingUsers = () => {
+    Object.values(remoteTypingTimeoutsRef.current).forEach(window.clearTimeout);
+    remoteTypingTimeoutsRef.current = {};
+    setTypingUsers({});
+  };
+
+  const clearOwnTypingTimers = () => {
+    if (typingIdleTimeoutRef.current !== null) {
+      window.clearTimeout(typingIdleTimeoutRef.current);
+      typingIdleTimeoutRef.current = null;
+    }
+  };
+
+  const sendTypingState = (isTyping: boolean, force = false) => {
+    if (!chat || typeof chat.id !== 'string' || chat.isPending) return;
+    const now = Date.now();
+
+    if (isTyping && !force && isTypingSentRef.current && now - lastTypingSentAtRef.current < TYPING_REFRESH_MS) {
+      return;
+    }
+
+    if (!isTyping && !isTypingSentRef.current && !force) {
+      return;
+    }
+
+    wsService.sendTyping(chat.id, isTyping);
+    lastTypingSentAtRef.current = now;
+    isTypingSentRef.current = isTyping;
+  };
+
+  const scheduleTypingStop = () => {
+    if (typingIdleTimeoutRef.current !== null) {
+      window.clearTimeout(typingIdleTimeoutRef.current);
+    }
+
+    typingIdleTimeoutRef.current = window.setTimeout(() => {
+      sendTypingState(false);
+      clearOwnTypingTimers();
+    }, TYPING_IDLE_MS);
+  };
 
   const resolveSenderName = async (senderId?: string) => {
     if (!senderId) return '';
@@ -197,37 +257,69 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   }, [chat, currentUserId]);
 
   useEffect(() => {
-    // Listen to new messages via WebSocket
     const unsubscribe = wsService.onMessage(async (msg) => {
-      // Basic check if the message belongs to current chat
-      if (msg.type === 'message.created' && msg.data?.conversationId === chat?.id) {
-        if (msg.data.senderId === currentUserId) return;
+      if (isMessageCreatedFrame(msg) && msg.data?.conversationId === chat?.id) {
+        const data = msg.data;
+        if (data.senderId === currentUserId) return;
 
-        const createdAt = msg.data.createdAt ? new Date(msg.data.createdAt) : new Date();
+        const createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
         const timeStr = `${String(createdAt.getHours()).padStart(2, '0')}:${String(createdAt.getMinutes()).padStart(2, '0')}`;
-        const senderName = await resolveSenderName(msg.data.senderId);
+        const senderName = await resolveSenderName(data.senderId);
+        clearTypingUser(data.senderId);
         setUserMessages(prev => {
-          if (prev.some(existing => existing.id === msg.data.messageId)) return prev;
+          if (prev.some(existing => existing.id === data.messageId)) return prev;
           return [...prev, { 
-            id: msg.data.messageId,
-            text: msg.data.content, 
+            id: data.messageId,
+            text: data.content, 
             time: timeStr,
             dateKey: getMessageDateKey(createdAt),
-            senderId: msg.data.senderId,
+            senderId: data.senderId,
             senderName,
             isSender: false
           }];
         });
+      }
+
+      if (isTypingFrame(msg)) {
+        const data = msg.data;
+        const userId = data.userId;
+        if (!userId || data.conversationId !== chat?.id || userId === currentUserId) return;
+
+        if (!data.isTyping) {
+          clearTypingUser(userId);
+          return;
+        }
+
+        const senderName = await resolveSenderName(userId);
+        setTypingUsers(prev => ({ ...prev, [userId]: senderName || chat?.name || 'Ai đó' }));
+        window.clearTimeout(remoteTypingTimeoutsRef.current[userId]);
+        remoteTypingTimeoutsRef.current[userId] = window.setTimeout(() => {
+          clearTypingUser(userId);
+        }, REMOTE_TYPING_TTL_MS);
       }
     });
     
     return unsubscribe;
   }, [chat?.id, currentUserId]);
 
+  useEffect(() => {
+    return () => {
+      if (isTypingSentRef.current && chat && typeof chat.id === 'string' && !chat.isPending) {
+        wsService.sendTyping(chat.id, false);
+      }
+      isTypingSentRef.current = false;
+      lastTypingSentAtRef.current = 0;
+      clearOwnTypingTimers();
+      clearAllTypingUsers();
+    };
+  }, [chat?.id]);
+
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputText.trim() && chat) {
       const text = inputText.trim();
       setInputText("");
+      sendTypingState(false, true);
+      clearOwnTypingTimers();
       
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -277,6 +369,27 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
     }
   };
 
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputText(value);
+
+    if (!value.trim()) {
+      sendTypingState(false);
+      clearOwnTypingTimers();
+      return;
+    }
+
+    sendTypingState(true);
+    scheduleTypingStop();
+  };
+
+  const typingNames = Object.values(typingUsers);
+  const typingText = typingNames.length === 0
+    ? ''
+    : typingNames.length === 1
+      ? `${typingNames[0]} đang soạn tin nhắn`
+      : `${typingNames.length} người đang soạn tin nhắn`;
 
   const handleAddMembers = async (memberIds: string[]) => {
     if (!chat?.group || typeof chat.id !== 'string') return;
@@ -481,6 +594,18 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               </div>
             );
           })}
+          {typingText && (
+            <div className="flex w-full justify-start items-start ml-2 mb-2 mt-2">
+              <div className="bg-white border border-[#e5e7eb] rounded-lg px-3 py-2 shadow-sm flex items-center gap-2 text-[#7589A3] text-[13px]">
+                <span className="flex items-center gap-1" aria-hidden="true">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#7589A3] animate-bounce" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#7589A3] animate-bounce [animation-delay:120ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#7589A3] animate-bounce [animation-delay:240ms]" />
+                </span>
+                <span>{typingText}</span>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -551,7 +676,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             type="text" 
             placeholder={`Nhập @, tin nhắn tới ${chat.name}`}
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent border-none outline-none text-[15px] py-1 text-gray-800 placeholder-gray-500"
           />

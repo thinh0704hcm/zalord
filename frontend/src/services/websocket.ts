@@ -1,17 +1,67 @@
-export type MessageCallback = (message: any) => void;
+export type WebSocketFrame<TData = unknown> = {
+  type: string;
+  data?: TData;
+};
+
+export type MessageCreatedFrameData = {
+  messageId: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  createdAt?: string;
+  attachmentIds?: string[];
+};
+
+export type TypingFrameData = {
+  conversationId: string;
+  isTyping: boolean;
+  userId?: string;
+};
+
+export type IncomingWebSocketFrame = WebSocketFrame<unknown>;
+export type MessageCreatedFrame = {
+  type: 'message.created';
+  data: MessageCreatedFrameData;
+};
+
+export type TypingFrame = {
+  type: 'typing';
+  data: TypingFrameData;
+};
+
+export type MessageCallback = (message: IncomingWebSocketFrame) => void;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+export const isMessageCreatedFrame = (frame: IncomingWebSocketFrame): frame is MessageCreatedFrame => {
+  if (frame.type !== 'message.created' || !isRecord(frame.data)) return false;
+  return typeof frame.data.messageId === 'string'
+    && typeof frame.data.conversationId === 'string'
+    && typeof frame.data.senderId === 'string'
+    && typeof frame.data.content === 'string';
+};
+
+export const isTypingFrame = (frame: IncomingWebSocketFrame): frame is TypingFrame => {
+  if (frame.type !== 'typing' || !isRecord(frame.data)) return false;
+  return typeof frame.data.conversationId === 'string'
+    && typeof frame.data.isTyping === 'boolean';
+};
 
 class WebSocketService {
   private ws: WebSocket | null = null;
+  private token: string | null = null;
   private url = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws/chat';
   private messageCallbacks: MessageCallback[] = [];
 
-  connect(token: string) {
-    if (this.ws) return;
+  connect(token = localStorage.getItem('token')) {
+    if (!token) return;
+    if (this.ws && this.token === token) return;
+    if (this.ws) {
+      this.ws.close();
+    }
 
-    // Standard WebSocket does not support passing headers directly in browser.
-    // Usually, token is passed via query string if the gateway allows it,
-    // or Kong needs to be configured to read from query params.
-    // For this example, we'll append it to the URL:
+    this.token = token;
     this.ws = new WebSocket(`${this.url}?token=${token}`);
 
     this.ws.onopen = () => {
@@ -20,9 +70,11 @@ class WebSocketService {
 
     this.ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        this.messageCallbacks.forEach(cb => cb(data));
-      } catch (e) {
+        const data: unknown = JSON.parse(event.data);
+        if (isRecord(data) && typeof data.type === 'string') {
+          this.messageCallbacks.forEach(cb => cb(data as IncomingWebSocketFrame));
+        }
+      } catch {
         console.error('Invalid WS message', event.data);
       }
     };
@@ -30,7 +82,6 @@ class WebSocketService {
     this.ws.onclose = () => {
       console.log('WebSocket disconnected');
       this.ws = null;
-      // Reconnect logic could be added here
     };
 
     this.ws.onerror = (err) => {
@@ -43,6 +94,7 @@ class WebSocketService {
       this.ws.close();
       this.ws = null;
     }
+    this.token = null;
   }
 
   onMessage(callback: MessageCallback) {
@@ -52,10 +104,20 @@ class WebSocketService {
     };
   }
 
-  send(data: any) {
+  send(data: WebSocketFrame) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     }
+  }
+
+  sendTyping(conversationId: string, isTyping: boolean) {
+    this.send({
+      type: 'typing',
+      data: {
+        conversationId,
+        isTyping
+      }
+    });
   }
 }
 
