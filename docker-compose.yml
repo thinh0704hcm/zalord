@@ -15,6 +15,7 @@ volumes:
   redisdata:
   rabbitdata:
   kafkadata:
+  frontend_node_modules:
 
 services:
   # ── Postgres: auth-service's database ─────────────────────────────────────
@@ -627,3 +628,23 @@ services:
       URLS_PRIMARY_NAME: auth-service
     mem_limit: 64m
     networks: [zalord-net]
+
+  # ── Frontend dev server (Vite hot reload) ─────────────────────────────────
+  # Source is bind-mounted from ./frontend. node_modules stays in a Docker
+  # volume so the VPS host does not need npm packages installed.
+  frontend:
+    image: node:24-alpine
+    container_name: zalord-frontend
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5179 --strictPort"
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-5179}:5179"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    mem_limit: 512m
+    networks: [zalord-net]
+
