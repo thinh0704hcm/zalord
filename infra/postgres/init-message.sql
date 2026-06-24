@@ -59,15 +59,17 @@ CREATE INDEX idx_msg_att_message ON message_attachments (message_id);
 -- consuming the message.created event (async, eventual consistency).
 -- Frontend's inbox list reads from here with ONE indexed query.
 CREATE TABLE conversation_views (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id              UUID NOT NULL,
-    conversation_id      UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    other_user_id        UUID,                                  -- for DIRECT: the other party
-    last_message_preview VARCHAR(200),
-    last_message_at      TIMESTAMPTZ,
-    last_sender_id       UUID,
-    unread_count         INT NOT NULL DEFAULT 0,
-    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id               UUID NOT NULL,
+    conversation_id       UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    other_user_id         UUID,                                 -- for DIRECT: the other party
+    last_message_preview  VARCHAR(200),
+    last_message_at       TIMESTAMPTZ,
+    last_sender_id        UUID,
+    unread_count          INT NOT NULL DEFAULT 0,
+    last_read_message_id  UUID,                                 -- read receipt: last seen msg
+    last_read_at          TIMESTAMPTZ,                          -- when the user marked it read
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT conv_views_unique UNIQUE (user_id, conversation_id)
 );
 

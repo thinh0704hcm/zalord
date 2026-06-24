@@ -17,3 +17,13 @@ type MessageCreatedEvent struct {
 	AttachmentIds  []uuid.UUID `json:"attachmentIds"`
 	CreatedAt      time.Time   `json:"createdAt"`
 }
+
+// MessageReadEvent — published by message-service when a user marks a
+// conversation as read. chat-service fans it out to the other members so
+// "Seen" markers update in real time.
+type MessageReadEvent struct {
+	ConversationId    uuid.UUID `json:"conversationId"`
+	ReaderId          uuid.UUID `json:"readerId"`
+	LastReadMessageId uuid.UUID `json:"lastReadMessageId"`
+	ReadAt            time.Time `json:"readAt"`
+}

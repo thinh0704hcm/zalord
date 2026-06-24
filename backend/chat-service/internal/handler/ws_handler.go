@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -8,33 +9,32 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/middleware"
+	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/presence"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/session"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/logger"
 	"go.uber.org/zap"
 )
 
 const (
-	// How long we wait for a pong before declaring the conn dead.
-	pongWait = 60 * time.Second
-	// How often we send pings — slightly less than pongWait.
+	pongWait   = 60 * time.Second
 	pingPeriod = (pongWait * 9) / 10
-	// Max time to wait when writing one frame.
-	writeWait = 10 * time.Second
+	writeWait  = 10 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// Dev-only: any origin can upgrade. In prod restrict to known web origins.
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
 type WsHandler struct {
 	registry *session.Registry
+	router   *Router
+	presence *presence.Registry
 }
 
-func NewWsHandler(reg *session.Registry) *WsHandler {
-	return &WsHandler{registry: reg}
+func NewWsHandler(reg *session.Registry, router *Router, pres *presence.Registry) *WsHandler {
+	return &WsHandler{registry: reg, router: router, presence: pres}
 }
 
 // Connect upgrades the HTTP request to a WebSocket. Identity is taken from
@@ -58,21 +58,27 @@ func (h *WsHandler) Connect(c *gin.Context) {
 	client := &session.Client{
 		UserID: userID,
 		Conn:   conn,
-		Send:   make(chan []byte, 32), // bounded — drop if slow consumer
+		Send:   make(chan []byte, 32),
 	}
 	h.registry.Add(client)
+	if h.presence != nil {
+		h.presence.MarkOnline(c.Request.Context(), userID)
+	}
 	logger.Log.Info("ws connected", zap.String("userId", uidStr))
 
 	go h.writePump(client)
-	go h.readPump(client) // blocks until close, then cleans up
+	go h.readPump(client)
 }
 
-// writePump owns all writes to the socket. Reads from the Send channel; also
-// emits periodic pings so idle conns don't get killed by intermediate proxies.
+// writePump owns all writes to the socket. Also emits periodic pings + refreshes
+// the presence heartbeat so a crashed instance's users eventually expire from
+// the online set.
 func (h *WsHandler) writePump(c *session.Client) {
 	ticker := time.NewTicker(pingPeriod)
+	hbTicker := time.NewTicker(presence.HeartbeatRefresh)
 	defer func() {
 		ticker.Stop()
+		hbTicker.Stop()
 		_ = c.Conn.Close()
 	}()
 	for {
@@ -80,7 +86,6 @@ func (h *WsHandler) writePump(c *session.Client) {
 		case msg, ok := <-c.Send:
 			_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// Send channel closed — tell peer we're done and exit.
 				_ = c.Conn.WriteMessage(websocket.CloseMessage, nil)
 				return
 			}
@@ -93,16 +98,26 @@ func (h *WsHandler) writePump(c *session.Client) {
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
+		case <-hbTicker.C:
+			if h.presence != nil {
+				h.presence.Heartbeat(context.Background(), c.UserID)
+			}
 		}
 	}
 }
 
-// readPump runs on its own goroutine. We don't expect inbound messages yet
-// (chat-service only PUSHes for now), but we must read so the conn closure
-// is detected and pong frames flow back. On exit, deregister + close.
+// readPump consumes inbound frames and dispatches via Router. On exit it
+// deregisters, drops watch subscriptions, and broadcasts offline if this was
+// the user's last connection on this instance.
 func (h *WsHandler) readPump(c *session.Client) {
 	defer func() {
 		h.registry.Remove(c)
+		if h.router != nil {
+			h.router.Watchers().Forget(c)
+		}
+		if h.presence != nil && len(h.registry.Get(c.UserID)) == 0 {
+			h.presence.MarkOffline(context.Background(), c.UserID)
+		}
 		close(c.Send)
 		_ = c.Conn.Close()
 		logger.Log.Info("ws disconnected", zap.String("userId", c.UserID.String()))
@@ -113,8 +128,12 @@ func (h *WsHandler) readPump(c *session.Client) {
 		return c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
 	for {
-		if _, _, err := c.Conn.ReadMessage(); err != nil {
+		_, msg, err := c.Conn.ReadMessage()
+		if err != nil {
 			return
+		}
+		if h.router != nil {
+			h.router.Handle(context.Background(), c, msg)
 		}
 	}
 }

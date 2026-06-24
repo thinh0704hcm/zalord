@@ -22,6 +22,10 @@ public class RabbitMQConfig {
     // Routing key for "a message was created" events.
     public static final String MESSAGE_CREATED_ROUTING_KEY = "message.created";
 
+    // Routing key for "user has read up to messageId" events. chat-service
+    // consumes this and pushes "Seen" markers over WebSocket.
+    public static final String MESSAGE_READ_ROUTING_KEY    = "message.read";
+
     // Smoke-test queue — chat-service (Sprint Core-2) will declare its own.
     public static final String MESSAGE_QUEUE = "message.queue";
     public static final String MESSAGE_BINDING_KEY = "message.#";

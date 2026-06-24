@@ -11,10 +11,13 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/config"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/events"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/handler"
+	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/membership"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/middleware"
+	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/presence"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/session"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/eventbus"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/logger"
+	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/redisx"
 	"go.uber.org/zap"
 )
 
@@ -28,25 +31,46 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// EventBus — backend chosen by EVENT_BUS env (rabbitmq | kafka).
-	// Must match message-service so both ends speak the same broker.
+	// Redis powers the membership cache (read), presence registry, and presence
+	// pub/sub. All three are best-effort: a Redis outage degrades realtime
+	// features but doesn't break chat-service's core message fan-out.
+	rdb, err := redisx.New(ctx)
+	if err != nil {
+		logger.Log.Fatal("redis connect failed", zap.Error(err))
+	}
+	defer func() { _ = rdb.Close() }()
+
 	bus, err := eventbus.New(cfg.MqUri, os.Getenv("KAFKA_BOOTSTRAP"))
 	if err != nil {
 		logger.Log.Fatal("eventbus init failed", zap.Error(err))
 	}
 	defer func() { _ = bus.Close() }()
 
-	// Registry + handlers
 	reg := session.NewRegistry()
-	wsHandler := handler.NewWsHandler(reg)
-	fanOut := events.NewFanOut(reg)
+	memCache := membership.New(rdb)
+	pres := presence.New(rdb)
+	router := handler.NewRouter(reg, memCache, pres)
+	wsHandler := handler.NewWsHandler(reg, router, pres)
 
 	// Subscribe to message.created via the chosen backend.
+	fanOut := events.NewFanOut(reg)
 	if err := bus.Subscribe(ctx, "message.created", "chat-fanout", fanOut.Handle); err != nil {
-		logger.Log.Fatal("subscribe failed", zap.Error(err))
+		logger.Log.Fatal("subscribe message.created failed", zap.Error(err))
 	}
 
-	// HTTP / WebSocket server
+	// Read receipts ride on a separate consumer group so they're independent
+	// of message.created — a slow read-receipt handler can't back up message
+	// delivery.
+	readFanOut := events.NewReadReceiptFanOut(reg, memCache)
+	if err := bus.Subscribe(ctx, "message.read", "chat-read-receipt", readFanOut.Handle); err != nil {
+		logger.Log.Fatal("subscribe message.read failed", zap.Error(err))
+	}
+
+	// Presence relay runs as a goroutine: listens to Redis pub/sub for
+	// transitions on ANY instance and pushes to local watchers.
+	relay := events.NewPresenceRelay(pres, router)
+	go relay.Run(ctx)
+
 	r := gin.Default()
 	r.GET("/health", func(c *gin.Context) {
 		users, conns := reg.Stats()
