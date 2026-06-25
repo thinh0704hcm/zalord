@@ -55,7 +55,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-export default function SidebarNav() {
+export default function SidebarNav({ unreadCount = 0 }: { unreadCount?: number }) {
   const [activeTab, setActiveTab] = useState('message');
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
@@ -328,9 +328,14 @@ export default function SidebarNav() {
           <div className="flex flex-col w-full mt-6 items-center gap-0.5">
             <div 
               onClick={() => setActiveTab('message')}
-              className={`w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${activeTab === 'message' ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
+              className={`relative w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${activeTab === 'message' ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
             >
               {activeTab === 'message' ? <ZalordMessageFilledIcon /> : <ZalordMessageOutlineIcon />}
+              {unreadCount > 0 && (
+                <div className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#ef4343] px-1.5 text-[11px] font-bold text-white shadow-sm ring-2 ring-[#005ae0]">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
             </div>
             <div 
               onClick={() => setActiveTab('contact')}

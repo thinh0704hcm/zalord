@@ -382,6 +382,7 @@ export default function ChatLayout() {
       name: group.name,
       message: 'Bạn vừa tạo nhóm',
       time: 'Vừa xong',
+      lastMessageAt: new Date().toISOString(),
       unread: 0,
       avatar: selectedAvatars,
       totalMembers: group.members?.length || totalMembers,
@@ -406,6 +407,7 @@ export default function ChatLayout() {
       name: user.displayName,
       message: 'Bắt đầu trò chuyện',
       time: 'Vừa xong',
+      lastMessageAt: new Date().toISOString(),
       unread: 0,
       avatar: getInitials(user.displayName),
       pendingDirectUserId: user.userId,
@@ -431,6 +433,7 @@ export default function ChatLayout() {
             id: conversationId,
             message: lastMessage ? `Bạn: ${lastMessage}` : chat.message,
             time: 'Vừa xong',
+            lastMessageAt: new Date().toISOString(),
             isPending: false,
             pendingDirectUserId: undefined,
             otherUserId: chat.otherUserId ?? chat.pendingDirectUserId ?? null,
@@ -442,13 +445,34 @@ export default function ChatLayout() {
     setActiveChatId(conversationId);
   };
 
+  const handleSelectChat = (chatId: string | number) => {
+    setActiveChatId(chatId);
+    setChats(prev => prev.map(c => 
+      c.id === chatId && c.unread > 0 
+        ? { ...c, unread: 0 } 
+        : c
+    ));
+  };
+
+  const totalUnreadCount = useMemo(() => {
+    return chats.reduce((sum, chat) => sum + (chat.unread || 0), 0);
+  }, [chats]);
+
+  const sortedChats = useMemo(() => {
+    return [...chats].sort((a, b) => {
+      const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [chats]);
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-white">
-      <SidebarNav />
+      <SidebarNav unreadCount={totalUnreadCount} />
       <ChatList 
-        chats={chats} 
+        chats={sortedChats} 
         activeChatId={activeChatId ?? ''} 
-        onSelectChat={setActiveChatId} 
+        onSelectChat={handleSelectChat} 
         onCreateGroup={handleCreateGroup} 
         onStartDirectChat={handleStartDirectChat}
         isLoading={isLoadingChats}
