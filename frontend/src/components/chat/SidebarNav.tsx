@@ -74,6 +74,7 @@ export default function SidebarNav() {
   const [draftGender, setDraftGender] = useState('');
   const [draftBirthday, setDraftBirthday] = useState('');
   const [draftAvatarUrl, setDraftAvatarUrl] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -186,6 +187,7 @@ export default function SidebarNav() {
 
   const beginAvatarEdit = () => {
     setDraftAvatarUrl(profile?.avatarUrl ?? avatarUrl ?? '');
+    setAvatarPreview(null);
     setUpdateError('');
     setProfileMode('avatar');
   };
@@ -315,7 +317,13 @@ export default function SidebarNav() {
                 {(profileMode === 'edit' || profileMode === 'avatar') && (
                   <button
                     type="button"
-                    onClick={() => setProfileMode('view')}
+                    onClick={() => {
+                      if (profileMode === 'avatar' && avatarPreview) {
+                        setAvatarPreview(null);
+                      } else {
+                        setProfileMode('view');
+                      }
+                    }}
                     className="flex h-8 w-8 items-center justify-center rounded-md text-[#081c36] hover:bg-[#f0f2f5]"
                     title="Quay lại"
                   >
@@ -455,6 +463,32 @@ export default function SidebarNav() {
                   </button>
                 </div>
               </>
+            ) : avatarPreview ? (
+              <div className="flex flex-col flex-1 h-[440px]">
+                <div className="flex-1 px-5 py-8 flex flex-col items-center justify-center">
+                  <div className="relative w-[280px] h-[280px] overflow-hidden flex items-center justify-center rounded-full border-4 border-[#eef0f4] shadow-sm">
+                    <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                </div>
+                
+                <div className="flex justify-end gap-3 border-t border-[#eef0f4] px-5 py-3 mt-auto">
+                  <button
+                    type="button"
+                    onClick={() => setAvatarPreview(null)}
+                    className="h-10 rounded-md bg-[#f0f2f5] px-6 text-[15px] font-medium text-[#081c36] hover:bg-[#e3e7ed]"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyAvatarUpdate}
+                    disabled={isUpdating}
+                    className="h-10 rounded-md bg-[#0068ff] px-6 text-[15px] font-semibold text-white hover:bg-[#0057d9] disabled:opacity-60"
+                  >
+                    {isUpdating ? 'Đang cập nhật...' : 'Cập nhật'}
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="px-5 pt-4 pb-12 min-h-[440px]">
                 <input
@@ -465,8 +499,7 @@ export default function SidebarNav() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      console.log('Selected file:', file);
-                      // TODO: Handle image preview and upload when backend supports it
+                      setAvatarPreview(URL.createObjectURL(file));
                     }
                   }}
                 />
