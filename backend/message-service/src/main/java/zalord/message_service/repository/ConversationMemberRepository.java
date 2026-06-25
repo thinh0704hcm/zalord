@@ -10,7 +10,11 @@ import zalord.message_service.model.ConversationMember;
 import java.util.List;
 import java.util.UUID;
 
+import java.util.Optional;
+
 public interface ConversationMemberRepository extends JpaRepository<ConversationMember, UUID> {
+
+    Optional<ConversationMember> findByConversationIdAndUserId(UUID conversationId, UUID userId);
 
     boolean existsByConversationIdAndUserId(UUID conversationId, UUID userId);
 

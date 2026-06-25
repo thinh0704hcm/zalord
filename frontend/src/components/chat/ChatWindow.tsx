@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { UserPlus, Users, ThumbsUp, Quote, X, RotateCcw } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
+import GroupSidebar from './GroupSidebar';
 import { Avatar } from './Avatar';
 
 import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
 import { inboxService } from '../../services/inbox';
 import { conversationService } from '../../services/conversation';
-import { isMessageCreatedFrame, isMessageReadFrame, isTypingFrame, isMessageRecalledFrame, wsService } from '../../services/websocket';
+import { isMessageCreatedFrame, isMessageReadFrame, isTypingFrame, isMessageRecalledFrame, isGroupMemberEventFrame, wsService } from '../../services/websocket';
 import { userService } from '../../services/user';
 import { groupService } from '../../services/group';
 
@@ -99,6 +100,8 @@ const Daystamp = ({ date }: { date: string }) => {
 
 export default function ChatWindow({ chat, onConversationReady }: ChatWindowProps) {
   const [isAddMembersModalOpen, setIsAddMembersModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isKicked, setIsKicked] = useState(false);
   const [inputText, setInputText] = useState("");
   const [groupMemberCount, setGroupMemberCount] = useState<number | null>(null);
   const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
@@ -154,7 +157,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   };
 
   const sendTypingState = (isTyping: boolean, force = false) => {
-    if (!chat || typeof chat.id !== 'string' || chat.isPending) return;
+    if (!chat || !chat.id || chat.isPending) return;
     const now = Date.now();
 
     if (isTyping && !force && isTypingSentRef.current && now - lastTypingSentAtRef.current < TYPING_REFRESH_MS) {
@@ -165,7 +168,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       return;
     }
 
-    wsService.sendTyping(chat.id, isTyping);
+    wsService.sendTyping(chat.id.toString(), isTyping);
     lastTypingSentAtRef.current = now;
     isTypingSentRef.current = isTyping;
   };
@@ -244,11 +247,31 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
     }
   };
 
+  const fetchGroupDetails = useCallback(() => {
+    if (!chat?.group || !chat.id) return;
+    groupService.get(chat.id.toString())
+      .then(group => {
+        setGroupMemberCount(group.members.length);
+        setGroupMemberIds(group.members.map(member => member.userId));
+        setIsKicked(false);
+      })
+      .catch((err) => {
+        setGroupMemberIds([]);
+        if (err.message === 'You are not a member of this group') {
+          setIsKicked(true);
+        }
+        if (!chat.totalMembers) {
+          setGroupMemberCount(null);
+        }
+      });
+  }, [chat?.id, chat?.group, chat?.totalMembers]);
+
   useEffect(() => {
-    if (!chat?.group || typeof chat.id !== 'string') {
+    if (!chat?.group || !chat.id) {
       queueMicrotask(() => {
         setGroupMemberCount(null);
         setGroupMemberIds([]);
+        setIsKicked(false);
       });
       return;
     }
@@ -257,27 +280,9 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       queueMicrotask(() => setGroupMemberCount(chat.totalMembers ?? null));
     }
 
-    let cancelled = false;
-    groupService.get(chat.id)
-      .then(group => {
-        if (!cancelled) {
-          setGroupMemberCount(group.members.length);
-          setGroupMemberIds(group.members.map(member => member.userId));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setGroupMemberIds([]);
-          if (!chat.totalMembers) {
-            setGroupMemberCount(null);
-          }
-        }
-      });
+    fetchGroupDetails();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [chat?.group, chat?.id, chat?.totalMembers]);
+  }, [chat?.group, chat?.id, chat?.totalMembers, fetchGroupDetails]);
 
   useEffect(() => {
     const previousChat = previousChatRef.current;
@@ -293,6 +298,9 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         setUserMessages([]);
         setReplyingTo(null);
       }
+      
+      setIsSidebarOpen(false);
+      setIsKicked(false);
 
       if (chat && typeof chat.id === 'string' && !chat.isPending) {
         const conversationId = chat.id;
@@ -401,6 +409,10 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         remoteTypingTimeoutsRef.current[userId] = window.setTimeout(() => {
           clearTypingUser(userId);
         }, REMOTE_TYPING_TTL_MS);
+      }
+      
+      if (isGroupMemberEventFrame(msg) && msg.data.conversationId === chat?.id.toString()) {
+        fetchGroupDetails();
       }
     });
     
@@ -542,7 +554,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   }
 
   return (
-    <div className="flex-1 h-screen flex flex-col bg-[#eef0f1] relative">
+    <div className="flex-1 h-screen flex flex-row">
+      <div className="flex-1 flex flex-col bg-[#eef0f1] relative min-w-0">
       {/* Header */}
       <div className="h-[64px] bg-white border-b border-[#d6dbe1] flex items-center justify-between px-4 flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -554,12 +567,21 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               {!chat.group && (
                 <span className={`mr-1.5 h-2 w-2 rounded-full ${chat.presenceStatus === 'online' ? 'bg-[#31a24c]' : 'bg-[#b8c0cc]'}`} />
               )}
-              <span>{chat.group ? `${groupMemberCount ?? chat.totalMembers ?? 0} thành viên` : (chat.presenceStatus === 'online' ? 'Trực tuyến' : 'Ngoại tuyến')}</span>
+              {isKicked ? (
+                <span>Bạn đã rời nhóm</span>
+              ) : (
+                <span 
+                  className={chat.group ? "cursor-pointer hover:underline" : ""} 
+                  onClick={() => chat.group && setIsSidebarOpen(!isSidebarOpen)}
+                >
+                  {chat.group ? `${groupMemberCount ?? chat.totalMembers ?? 0} thành viên` : (chat.presenceStatus === 'online' ? 'Trực tuyến' : 'Ngoại tuyến')}
+                </span>
+              )}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-1 text-gray-600">
-          {chat.group && (
+          {chat.group && !isKicked && (
             <button
               onClick={() => setIsAddMembersModalOpen(true)}
               className="p-1.5 rounded-md transition-colors hover:bg-gray-100"
@@ -850,6 +872,11 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       )}
 
       {/* Input Area */}
+      {isKicked ? (
+        <div className="bg-[#e9eaec] flex items-center justify-center h-[90px] text-gray-500 text-[14px] border-t border-[#d6dbe1] flex-shrink-0">
+          Bạn không còn là thành viên của nhóm này
+        </div>
+      ) : (
       <div className="bg-white flex flex-col flex-shrink-0">
         {replyingTo && (
           <div className="flex items-center justify-between px-4 py-2 bg-[#f2f4f7] border-t border-[#d6dbe1] text-[13px] text-[#081c36]">
@@ -887,6 +914,12 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           />
         </div>
       </div>
+      )}
+      </div>
+
+      {isSidebarOpen && chat.group && !isKicked && (
+        <GroupSidebar groupId={chat.id.toString()} />
+      )}
     </div>
   );
 }

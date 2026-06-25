@@ -33,6 +33,9 @@ public class ConversationMember {
     @Column(name = "joined_at", nullable = false, updatable = false)
     private Instant joinedAt;
 
+    @Column(name = "left_at")
+    private Instant leftAt;
+
     @PrePersist
     protected void onCreate() {
         this.joinedAt = Instant.now();

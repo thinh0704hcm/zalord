@@ -87,10 +87,20 @@ public class MessageServiceImpl implements IMessageService {
         if (members.isEmpty()) {
             throw new NotMemberException("Conversation not found or you are not a member");
         }
-        List<UUID> memberIds = members.stream().map(ConversationMember::getUserId).toList();
-        if (!memberIds.contains(caller)) {
-            throw new NotMemberException("You are not a member of this conversation");
+
+        ConversationMember callerMember = members.stream()
+                .filter(m -> m.getUserId().equals(caller))
+                .findFirst()
+                .orElseThrow(() -> new NotMemberException("You are not a member of this conversation"));
+        
+        if (callerMember.getLeftAt() != null) {
+            throw new NotMemberException("You are no longer a member of this conversation");
         }
+
+        List<UUID> memberIds = members.stream()
+                .filter(m -> m.getLeftAt() == null)
+                .map(ConversationMember::getUserId)
+                .toList();
 
         // Validate the reply target (if any) BEFORE we touch media — cheaper
         // failure first. Allowed to reply to a recalled message; the UI can
@@ -183,16 +193,20 @@ public class MessageServiceImpl implements IMessageService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<MessageResponse> history(UUID caller, UUID conversationId, int page, int size) {
-        boolean isMember = memberRepo.existsByConversationIdAndUserId(conversationId, caller);
-        if (!isMember) {
-            throw new NotMemberException("You are not a member of this conversation");
-        }
+        ConversationMember member = memberRepo.findByConversationIdAndUserId(conversationId, caller)
+                .orElseThrow(() -> new NotMemberException("You are not a member of this conversation"));
+
         if (page < 1) page = 1;
         if (size < 1) size = 50;
         if (size > 200) size = 200;
 
         Pageable pageable = PageRequest.of(page - 1, size);
-        Page<Message> result = messageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
+        Page<Message> result;
+        if (member.getLeftAt() != null) {
+            result = messageRepo.findByConversationIdAndCreatedAtLessThanEqualOrderByCreatedAtDesc(conversationId, member.getLeftAt(), pageable);
+        } else {
+            result = messageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
+        }
 
         List<UUID> ids = result.getContent().stream().map(Message::getId).toList();
         Map<UUID, List<UUID>> attachmentsByMsg = ids.isEmpty() ? Map.of()
@@ -212,10 +226,8 @@ public class MessageServiceImpl implements IMessageService {
     @Override
     @Transactional(readOnly = true)
     public List<MessageReaderResponse> lastMessageReaders(UUID caller, UUID conversationId) {
-        boolean isMember = memberRepo.existsByConversationIdAndUserId(conversationId, caller);
-        if (!isMember) {
-            throw new NotMemberException("You are not a member of this conversation");
-        }
+        ConversationMember member = memberRepo.findByConversationIdAndUserId(conversationId, caller)
+                .orElseThrow(() -> new NotMemberException("You are not a member of this conversation"));
 
         Optional<Message> latest = messageRepo.findFirstByConversationIdOrderByCreatedAtDesc(conversationId);
         if (latest.isEmpty()) {

@@ -101,6 +101,8 @@ public class InboxProjector {
         String preview = previewOf(event);
 
         for (ConversationMember m : members) {
+            if (m.getLeftAt() != null) continue;
+            
             UUID memberId = m.getUserId();
             UUID otherUserId = convType == ConversationType.DIRECT
                     ? pickOther(members, memberId)

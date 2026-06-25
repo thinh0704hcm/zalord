@@ -118,15 +118,16 @@ public class GroupEventConsumer {
     private void handleMemberRemoved(byte[] body) throws Exception {
         GroupMemberRemovedEvent e = objectMapper.readValue(body, GroupMemberRemovedEvent.class);
 
-        // Use native deletes — JpaRepository deleteBy methods exist but it's
-        // cleaner to issue a single DELETE for each.
         memberRepo.findAllByConversationId(e.groupId()).stream()
                 .filter(m -> m.getUserId().equals(e.userId()))
                 .findFirst()
-                .ifPresent(memberRepo::delete);
+                .ifPresent(m -> {
+                    m.setLeftAt(java.time.Instant.now());
+                    memberRepo.save(m);
+                });
 
-        // Drop the user's view of this group from their inbox.
-        viewRepo.deleteUserConversationView(e.userId(), e.groupId());
+        // We do NOT delete the ConversationView so they can still view history.
+        // But we DO evict from Redis so they can't download NEW attachments.
 
         // Evict from Redis cache — they can no longer download attachments here.
         membersCache.removeMember(e.groupId(), e.userId());

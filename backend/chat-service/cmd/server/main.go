@@ -73,6 +73,17 @@ func main() {
 		logger.Log.Fatal("subscribe message.recalled failed", zap.Error(err))
 	}
 
+	// Group events
+	groupAddedFanOut := events.NewGroupEventFanOut(reg, memCache, "group.member.added")
+	if err := bus.Subscribe(ctx, "group.member.added", "chat-group-added", groupAddedFanOut.Handle); err != nil {
+		logger.Log.Fatal("subscribe group.member.added failed", zap.Error(err))
+	}
+
+	groupRemovedFanOut := events.NewGroupEventFanOut(reg, memCache, "group.member.removed")
+	if err := bus.Subscribe(ctx, "group.member.removed", "chat-group-removed", groupRemovedFanOut.Handle); err != nil {
+		logger.Log.Fatal("subscribe group.member.removed failed", zap.Error(err))
+	}
+
 	// Presence relay runs as a goroutine: listens to Redis pub/sub for
 	// transitions on ANY instance and pushes to local watchers.
 	relay := events.NewPresenceRelay(pres, router)

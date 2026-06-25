@@ -10,6 +10,11 @@ export type MessageCreatedFrameData = {
   content: string;
   createdAt?: string;
   attachmentIds?: string[];
+  replyTo?: {
+    messageId: string;
+    senderId: string;
+    preview: string;
+  };
 };
 
 export type TypingFrameData = {
@@ -44,7 +49,23 @@ export type MessageRecalledFrameData = {
   recalledAt: string;
 };
 
-export type IncomingWebSocketFrame = WebSocketFrame<unknown>;
+export interface GroupMemberEventFrame {
+  type: 'group.member.added' | 'group.member.removed';
+  data: {
+    conversationId: string;
+    userId: string;
+  };
+}
+
+export type IncomingWebSocketFrame =
+  | MessageCreatedFrame
+  | MessageRecalledFrame
+  | TypingFrame
+  | MessageReadFrame
+  | PresenceStateFrame
+  | PresenceEventFrame
+  | GroupMemberEventFrame;
+
 export type MessageCreatedFrame = {
   type: 'message.created';
   data: MessageCreatedFrameData;
@@ -121,6 +142,12 @@ export const isPresenceEventFrame = (frame: IncomingWebSocketFrame): frame is Pr
   return typeof frame.data.userId === 'string'
     && isPresenceStatus(frame.data.status)
     && typeof frame.data.at === 'string';
+};
+
+export const isGroupMemberEventFrame = (frame: IncomingWebSocketFrame): frame is GroupMemberEventFrame => {
+  if ((frame.type !== 'group.member.added' && frame.type !== 'group.member.removed') || !isRecord(frame.data)) return false;
+  return typeof frame.data.conversationId === 'string'
+    && typeof frame.data.userId === 'string';
 };
 
 class WebSocketService {

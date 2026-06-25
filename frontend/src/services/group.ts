@@ -56,5 +56,16 @@ export const groupService = {
       }
       throw new Error('Không thể thêm thành viên');
     }
+  },
+
+  removeMember: async (groupId: string, userId: string): Promise<void> => {
+    try {
+      await api.delete(`/groups/${groupId}/members/${userId}`);
+    } catch (error: any) {
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error('Không thể xóa thành viên');
+    }
   }
 };
