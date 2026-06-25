@@ -13,6 +13,7 @@ export interface UserProfile {
 
 export type UpdateProfilePayload = {
   displayName: string;
+  avatarUrl?: string | null;
   gender?: string | null;
   dateOfBirth?: string | null;
 };

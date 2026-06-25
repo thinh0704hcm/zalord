@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, ChevronLeft, ExternalLink, Pencil, X } from 'lucide-react';
+import { Camera, ChevronLeft, Pencil, X } from 'lucide-react';
 import { userService, type UserProfile } from '../../services/user';
 import { 
   ZalordMessageFilledIcon,
@@ -20,7 +20,7 @@ type StoredUser = {
   dateOfBirth?: string | null;
 };
 
-type ProfileMode = 'view' | 'edit';
+type ProfileMode = 'view' | 'edit' | 'avatar';
 
 const UNSET_PROFILE_VALUE = 'Chưa cập nhật';
 
@@ -73,6 +73,7 @@ export default function SidebarNav() {
   const [draftName, setDraftName] = useState(getStoredUserName);
   const [draftGender, setDraftGender] = useState('');
   const [draftBirthday, setDraftBirthday] = useState('');
+  const [draftAvatarUrl, setDraftAvatarUrl] = useState('');
   const [updateError, setUpdateError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -90,6 +91,7 @@ export default function SidebarNav() {
         setDraftGender(nextProfile.gender ?? '');
         setDraftBirthday(nextProfile.dateOfBirth ?? '');
         setAvatarUrl(nextProfile.avatarUrl);
+        setDraftAvatarUrl(nextProfile.avatarUrl ?? '');
 
         const storedUser = getStoredUser();
         localStorage.setItem(
@@ -181,6 +183,48 @@ export default function SidebarNav() {
     }
   };
 
+  const beginAvatarEdit = () => {
+    setDraftAvatarUrl(profile?.avatarUrl ?? avatarUrl ?? '');
+    setUpdateError('');
+    setProfileMode('avatar');
+  };
+
+  const applyAvatarUpdate = async () => {
+    setIsUpdating(true);
+    setUpdateError('');
+    try {
+      const updatedProfile = await userService.updateMe({
+        displayName: profile?.displayName || userName,
+        gender: profile?.gender || null,
+        dateOfBirth: profile?.dateOfBirth || null,
+        avatarUrl: draftAvatarUrl || null,
+      });
+
+      setProfile(updatedProfile);
+      setUserName(updatedProfile.displayName);
+      setDraftName(updatedProfile.displayName);
+      setDraftGender(updatedProfile.gender ?? '');
+      setDraftBirthday(updatedProfile.dateOfBirth ?? '');
+      setAvatarUrl(updatedProfile.avatarUrl);
+      setDraftAvatarUrl(updatedProfile.avatarUrl ?? '');
+
+      const storedUser = getStoredUser();
+      localStorage.setItem(
+        'user',
+        JSON.stringify({
+          ...storedUser,
+          ...updatedProfile,
+          username: updatedProfile.phoneNumber,
+        })
+      );
+      setProfileMode('view');
+    } catch (error: unknown) {
+      setUpdateError(getErrorMessage(error, 'Không thể cập nhật ảnh đại diện'));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const storedUser = getStoredUser();
   const accountPhone = profile?.phoneNumber || storedUser.phoneNumber || storedUser.username;
   const accountGender = profile?.gender || storedUser.gender || UNSET_PROFILE_VALUE;
@@ -209,10 +253,6 @@ export default function SidebarNav() {
                 </div>
                 <div className="h-px bg-gray-200 my-1" />
                 <div className="flex flex-col">
-                  <div className="px-4 py-2.5 hover:bg-gray-100 cursor-pointer text-[14px] text-gray-700 flex justify-between items-center transition-colors">
-                    <span>Nâng cấp tài khoản</span>
-                    <ExternalLink size={16} className="text-gray-500" />
-                  </div>
                   <button
                     type="button"
                     onClick={openAccountProfile}
@@ -271,7 +311,7 @@ export default function SidebarNav() {
           <div className="w-[500px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[4px] bg-white shadow-[0_8px_28px_rgba(0,0,0,0.22)]">
             <div className="flex h-[62px] items-center justify-between px-5 border-b border-[#e7e9ee]">
               <div className="flex items-center gap-2 min-w-0">
-                {profileMode === 'edit' && (
+                {(profileMode === 'edit' || profileMode === 'avatar') && (
                   <button
                     type="button"
                     onClick={() => setProfileMode('view')}
@@ -282,7 +322,7 @@ export default function SidebarNav() {
                   </button>
                 )}
                 <h2 className="truncate text-[20px] font-semibold text-[#081c36]">
-                  {profileMode === 'view' ? 'Thông tin tài khoản' : 'Cập nhật thông tin'}
+                  {profileMode === 'view' ? 'Thông tin tài khoản' : profileMode === 'edit' ? 'Cập nhật thông tin' : 'Cập nhật ảnh đại diện'}
                 </h2>
               </div>
               <button
@@ -304,7 +344,7 @@ export default function SidebarNav() {
                 <div className="relative flex min-h-[100px] items-center gap-5 px-5 pb-5 pt-4 border-b-[6px] border-[#eef0f4]">
                   <div className="relative -mt-[56px] h-[100px] w-[100px] shrink-0 rounded-full border-4 border-white bg-[#2f80ed] shadow-sm flex items-center justify-center text-[36px] font-bold text-white overflow-visible">
                     {avatarUrl ? <img src={avatarUrl} alt={userName} className="h-full w-full rounded-full object-cover" /> : getInitials(userName)}
-                    <button className="absolute bottom-1 right-0 flex h-8 w-8 items-center justify-center rounded-full border border-[#d3d8df] bg-[#f2f4f7] text-[#304057] shadow-sm" title="Đổi ảnh đại diện">
+                    <button onClick={beginAvatarEdit} className="absolute bottom-1 right-0 flex h-8 w-8 items-center justify-center rounded-full border border-[#d3d8df] bg-[#f2f4f7] text-[#304057] shadow-sm" title="Đổi ảnh đại diện">
                       <Camera size={17} strokeWidth={1.7} />
                     </button>
                   </div>
@@ -339,7 +379,7 @@ export default function SidebarNav() {
                   </button>
                 </div>
               </>
-            ) : (
+            ) : profileMode === 'edit' ? (
               <>
                 <div className="px-5 py-5">
                   <div className="space-y-4">
@@ -407,6 +447,44 @@ export default function SidebarNav() {
                   <button
                     type="button"
                     onClick={applyProfileUpdate}
+                    disabled={isUpdating}
+                    className="h-10 rounded-md bg-[#0068ff] px-6 text-[15px] font-semibold text-white hover:bg-[#0057d9] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isUpdating ? 'Đang cập nhật...' : 'Cập nhật'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="px-5 py-5">
+                  <div className="space-y-4">
+                    <label className="block">
+                      <span className="mb-1.5 block text-[14px] font-medium text-[#344054]">Đường dẫn ảnh đại diện</span>
+                      <input
+                        value={draftAvatarUrl}
+                        onChange={(event) => setDraftAvatarUrl(event.target.value)}
+                        placeholder="https://example.com/avatar.jpg"
+                        className="h-10 w-full rounded-md border border-[#d0d5dd] px-3 text-[15px] text-[#081c36] outline-none focus:border-[#0068ff] focus:ring-2 focus:ring-[#0068ff]/15"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {updateError && (
+                  <div className="px-5 pb-2 text-[13px] text-red-500">{updateError}</div>
+                )}
+
+                <div className="flex justify-end gap-3 border-t border-[#eef0f4] px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setProfileMode('view')}
+                    className="h-10 rounded-md px-5 text-[15px] font-medium text-[#081c36] hover:bg-[#f0f2f5]"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyAvatarUpdate}
                     disabled={isUpdating}
                     className="h-10 rounded-md bg-[#0068ff] px-6 text-[15px] font-semibold text-white hover:bg-[#0057d9] disabled:cursor-not-allowed disabled:opacity-60"
                   >
