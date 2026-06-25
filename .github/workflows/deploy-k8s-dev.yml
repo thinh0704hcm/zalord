@@ -59,10 +59,10 @@ jobs:
 
       - name: Apply manifests
         run: |
-          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -s" <<'REMOTE'
+          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
             set -euo pipefail
             kubectl create namespace zalord-dev --dry-run=client -o yaml | kubectl apply -f -
             kubectl apply -f ~/zalord-k8s-dev/
             rm -rf ~/zalord-k8s-dev
             kubectl get configmaps,secrets -n zalord-dev
-REMOTE
+          '"
