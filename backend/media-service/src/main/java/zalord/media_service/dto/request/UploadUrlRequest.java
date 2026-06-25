@@ -10,6 +10,7 @@ public record UploadUrlRequest(
         /** Required for ATTACHMENT (caller must be a member). Ignored for AVATAR. */
         UUID conversationId,
         /** Optional — used by MinIO to set Content-Type on the object. */
-        String mimeType
+        String mimeType,
+        String fileName
 ) {
 }

@@ -13,6 +13,7 @@ public record MediaResponse(
         UUID ownerId,
         MediaKind kind,
         UUID conversationId,
+        String fileName,
         String mimeType,
         Long sizeBytes,
         MediaStatus status,

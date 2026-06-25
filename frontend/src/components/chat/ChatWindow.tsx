@@ -11,7 +11,8 @@ import { inboxService } from '../../services/inbox';
 import { conversationService } from '../../services/conversation';
 import { isMessageCreatedFrame, isMessageReadFrame, isTypingFrame, isMessageRecalledFrame, isGroupMemberEventFrame, wsService } from '../../services/websocket';
 import { userService } from '../../services/user';
-import { mediaService } from '../../services/media';
+import { mediaService, type MediaResponse } from '../../services/media';
+import api from '../../services/api';
 import { groupService } from '../../services/group';
 
 interface ChatWindowProps {
@@ -35,6 +36,7 @@ type UserMessage = {
   isSender?: boolean;
   replyTo?: ReplyToSnippet | null;
   isRecalled?: boolean;
+  attachmentIds?: string[];
 };
 
 type SeenReader = {
@@ -52,6 +54,7 @@ type MessageHistoryItem = {
   senderId: string;
   replyTo?: ReplyToSnippet | null;
   recalledAt?: string;
+  attachmentIds?: string[];
 };
 
 const getMessageDateKey = (date: Date) => date.toISOString().slice(0, 10);
@@ -98,6 +101,72 @@ const Daystamp = ({ date }: { date: string }) => {
     </div>
   );
 };
+
+function AttachmentItem({ id }: { id: string }) {
+  const [media, setMedia] = useState<MediaResponse | null>(null);
+  const [hasError, setHasError] = useState(false);
+  
+  useEffect(() => {
+    let mounted = true;
+    const fetchMedia = async () => {
+      try {
+        const response = await api.get(`/media/${id}`);
+        if (mounted) setMedia(response.data.data);
+      } catch (e) {
+        console.error('Failed to fetch media metadata', e);
+        if (mounted) setHasError(true);
+      }
+    };
+    fetchMedia();
+    return () => { mounted = false; };
+  }, [id]);
+
+  const handleDownload = async () => {
+    try {
+      const res = await api.get(`/media/${id}/url`);
+      const downloadUrl = res.data.data.url;
+      window.open(downloadUrl, '_blank');
+    } catch (e) {
+      console.error('Failed to get download URL', e);
+    }
+  };
+
+  if (hasError) return <div className="text-xs text-red-400 italic p-1 border border-red-200 bg-red-50 rounded mt-1 max-w-[200px]">Tệp không tồn tại hoặc đã bị xóa</div>;
+  if (!media) return <div className="text-xs text-gray-500 italic p-1">Đang tải tệp đính kèm...</div>;
+
+  const isImage = media.mimeType?.startsWith('image/');
+  
+  if (isImage) {
+    return (
+      <div 
+        className="mt-2 rounded overflow-hidden border border-gray-200 cursor-pointer hover:opacity-90 max-w-[200px]"
+        onClick={handleDownload}
+        title="Bấm để tải xuống/xem"
+      >
+        <div className="bg-gray-100 p-2 flex items-center gap-2">
+          <ZalordPhotoIcon className="w-5 h-5 text-gray-500" />
+          <span className="text-xs text-gray-700 truncate">{media.fileName || media.id}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className="mt-2 flex items-center gap-3 p-2 bg-white rounded border border-gray-200 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors w-fit max-w-[250px]"
+      onClick={handleDownload}
+      title="Bấm để tải xuống"
+    >
+      <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-blue-50 rounded text-blue-600">
+        <ZalordAttachIcon className="w-5 h-5" />
+      </div>
+      <div className="flex flex-col min-w-0">
+        <span className="text-sm font-medium text-gray-800 truncate">{media.fileName || media.id}</span>
+        {media.sizeBytes && <span className="text-xs text-gray-500">{(media.sizeBytes / 1024).toFixed(1)} KB</span>}
+      </div>
+    </div>
+  );
+}
 
 export default function ChatWindow({ chat, onConversationReady }: ChatWindowProps) {
   const [isAddMembersModalOpen, setIsAddMembersModalOpen] = useState(false);
@@ -215,8 +284,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
     const readers = await messageService.lastReaders(conversationId);
     
-    // Explicitly exclude both the current viewer and the sender of the last message
-    // (Backend also excludes them, but this adds a bulletproof frontend guarantee)
     const msgs = userMessagesRef.current;
     const latestSenderId = msgs.length > 0 ? msgs[msgs.length - 1].senderId : null;
     
@@ -338,7 +405,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
               isSender,
               replyTo: m.replyTo,
-              isRecalled
+              isRecalled,
+              attachmentIds: m.attachmentIds
             };
           }))).reverse();
 
@@ -367,7 +435,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         queueMicrotask(() => setLastMessageReaders([]));
       }
     }
-  }, [chat, currentUserId, getMessageDateKey]);
+  }, [chat, currentUserId]);
 
   const loadMoreMessages = async () => {
     if (isLoadingMore || !hasMoreMessages || !chat || typeof chat.id !== 'string') return;
@@ -400,7 +468,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
             isSender,
             replyTo: m.replyTo,
-            isRecalled
+            isRecalled,
+            attachmentIds: m.attachmentIds
           };
         }))).reverse();
 
@@ -454,13 +523,14 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           if (prev.some(existing => existing.id === data.messageId)) return prev;
           return [...prev, { 
             id: data.messageId,
-            text: data.content, 
+            text: data.content || (data.attachmentIds?.length ? '[Tệp đính kèm]' : ''), 
             time: timeStr,
             dateKey: getMessageDateKey(createdAt),
             senderId: data.senderId,
             senderName,
             isSender: false,
-            replyTo: data.replyTo
+            replyTo: data.replyTo,
+            attachmentIds: data.attachmentIds
           }];
         });
         void markConversationRead(data.conversationId, data.messageId)
@@ -555,7 +625,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         senderId: currentUserId || undefined, 
         senderName: 'Bạn', 
         isSender: true,
-        replyTo: currentReply ? { messageId: currentReply.id, senderId: currentReply.senderId, preview: currentReply.content } : null
+        replyTo: currentReply ? { messageId: currentReply.id, senderId: currentReply.senderId, preview: currentReply.content } : null,
+        attachmentIds: undefined // For optimistic UI, we don't have the UUIDs yet.
       }]);
       
       setIsUploading(true);
@@ -588,9 +659,11 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             ? {
                 ...message,
                 id: sentMessage?.messageId || sentMessage?.id || optimisticId,
+                text: sentMessage?.content ?? message.text,
                 time: sentMessage?.createdAt
                   ? `${String(new Date(sentMessage.createdAt).getHours()).padStart(2, '0')}:${String(new Date(sentMessage.createdAt).getMinutes()).padStart(2, '0')}`
                   : message.time,
+                attachmentIds: sentMessage?.attachmentIds
               }
             : message
           );
@@ -855,7 +928,14 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                          )}
                       </div>
                       <div className={`rounded-lg px-3 py-2 shadow-sm border w-fit max-w-full ${msg.isRecalled ? 'bg-white border-gray-200' : 'bg-[#e5efff] border-[#cce1ff]'}`}>
-                        <div className={`text-[15px] ${msg.isRecalled ? 'text-gray-400 italic' : 'text-[#081c36]'}`}>{msg.text}</div>
+                        <div className={`text-[15px] ${msg.isRecalled ? 'text-gray-400 italic' : 'text-[#081c36]'}`}>
+                          {msg.text && <div>{msg.text}</div>}
+                          {!msg.isRecalled && msg.attachmentIds && msg.attachmentIds.length > 0 && (
+                            <div className="flex flex-col gap-1 mt-1">
+                              {msg.attachmentIds.map(id => <AttachmentItem key={id} id={id} />)}
+                            </div>
+                          )}
+                        </div>
                         <div className={`text-[12px] mt-1 text-right ${msg.isRecalled ? 'text-gray-400' : 'text-[#7589A3]'}`}>{msg.time}</div>
                       </div>
                     </div>
@@ -897,7 +977,14 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                   )}
                   <div className="flex items-center gap-2 w-full justify-start">
                     <div className="bg-white border-[#e5e7eb] rounded-lg px-3 py-2 shadow-sm border w-fit max-w-full">
-                      <div className={`text-[15px] ${msg.isRecalled ? 'text-gray-400 italic' : 'text-[#081c36]'}`}>{msg.text}</div>
+                      <div className={`text-[15px] ${msg.isRecalled ? 'text-gray-400 italic' : 'text-[#081c36]'}`}>
+                        {msg.text && <div>{msg.text}</div>}
+                        {!msg.isRecalled && msg.attachmentIds && msg.attachmentIds.length > 0 && (
+                          <div className="flex flex-col gap-1 mt-1">
+                            {msg.attachmentIds.map(id => <AttachmentItem key={id} id={id} />)}
+                          </div>
+                        )}
+                      </div>
                       <div className={`text-[12px] mt-1 text-right ${msg.isRecalled ? 'text-gray-400' : 'text-[#7589A3]'}`}>{msg.time}</div>
                     </div>
                     {!msg.isRecalled && (
@@ -1015,10 +1102,11 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             className="hidden"
             ref={fileInputRef}
             onChange={(e) => {
-              if (e.target.files) {
-                setPendingAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+              const newFiles = e.target.files ? Array.from(e.target.files) : [];
+              if (newFiles.length > 0) {
+                setPendingAttachments(prev => [...prev, ...newFiles]);
               }
-              if (fileInputRef.current) fileInputRef.current.value = '';
+              e.target.value = '';
             }}
           />
         </div>

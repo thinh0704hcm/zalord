@@ -34,6 +34,9 @@ public class Media {
     @Column(name = "storage_key", nullable = false, unique = true, length = 500)
     private String storageKey;
 
+    @Column(name = "file_name", length = 255)
+    private String fileName;
+
     @Column(name = "mime_type", length = 100)
     private String mimeType;
 

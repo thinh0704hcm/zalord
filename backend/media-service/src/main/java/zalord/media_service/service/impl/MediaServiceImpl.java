@@ -84,6 +84,7 @@ public class MediaServiceImpl implements IMediaService {
                 req.kind().name(),
                 req.kind() == MediaKind.ATTACHMENT ? req.conversationId() : null,
                 key,
+                req.fileName(),
                 req.mimeType()
         );
 
@@ -233,6 +234,7 @@ public class MediaServiceImpl implements IMediaService {
                 .ownerId(m.getOwnerId())
                 .kind(m.getKind())
                 .conversationId(m.getConversationId())
+                .fileName(m.getFileName())
                 .mimeType(m.getMimeType())
                 .sizeBytes(m.getSizeBytes())
                 .status(m.getStatus())

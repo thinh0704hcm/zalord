@@ -23,13 +23,14 @@ public interface MediaRepository extends JpaRepository<Media, UUID> {
      */
     @Modifying
     @Query(value = """
-        INSERT INTO media (id, owner_id, kind, conversation_id, storage_key, mime_type, status, created_at)
-        VALUES (:id, :ownerId, :kind, :conversationId, :storageKey, :mimeType, 'PENDING', now())
+        INSERT INTO media (id, owner_id, kind, conversation_id, storage_key, file_name, mime_type, status, created_at)
+        VALUES (:id, :ownerId, :kind, :conversationId, :storageKey, :fileName, :mimeType, 'PENDING', now())
         """, nativeQuery = true)
     void insertNew(@Param("id") UUID id,
                    @Param("ownerId") UUID ownerId,
                    @Param("kind") String kind,
                    @Param("conversationId") UUID conversationId,
                    @Param("storageKey") String storageKey,
+                   @Param("fileName") String fileName,
                    @Param("mimeType") String mimeType);
 }

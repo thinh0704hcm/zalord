@@ -105,8 +105,7 @@ export const isMessageCreatedFrame = (frame: IncomingWebSocketFrame): frame is M
   if (frame.type !== 'message.created' || !isRecord(frame.data)) return false;
   return typeof frame.data.messageId === 'string'
     && typeof frame.data.conversationId === 'string'
-    && typeof frame.data.senderId === 'string'
-    && typeof frame.data.content === 'string';
+    && typeof frame.data.senderId === 'string';
 };
 
 export const isMessageRecalledFrame = (frame: IncomingWebSocketFrame): frame is MessageRecalledFrame => {

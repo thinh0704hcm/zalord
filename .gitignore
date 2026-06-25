@@ -333,3 +333,5 @@ docs/only-me/
 
 # Plaintext secrets (never commit)
 deploy/k8s/**/*-secret.yaml
+
+target/

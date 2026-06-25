@@ -5,6 +5,7 @@ export interface UploadUrlRequest {
   kind: 'AVATAR' | 'ATTACHMENT';
   conversationId?: string;
   mimeType?: string;
+  fileName?: string;
 }
 
 export interface UploadUrlResponse {
@@ -16,6 +17,7 @@ export interface MediaResponse {
   id: string;
   kind: string;
   conversationId?: string;
+  fileName?: string;
   url?: string;
   mimeType?: string;
   sizeBytes?: number;
@@ -45,6 +47,7 @@ export const mediaService = {
       kind: 'ATTACHMENT',
       conversationId,
       mimeType: file.type || 'application/octet-stream',
+      fileName: file.name,
     });
     
     await mediaService.uploadFileToMinio(uploadUrl, file);

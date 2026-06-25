@@ -9,6 +9,7 @@ CREATE TABLE media (
     kind            VARCHAR(20) NOT NULL CHECK (kind IN ('AVATAR', 'ATTACHMENT')),
     conversation_id UUID,                    -- only for ATTACHMENT (NULL for AVATAR)
     storage_key     VARCHAR(500) NOT NULL UNIQUE,
+    file_name       VARCHAR(255),
     mime_type       VARCHAR(100),
     size_bytes      BIGINT,
     status          VARCHAR(20) NOT NULL DEFAULT 'PENDING'
