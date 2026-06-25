@@ -184,8 +184,11 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
               >
                 <div className="relative mt-0.5">
                   {renderAvatar(chat)}
+                  {!chat.group && chat.presenceStatus === 'online' && (
+                    <div className="absolute -bottom-0.5 -right-0.5 z-40 w-3.5 h-3.5 rounded-full bg-[#31a24c] border-2 border-white" title="Trực tuyến" />
+                  )}
                   {chat.unread > 0 && (
-                    <div className="absolute -bottom-0.5 -right-0.5 z-50 bg-red-500 text-white text-[10px] font-bold h-[16px] min-w-[16px] px-1 rounded-full border border-white flex items-center justify-center leading-none">
+                    <div className="absolute -top-0.5 -right-0.5 z-50 bg-red-500 text-white text-[10px] font-bold h-[16px] min-w-[16px] px-1 rounded-full border border-white flex items-center justify-center leading-none">
                       {chat.unread > 9 ? '9+' : chat.unread}
                     </div>
                   )}

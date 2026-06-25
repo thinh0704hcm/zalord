@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SidebarNav from '../../components/chat/SidebarNav';
 import ChatList from '../../components/chat/ChatList';
 import ChatWindow from '../../components/chat/ChatWindow';
-import { isMessageCreatedFrame, wsService } from '../../services/websocket';
+import { isMessageCreatedFrame, isPresenceEventFrame, isPresenceStateFrame, wsService, type PresenceStatus } from '../../services/websocket';
 
 import { userService, type UserProfile } from '../../services/user';
 import { inboxService, type InboxItemResponse } from '../../services/inbox';
@@ -21,6 +21,8 @@ export interface Chat {
   group?: boolean;
   pendingDirectUserId?: string;
   isPending?: boolean;
+  otherUserId?: string | null;
+  presenceStatus?: PresenceStatus;
 }
 
 const relativeTime = (value: string | null) => {
@@ -68,6 +70,11 @@ const getCurrentUserId = () => {
   }
 };
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error) return error.message;
+  return fallback;
+};
+
 const formatLastMessagePreview = (preview: string | null, lastSenderId: string | null, currentUserId: string | null, otherUserName: string) => {
   if (!preview) return 'Bắt đầu trò chuyện';
   if (!lastSenderId || !currentUserId) return preview;
@@ -97,7 +104,8 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
         unread: item.unreadCount || 0,
         avatar: memberAvatars.length > 0 ? memberAvatars : [getInitials(group.name)],
         totalMembers: group.members.length,
-        group: true
+        group: true,
+        otherUserId: null
       };
     } catch (error) {
       console.warn('Failed to load group for inbox item', item.conversationId, error);
@@ -110,7 +118,8 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
         unread: item.unreadCount || 0,
         avatar: ['NC', '??', '??'],
         totalMembers: 3,
-        group: true
+        group: true,
+        otherUserId: null
       };
     }
   }
@@ -133,7 +142,9 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
     time: relativeTime(item.lastMessageAt),
     lastMessageAt: item.lastMessageAt,
     unread: item.unreadCount || 0,
-    avatar
+    avatar,
+    otherUserId: item.otherUserId,
+    presenceStatus: 'offline'
   };
 };
 
@@ -145,6 +156,12 @@ export default function ChatLayout() {
   const [chatListError, setChatListError] = useState('');
   const activeChatIdRef = useRef<string | number | null>(null);
   const activeChat = chats.find(c => c.id === activeChatId);
+  const presenceUserIds = useMemo(() => Array.from(new Set(chats
+    .filter(chat => !chat.group)
+    .map(chat => chat.otherUserId)
+    .filter((id): id is string => Boolean(id))))
+    .sort(), [chats]);
+  const presenceUserIdsKey = presenceUserIds.join('|');
 
   useEffect(() => {
     const ticker = setInterval(() => {
@@ -160,6 +177,36 @@ export default function ChatLayout() {
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
+
+  useEffect(() => {
+    if (!presenceUserIdsKey) return;
+
+    const userIds = presenceUserIdsKey.split('|');
+    const refreshPresence = () => {
+      wsService.queryPresence(userIds);
+    };
+    const subscribePresence = () => {
+      refreshPresence();
+      wsService.watchPresence(userIds);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshPresence();
+      }
+    };
+
+    subscribePresence();
+    const unsubscribeOpen = wsService.onOpen(subscribePresence);
+    const refreshTimer = window.setInterval(refreshPresence, 30_000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      unsubscribeOpen();
+      window.clearInterval(refreshTimer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      wsService.unwatchPresence(userIds);
+    };
+  }, [presenceUserIdsKey]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -187,9 +234,9 @@ export default function ChatLayout() {
           return [...pendingChats, ...fetchedChats];
         });
         setActiveChatId(current => current ?? fetchedChats[0]?.id ?? null);
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (!cancelled) {
-          setChatListError(error.message || 'Không thể tải danh sách chat');
+          setChatListError(getErrorMessage(error, 'Không thể tải danh sách chat'));
         }
       } finally {
         if (!cancelled && showLoading) {
@@ -232,6 +279,24 @@ export default function ChatLayout() {
     window.addEventListener('auth-token-refreshed', handleTokenRefreshed);
 
     const unsubscribeWs = wsService.onMessage((msg) => {
+      if (isPresenceStateFrame(msg)) {
+        const states = msg.data.states;
+        setChats(prev => prev.map(chat => chat.otherUserId && states[chat.otherUserId]
+          ? { ...chat, presenceStatus: states[chat.otherUserId] }
+          : chat
+        ));
+        return;
+      }
+
+      if (isPresenceEventFrame(msg)) {
+        const { userId, status } = msg.data;
+        setChats(prev => prev.map(chat => chat.otherUserId === userId
+          ? { ...chat, presenceStatus: status }
+          : chat
+        ));
+        return;
+      }
+
       if (!isMessageCreatedFrame(msg)) return;
 
       const data = msg.data;
@@ -291,7 +356,8 @@ export default function ChatLayout() {
       unread: 0,
       avatar: selectedAvatars,
       totalMembers: group.members?.length || totalMembers,
-      group: true
+      group: true,
+      otherUserId: null
     };
     setChats(prev => [newChat, ...prev]);
     setActiveChatId(newChat.id);
@@ -314,7 +380,9 @@ export default function ChatLayout() {
       unread: 0,
       avatar: getInitials(user.displayName),
       pendingDirectUserId: user.userId,
-      isPending: true
+      isPending: true,
+      otherUserId: user.userId,
+      presenceStatus: 'offline'
     };
 
     setChats(prev => [newChat, ...prev]);
@@ -335,7 +403,9 @@ export default function ChatLayout() {
             message: lastMessage ? `Bạn: ${lastMessage}` : chat.message,
             time: 'Vừa xong',
             isPending: false,
-            pendingDirectUserId: undefined
+            pendingDirectUserId: undefined,
+            otherUserId: chat.otherUserId ?? chat.pendingDirectUserId ?? null,
+            presenceStatus: chat.presenceStatus ?? 'offline'
           }
         : chat
       );

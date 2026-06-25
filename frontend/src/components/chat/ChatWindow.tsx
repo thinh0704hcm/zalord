@@ -422,7 +422,10 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             <h2 className="font-semibold text-gray-900 text-[16px] leading-tight">{chat.name}</h2>
             <div className="flex items-center text-[13px] text-gray-500 mt-0.5">
               {chat.group ? <Users size={13} className="mr-1" /> : <UserPlus size={13} className="mr-1" />}
-              <span>{chat.group ? `${groupMemberCount ?? chat.totalMembers ?? 0} thành viên` : 'Trực tuyến'}</span>
+              {!chat.group && (
+                <span className={`mr-1.5 h-2 w-2 rounded-full ${chat.presenceStatus === 'online' ? 'bg-[#31a24c]' : 'bg-[#b8c0cc]'}`} />
+              )}
+              <span>{chat.group ? `${groupMemberCount ?? chat.totalMembers ?? 0} thành viên` : (chat.presenceStatus === 'online' ? 'Trực tuyến' : 'Ngoại tuyến')}</span>
             </div>
           </div>
         </div>
