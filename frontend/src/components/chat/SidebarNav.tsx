@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, ChevronLeft, Image, Pencil, User, X } from 'lucide-react';
+import { Camera, ChevronLeft, Image, Pencil, User, X, Bell } from 'lucide-react';
 import { userService, type UserProfile } from '../../services/user';
 import api from '../../services/api';
 import { Avatar } from './Avatar';
@@ -7,9 +7,7 @@ import {
   ZalordMessageFilledIcon,
   ZalordContactFilledIcon,
   ZalordMessageOutlineIcon, 
-  ZalordContactOutlineIcon, 
-  ZalordSettingsOutlineIcon,
-  ZalordSettingsFilledIcon
+  ZalordContactOutlineIcon
 } from './ZalordIcons';
 
 type StoredUser = {
@@ -59,6 +57,8 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 export default function SidebarNav() {
   const [activeTab, setActiveTab] = useState('message');
+  const [showNotificationMenu, setShowNotificationMenu] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [profileMode, setProfileMode] = useState<ProfileMode>('view');
@@ -321,11 +321,37 @@ export default function SidebarNav() {
         </div>
 
         <div className="flex flex-col items-center w-full mb-2 gap-1.5">
-          <div 
-            onClick={() => setActiveTab('settings')}
-            className={`w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${activeTab === 'settings' ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
-          >
-            {activeTab === 'settings' ? <ZalordSettingsFilledIcon /> : <ZalordSettingsOutlineIcon />}
+          <div className="relative">
+            <div 
+              onClick={() => setShowNotificationMenu(!showNotificationMenu)}
+              className={`w-[48px] h-[48px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${showNotificationMenu ? 'bg-[#004bb9] text-white' : 'hover:bg-[#0051d1] text-white'}`}
+            >
+              <Bell size={26} fill={showNotificationMenu ? "currentColor" : "none"} strokeWidth={2.2} />
+            </div>
+            
+            {showNotificationMenu && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowNotificationMenu(false)}
+                />
+                <div className="absolute left-[56px] bottom-0 w-[160px] bg-white rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-[#e7e9ee] overflow-hidden z-50 py-1">
+                  <div 
+                    className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                    onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                  >
+                    <span className="text-sm font-medium text-gray-800">Thông báo</span>
+                    <div 
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out ${notificationsEnabled ? 'bg-[#004bb9]' : 'bg-gray-200'}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out shadow-sm ${notificationsEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
