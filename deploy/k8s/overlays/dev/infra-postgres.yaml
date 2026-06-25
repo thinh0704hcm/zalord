@@ -1,0 +1,503 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-pg
+  namespace: zalord-dev
+spec:
+  clusterIP: None
+  selector:
+    app: auth-pg
+  ports:
+    - port: 5432
+      name: psql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-pg
+  namespace: zalord-dev
+spec:
+  serviceName: auth-pg
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-pg
+  template:
+    metadata:
+      labels:
+        app: auth-pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          command: ["postgres", "-c", "shared_buffers=64MB"]
+          env:
+            - name: POSTGRES_DB
+              value: auth-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: psql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d auth-db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-sql
+          configMap:
+            name: auth-pg-init-sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-pg
+  namespace: zalord-dev
+spec:
+  clusterIP: None
+  selector:
+    app: user-pg
+  ports:
+    - port: 5432
+      name: psql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: user-pg
+  namespace: zalord-dev
+spec:
+  serviceName: user-pg
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-pg
+  template:
+    metadata:
+      labels:
+        app: user-pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          command: ["postgres", "-c", "shared_buffers=64MB"]
+          env:
+            - name: POSTGRES_DB
+              value: user-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-secret
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: psql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d user-db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-sql
+          configMap:
+            name: user-pg-init-sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: message-pg
+  namespace: zalord-dev
+spec:
+  clusterIP: None
+  selector:
+    app: message-pg
+  ports:
+    - port: 5432
+      name: psql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: message-pg
+  namespace: zalord-dev
+spec:
+  serviceName: message-pg
+  replicas: 1
+  selector:
+    matchLabels:
+      app: message-pg
+  template:
+    metadata:
+      labels:
+        app: message-pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          command: ["postgres", "-c", "shared_buffers=64MB"]
+          env:
+            - name: POSTGRES_DB
+              value: message-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: message-service-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: message-service-secret
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: psql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d message-db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-sql
+          configMap:
+            name: message-pg-init-sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: group-pg
+  namespace: zalord-dev
+spec:
+  clusterIP: None
+  selector:
+    app: group-pg
+  ports:
+    - port: 5432
+      name: psql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: group-pg
+  namespace: zalord-dev
+spec:
+  serviceName: group-pg
+  replicas: 1
+  selector:
+    matchLabels:
+      app: group-pg
+  template:
+    metadata:
+      labels:
+        app: group-pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          command: ["postgres", "-c", "shared_buffers=64MB"]
+          env:
+            - name: POSTGRES_DB
+              value: group-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: group-service-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: group-service-secret
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: psql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d group-db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-sql
+          configMap:
+            name: group-pg-init-sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-pg
+  namespace: zalord-dev
+spec:
+  clusterIP: None
+  selector:
+    app: media-pg
+  ports:
+    - port: 5432
+      name: psql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: media-pg
+  namespace: zalord-dev
+spec:
+  serviceName: media-pg
+  replicas: 1
+  selector:
+    matchLabels:
+      app: media-pg
+  template:
+    metadata:
+      labels:
+        app: media-pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          command: ["postgres", "-c", "shared_buffers=64MB"]
+          env:
+            - name: POSTGRES_DB
+              value: media-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: media-service-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: media-service-secret
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: psql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d media-db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-sql
+          configMap:
+            name: media-pg-init-sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-pg
+  namespace: zalord-dev
+spec:
+  clusterIP: None
+  selector:
+    app: notification-pg
+  ports:
+    - port: 5432
+      name: psql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: notification-pg
+  namespace: zalord-dev
+spec:
+  serviceName: notification-pg
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-pg
+  template:
+    metadata:
+      labels:
+        app: notification-pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          command: ["postgres", "-c", "shared_buffers=64MB"]
+          env:
+            - name: POSTGRES_DB
+              value: notification-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secret
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: psql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+          resources:
+            requests:
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d notification-db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-sql
+          configMap:
+            name: notification-pg-init-sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi

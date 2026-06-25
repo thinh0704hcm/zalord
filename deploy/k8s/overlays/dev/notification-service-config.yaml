@@ -3,7 +3,6 @@ data:
   DB_HOST: notification-pg
   DB_NAME: notification-db
   DB_PORT: "5432"
-  GRPC_PORT: "9082"
   MQ_HOST: rabbitmq
   MQ_PORT: "5672"
   SERVER_PORT: "8087"
