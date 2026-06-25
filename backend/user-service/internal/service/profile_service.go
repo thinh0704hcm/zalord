@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	queries "github.com/thinh0704hcm/zalord/backend/user-service/db/sqlc"
@@ -17,6 +18,7 @@ import (
 type ProfileService interface {
 	ConsumeProfileCreated(ctx context.Context, body []byte) error
 	CreateProfile(ctx context.Context, userId uuid.UUID, displayName, phoneNumber string) error
+	UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time) (*queries.Profile, error)
 	GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error)
 	GetByPhone(ctx context.Context, phone string) (*queries.Profile, error)
 	SearchByName(ctx context.Context, name string, limit int) ([]queries.Profile, error)
@@ -61,6 +63,10 @@ func (p *profileService) CreateProfile(ctx context.Context, userId uuid.UUID, di
 	logger.Log.Info("profile created (or already existed)",
 		zap.String("user_id", userId.String()))
 	return nil
+}
+
+func (p *profileService) UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time) (*queries.Profile, error) {
+	return p.profileRepo.UpdateMyProfile(ctx, userId, displayName, gender, dateOfBirth)
 }
 
 func (p *profileService) GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error) {

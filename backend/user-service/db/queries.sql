@@ -5,22 +5,22 @@ INSERT INTO profiles (
 ON CONFLICT (user_id) DO NOTHING;
 
 -- name: GetProfileByUserID :one
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE user_id = $1 AND deleted_at IS NULL;
 
 -- name: GetProfileByID :one
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetProfileByPhone :one
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE phone_number = $1 AND deleted_at IS NULL;
 
 -- name: ListProfiles :many
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE deleted_at IS NULL
  ORDER BY created_at DESC
@@ -30,9 +30,18 @@ SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_
 SELECT COUNT(*) FROM profiles WHERE deleted_at IS NULL;
 
 -- name: SearchProfilesByName :many
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE deleted_at IS NULL
    AND display_name ILIKE '%' || $1 || '%'
  ORDER BY display_name ASC, created_at DESC
  LIMIT $2;
+
+
+-- name: UpdateMyProfile :one
+UPDATE profiles
+   SET display_name = $2,
+       gender = $3,
+       date_of_birth = $4
+ WHERE user_id = $1 AND deleted_at IS NULL
+ RETURNING id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at;

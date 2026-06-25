@@ -4,6 +4,8 @@ CREATE TABLE profiles (
   display_name  VARCHAR(100) NOT NULL,
   phone_number  VARCHAR(20) NOT NULL UNIQUE,
   avatar_url    TEXT,
+  gender        VARCHAR(20),
+  date_of_birth DATE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at    TIMESTAMPTZ
 );

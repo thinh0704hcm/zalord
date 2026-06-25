@@ -7,6 +7,7 @@ package queries
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -41,7 +42,7 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) er
 }
 
 const getProfileByID = `-- name: GetProfileByID :one
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE id = $1 AND deleted_at IS NULL
 `
@@ -55,6 +56,8 @@ func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, er
 		&i.DisplayName,
 		&i.PhoneNumber,
 		&i.AvatarUrl,
+		&i.Gender,
+		&i.DateOfBirth,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
@@ -62,7 +65,7 @@ func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, er
 }
 
 const getProfileByPhone = `-- name: GetProfileByPhone :one
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE phone_number = $1 AND deleted_at IS NULL
 `
@@ -76,6 +79,8 @@ func (q *Queries) GetProfileByPhone(ctx context.Context, phoneNumber string) (Pr
 		&i.DisplayName,
 		&i.PhoneNumber,
 		&i.AvatarUrl,
+		&i.Gender,
+		&i.DateOfBirth,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
@@ -83,7 +88,7 @@ func (q *Queries) GetProfileByPhone(ctx context.Context, phoneNumber string) (Pr
 }
 
 const getProfileByUserID = `-- name: GetProfileByUserID :one
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE user_id = $1 AND deleted_at IS NULL
 `
@@ -97,6 +102,8 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID uuid.UUID) (Pro
 		&i.DisplayName,
 		&i.PhoneNumber,
 		&i.AvatarUrl,
+		&i.Gender,
+		&i.DateOfBirth,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
@@ -104,7 +111,7 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID uuid.UUID) (Pro
 }
 
 const listProfiles = `-- name: ListProfiles :many
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE deleted_at IS NULL
  ORDER BY created_at DESC
@@ -131,6 +138,8 @@ func (q *Queries) ListProfiles(ctx context.Context, arg ListProfilesParams) ([]P
 			&i.DisplayName,
 			&i.PhoneNumber,
 			&i.AvatarUrl,
+			&i.Gender,
+			&i.DateOfBirth,
 			&i.CreatedAt,
 			&i.DeletedAt,
 		); err != nil {
@@ -145,7 +154,7 @@ func (q *Queries) ListProfiles(ctx context.Context, arg ListProfilesParams) ([]P
 }
 
 const searchProfilesByName = `-- name: SearchProfilesByName :many
-SELECT id, user_id, display_name, phone_number, avatar_url, created_at, deleted_at
+SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
   FROM profiles
  WHERE deleted_at IS NULL
    AND display_name ILIKE '%' || $1 || '%'
@@ -173,6 +182,8 @@ func (q *Queries) SearchProfilesByName(ctx context.Context, arg SearchProfilesBy
 			&i.DisplayName,
 			&i.PhoneNumber,
 			&i.AvatarUrl,
+			&i.Gender,
+			&i.DateOfBirth,
 			&i.CreatedAt,
 			&i.DeletedAt,
 		); err != nil {
@@ -184,4 +195,42 @@ func (q *Queries) SearchProfilesByName(ctx context.Context, arg SearchProfilesBy
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMyProfile = `-- name: UpdateMyProfile :one
+UPDATE profiles
+   SET display_name = $2,
+       gender = $3,
+       date_of_birth = $4
+ WHERE user_id = $1 AND deleted_at IS NULL
+ RETURNING id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at
+`
+
+type UpdateMyProfileParams struct {
+	UserID      uuid.UUID  `json:"user_id"`
+	DisplayName string     `json:"display_name"`
+	Gender      *string    `json:"gender"`
+	DateOfBirth *time.Time `json:"date_of_birth"`
+}
+
+func (q *Queries) UpdateMyProfile(ctx context.Context, arg UpdateMyProfileParams) (Profile, error) {
+	row := q.db.QueryRow(ctx, updateMyProfile,
+		arg.UserID,
+		arg.DisplayName,
+		arg.Gender,
+		arg.DateOfBirth,
+	)
+	var i Profile
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DisplayName,
+		&i.PhoneNumber,
+		&i.AvatarUrl,
+		&i.Gender,
+		&i.DateOfBirth,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }

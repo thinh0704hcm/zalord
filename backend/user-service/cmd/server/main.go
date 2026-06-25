@@ -92,6 +92,7 @@ func main() {
 	api.Use(middleware.Identity())
 	{
 		api.GET("/me", profileHandler.GetMe)
+		api.PUT("/me", profileHandler.UpdateMe)
 		api.GET("/by-phone/:phone", profileHandler.GetByPhone)
 		api.GET("/search", profileHandler.SearchByName)
 		api.GET("/:userId", profileHandler.GetByUserID)

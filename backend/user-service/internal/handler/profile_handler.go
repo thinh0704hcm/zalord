@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,17 +25,33 @@ type ProfileResponse struct {
 	UserID      uuid.UUID `json:"userId"`
 	DisplayName string    `json:"displayName"`
 	PhoneNumber string    `json:"phoneNumber"`
-	AvatarURL   *string   `json:"avatarUrl,omitempty"`
+	AvatarURL   *string   `json:"avatarUrl"`
+	Gender      *string   `json:"gender"`
+	DateOfBirth *string   `json:"dateOfBirth"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+type UpdateProfileRequest struct {
+	DisplayName string  `json:"displayName"`
+	Gender      *string `json:"gender"`
+	DateOfBirth *string `json:"dateOfBirth"`
+}
+
 func toResponse(p *queries.Profile) ProfileResponse {
+	var dateOfBirth *string
+	if p.DateOfBirth != nil {
+		formatted := p.DateOfBirth.Format("2006-01-02")
+		dateOfBirth = &formatted
+	}
+
 	return ProfileResponse{
 		ID:          p.ID,
 		UserID:      p.UserID,
 		DisplayName: p.DisplayName,
 		PhoneNumber: p.PhoneNumber,
 		AvatarURL:   p.AvatarUrl,
+		Gender:      p.Gender,
+		DateOfBirth: dateOfBirth,
 		CreatedAt:   p.CreatedAt,
 	}
 }
@@ -92,6 +109,81 @@ func (h *ProfileHandler) GetMe(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal error"})
 		return
 	}
+	c.JSON(http.StatusOK, toResponse(prof))
+}
+
+// UpdateMe godoc
+//
+//	@Summary      Update my profile
+//	@Description  Updates display name and optional personal fields for the authenticated caller.
+//	@Tags         profile
+//	@Security     BearerAuth
+//	@Accept       json
+//	@Produce      json
+//	@Param        body  body      UpdateProfileRequest  true  "Profile fields"
+//	@Success      200   {object}  ProfileResponse
+//	@Failure      400   {object}  ErrorResponse
+//	@Failure      401   {object}  ErrorResponse
+//	@Failure      404   {object}  ErrorResponse  "profile not found"
+//	@Failure      500   {object}  ErrorResponse
+//	@Router       /api/v1/users/me [put]
+func (h *ProfileHandler) UpdateMe(c *gin.Context) {
+	raw, _ := c.Get(middleware.CtxUserID)
+	uidStr, _ := raw.(string)
+	userID, err := uuid.Parse(uidStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid userId in context"})
+		return
+	}
+
+	var req UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+		return
+	}
+
+	displayName := strings.TrimSpace(req.DisplayName)
+	if displayName == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "displayName required"})
+		return
+	}
+	if len([]rune(displayName)) > 100 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "displayName must be at most 100 characters"})
+		return
+	}
+
+	var gender *string
+	if req.Gender != nil {
+		trimmed := strings.TrimSpace(*req.Gender)
+		if trimmed != "" {
+			gender = &trimmed
+		}
+	}
+
+	var dateOfBirth *time.Time
+	if req.DateOfBirth != nil {
+		trimmed := strings.TrimSpace(*req.DateOfBirth)
+		if trimmed != "" {
+			parsed, err := time.Parse("2006-01-02", trimmed)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, ErrorResponse{Error: "dateOfBirth must use YYYY-MM-DD"})
+				return
+			}
+			dateOfBirth = &parsed
+		}
+	}
+
+	prof, err := h.svc.UpdateMyProfile(c.Request.Context(), userID, displayName, gender, dateOfBirth)
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "profile not found"})
+		return
+	}
+	if err != nil {
+		logger.Log.Error("UpdateMyProfile failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal error"})
+		return
+	}
+
 	c.JSON(http.StatusOK, toResponse(prof))
 }
 

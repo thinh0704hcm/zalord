@@ -6,6 +6,11 @@ import CreateGroupModal from './CreateGroupModal';
 import { userService } from '../../services/user';
 import type { UserProfile } from '../../services/user';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error) return error.message;
+  return fallback;
+};
+
 interface ChatListProps {
   chats: Chat[];
   activeChatId: string | number;
@@ -28,38 +33,47 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
   const displayedChats = activeFilter === 'unread' ? chats.filter(c => c.unread > 0) : chats;
 
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchedUser(null);
-      setSearchError('');
-      setIsSearchingApi(false);
-      return;
-    }
+    const query = searchQuery.trim();
+    if (!query) return;
 
-    setIsSearchingApi(true);
-    setSearchError('');
-    setSearchedUser(null);
-
+    let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const profile = await userService.findByPhone(searchQuery.trim());
-        setSearchedUser(profile);
-      } catch (err: any) {
-        setSearchError(err.message || 'Không tìm thấy kết quả');
+        const profile = await userService.findByPhone(query);
+        if (!cancelled) {
+          setSearchedUser(profile);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setSearchError(getErrorMessage(err, 'Không tìm thấy kết quả'));
+        }
       } finally {
-        setIsSearchingApi(false);
+        if (!cancelled) {
+          setIsSearchingApi(false);
+        }
       }
     }, 1000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [searchQuery]);
 
   const handleSearchFocus = () => {
     setIsSearching(true);
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setSearchedUser(null);
+    setSearchError('');
+    setIsSearchingApi(Boolean(value.trim()));
+  };
+
   const closeSearch = () => {
     setIsSearching(false);
-    setSearchQuery('');
+    handleSearchChange('');
   };
 
   return (
@@ -74,7 +88,7 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
               type="text"
               placeholder="Tìm kiếm"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               onFocus={handleSearchFocus}
               className="bg-transparent border-none outline-none w-full text-[14px] text-[#081c36] placeholder-[#7589A3]"
             />
@@ -84,7 +98,7 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
                 fill="#949494"
                 stroke="#eaedf0"
                 className="cursor-pointer"
-                onClick={() => setSearchQuery('')}
+                onClick={() => handleSearchChange('')}
               />
             )}
           </div>
@@ -185,10 +199,10 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
                 <div className="relative mt-0.5">
                   {renderAvatar(chat)}
                   {!chat.group && chat.presenceStatus === 'online' && (
-                    <div className="absolute -bottom-0.5 -right-0.5 z-40 w-3.5 h-3.5 rounded-full bg-[#31a24c] border-2 border-white" title="Trực tuyến" />
+                    <div className="absolute -bottom-0.5 -right-0.5 z-[2] w-3.5 h-3.5 rounded-full bg-[#31a24c] border-2 border-white" title="Trực tuyến" />
                   )}
                   {chat.unread > 0 && (
-                    <div className="absolute -top-0.5 -right-0.5 z-50 bg-red-500 text-white text-[10px] font-bold h-[16px] min-w-[16px] px-1 rounded-full border border-white flex items-center justify-center leading-none">
+                    <div className="absolute -top-0.5 -right-0.5 z-[3] bg-red-500 text-white text-[10px] font-bold h-[16px] min-w-[16px] px-1 rounded-full border border-white flex items-center justify-center leading-none">
                       {chat.unread > 9 ? '9+' : chat.unread}
                     </div>
                   )}
@@ -244,13 +258,13 @@ const renderAvatar = (chat: Chat) => {
   if (total === 3) {
     return (
       <div className="w-[46px] h-[46px] relative flex-shrink-0">
-        <div className="absolute bottom-0 right-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-10 overflow-hidden">
+        <div className="absolute bottom-0 right-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[1] overflow-hidden">
           {normalizeAvatarText(avatars[2]) || '??'}
         </div>
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[2] overflow-hidden">
           {normalizeAvatarText(avatars[1]) || '??'}
         </div>
-        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-30 overflow-hidden">
+        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[3] overflow-hidden">
           {normalizeAvatarText(avatars[0]) || '??'}
         </div>
       </div>
@@ -261,16 +275,16 @@ const renderAvatar = (chat: Chat) => {
     const remaining = total - 3;
     return (
       <div className="w-[46px] h-[46px] relative flex-shrink-0">
-        <div className="absolute top-0 left-0 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-10 overflow-hidden">
+        <div className="absolute top-0 left-0 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[1] overflow-hidden">
           {normalizeAvatarText(avatars[0]) || '??'}
         </div>
-        <div className="absolute top-0 right-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
+        <div className="absolute top-0 right-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[2] overflow-hidden">
           {normalizeAvatarText(avatars[1]) || '??'}
         </div>
-        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-20 overflow-hidden">
+        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[2] overflow-hidden">
           {normalizeAvatarText(avatars[2]) || '??'}
         </div>
-        <div className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-semibold border-[1.5px] border-white z-30 overflow-hidden ${total === 4 ? 'bg-[#4a90e2] text-white' : 'bg-[#eaedf0] text-[#081c36]'
+        <div className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-semibold border-[1.5px] border-white z-[3] overflow-hidden ${total === 4 ? 'bg-[#4a90e2] text-white' : 'bg-[#eaedf0] text-[#081c36]'
           }`}>
           {total === 4 ? (normalizeAvatarText(avatars[3]) || '??') : remaining}
         </div>

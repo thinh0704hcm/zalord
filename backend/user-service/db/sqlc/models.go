@@ -16,6 +16,8 @@ type Profile struct {
 	DisplayName string     `json:"display_name"`
 	PhoneNumber string     `json:"phone_number"`
 	AvatarUrl   *string    `json:"avatar_url"`
+	Gender      *string    `json:"gender"`
+	DateOfBirth *time.Time `json:"date_of_birth"`
 	CreatedAt   time.Time  `json:"created_at"`
 	DeletedAt   *time.Time `json:"deleted_at"`
 }

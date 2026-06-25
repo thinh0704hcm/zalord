@@ -11,6 +11,8 @@ type Profile struct {
 	UserID      uuid.UUID  `json:"user_id"`
 	DisplayName string     `json:"display_name"`
 	AvatarUrl   *string    `json:"avatar_url"`
+	Gender      *string    `json:"gender"`
+	DateOfBirth *time.Time `json:"date_of_birth"`
 	CreatedAt   time.Time  `json:"created_at"`
 	DeletedAt   *time.Time `json:"deleted_at"`
 }
