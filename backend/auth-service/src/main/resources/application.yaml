@@ -36,8 +36,42 @@ spring:
   refresh:
     expiration: ${REFRESH_EXPIRY_DAYS}  # days
 
+# Same tuning as message-service for the media gRPC: 5 failures in 10 calls
+# trips the circuit, 30s OPEN, 3 half-open probes. Register flow doesn't have
+# the same volume as send-message, so the breaker mostly serves as a watchdog
+# during deploys / user-service restarts.
+resilience4j:
+  circuitbreaker:
+    instances:
+      userGrpc:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+
 server:
   port: ${SERVER_PORT:8081}
+
+# Actuator surfaces JVM + HTTP + custom metrics; only the endpoints below are
+# exposed (health is needed for the docker healthcheck; prometheus for scraping;
+# info for the build banner). Everything else stays disabled in dev.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+    prometheus:
+      access: read-only
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 logging:
   level:

@@ -17,6 +17,7 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/session"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/eventbus"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/logger"
+	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/metrics"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/redisx"
 	"go.uber.org/zap"
 )
@@ -66,12 +67,22 @@ func main() {
 		logger.Log.Fatal("subscribe message.read failed", zap.Error(err))
 	}
 
+	// Recalls — same rationale for the dedicated consumer group.
+	recallFanOut := events.NewRecallFanOut(reg, memCache)
+	if err := bus.Subscribe(ctx, "message.recalled", "chat-recall", recallFanOut.Handle); err != nil {
+		logger.Log.Fatal("subscribe message.recalled failed", zap.Error(err))
+	}
+
 	// Presence relay runs as a goroutine: listens to Redis pub/sub for
 	// transitions on ANY instance and pushes to local watchers.
 	relay := events.NewPresenceRelay(pres, router)
 	go relay.Run(ctx)
 
 	r := gin.Default()
+	r.Use(metrics.Middleware())
+	// Prometheus scrape endpoint. Not behind auth — Prometheus scrapes
+	// directly via the docker network, never via Kong.
+	r.GET("/metrics", metrics.Handler())
 	r.GET("/health", func(c *gin.Context) {
 		users, conns := reg.Stats()
 		c.JSON(http.StatusOK, gin.H{

@@ -18,6 +18,12 @@ public class GlobalExceptionHandler {
                 .body(new ApiResponse<>(HttpStatus.FORBIDDEN, ex.getMessage(), null, "NOT_A_MEMBER"));
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<?>> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiResponse<>(HttpStatus.FORBIDDEN, ex.getMessage(), null, "FORBIDDEN"));
+    }
+
     @ExceptionHandler(ConversationNotFoundException.class)
     public ResponseEntity<ApiResponse<?>> handleNotFound(ConversationNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -28,6 +34,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleInvalid(InvalidRequestException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiResponse<>(HttpStatus.BAD_REQUEST, ex.getMessage(), null, "INVALID_REQUEST"));
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ApiResponse<?>> handleUnavailable(ServiceUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiResponse<>(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), null, "SERVICE_UNAVAILABLE"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

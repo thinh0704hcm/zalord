@@ -1,0 +1,71 @@
+# Prometheus scrape config for the zalord stack.
+# Every target is on the docker network — Prometheus hits container hostnames
+# directly, not through Kong. The "service" label is what dashboards split on.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: zalord
+
+scrape_configs:
+  # ── Java apps (Spring Boot Actuator + Micrometer) ──
+  - job_name: java-apps
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["auth-service:8081"]
+        labels: { service: auth-service }
+      - targets: ["message-service:8083"]
+        labels: { service: message-service }
+      - targets: ["group-service:8085"]
+        labels: { service: group-service }
+      - targets: ["media-service:8086"]
+        labels: { service: media-service }
+
+  # ── Go apps (client_golang on the gin /metrics endpoint) ──
+  - job_name: go-apps
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["chat-service:8084"]
+        labels: { service: chat-service }
+      - targets: ["notification-service:8087"]
+        labels: { service: notification-service }
+      - targets: ["user-service:8082"]
+        labels: { service: user-service }
+
+  # ── Kong (built-in prometheus plugin) ──
+  # The Kong plugin exposes metrics on the ADMIN listener (:8001/metrics),
+  # not the proxy port. We scrape the container directly.
+  - job_name: kong
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["kong:8001"]
+        labels: { service: kong }
+
+  # ── RabbitMQ (rabbitmq_prometheus plugin, port 15692) ──
+  # /metrics is the aggregated view (good for cluster-wide gauges).
+  # /metrics/per-object adds queue/exchange/connection labels — needed for the
+  # per-queue depth panel. Scrape both, label them as the same `rabbitmq` svc.
+  - job_name: rabbitmq
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+        labels: { service: rabbitmq }
+
+  - job_name: rabbitmq-detail
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+        labels: { service: rabbitmq }
+
+  # ── Kafka (kafka-exporter sidecar, port 9308) ──
+  - job_name: kafka
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
+        labels: { service: kafka }
+
+  # ── Prometheus itself ──
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels: { service: prometheus }

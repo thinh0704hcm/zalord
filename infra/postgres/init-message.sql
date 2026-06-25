@@ -32,14 +32,25 @@ CREATE TABLE direct_lookup (
 );
 
 CREATE TABLE messages (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    sender_id        UUID NOT NULL,
-    content          TEXT NOT NULL,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id       UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    sender_id             UUID NOT NULL,
+    content               TEXT NOT NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Recall ("thu hồi cho tất cả"): non-null = the sender retracted this message.
+    -- We keep the row so pagination ordering + foreign references (replies that
+    -- snapshot this message) don't break; clients render a placeholder.
+    recalled_at           TIMESTAMPTZ,
+    -- Reply: denormalized snapshot of the quoted message captured at send time.
+    -- We snapshot instead of joining at read time so quotes survive recall +
+    -- avoid an extra DB roundtrip on the history hot path.
+    reply_to_message_id   UUID,
+    reply_to_sender_id    UUID,
+    reply_to_preview      VARCHAR(200)
 );
 
 CREATE INDEX idx_messages_conv_created ON messages (conversation_id, created_at DESC);
+CREATE INDEX idx_messages_reply_to     ON messages (reply_to_message_id) WHERE reply_to_message_id IS NOT NULL;
 
 -- Join table for media attachments. media_id is NOT a FK — media-service owns
 -- its own database. Ownership/state of each media_id is validated synchronously

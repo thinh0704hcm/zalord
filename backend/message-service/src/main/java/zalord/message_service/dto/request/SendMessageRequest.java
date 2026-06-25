@@ -13,6 +13,9 @@ import java.util.UUID;
 public record SendMessageRequest(
         @NotNull UUID conversationId,
         @Size(max = 4000) String content,
-        @Size(max = 10) List<UUID> attachmentIds
+        @Size(max = 10) List<UUID> attachmentIds,
+        // Optional: id of a message in the same conversation that this message
+        // is replying to. Service validates membership and snapshots a preview.
+        UUID replyToMessageId
 ) {
 }

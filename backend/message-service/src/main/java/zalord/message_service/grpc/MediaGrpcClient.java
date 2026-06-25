@@ -1,5 +1,6 @@
 package zalord.message_service.grpc;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.grpc.ManagedChannel;
 import io.grpc.netty.shaded.io.grpc.netty.NegotiationType;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
@@ -12,6 +13,7 @@ import zalord.media.v1.InvalidAttachment;
 import zalord.media.v1.MediaInternalGrpc;
 import zalord.media.v1.ValidateAttachmentsRequest;
 import zalord.media.v1.ValidateAttachmentsResponse;
+import zalord.message_service.exception.ServiceUnavailableException;
 
 import java.util.List;
 import java.util.UUID;
@@ -48,6 +50,14 @@ public class MediaGrpcClient {
         if (channel != null) channel.shutdown().awaitTermination(2, TimeUnit.SECONDS);
     }
 
+    /**
+     * Sync call wrapped by Resilience4j. Only gRPC infra failures (transport,
+     * deadline-exceeded) count as circuit failures — business invalidation
+     * results return a Result object, never throw. When the circuit opens
+     * Resilience4j throws CallNotPermittedException which is routed to the
+     * fallback below, mapped to 503 SERVICE_UNAVAILABLE for clients.
+     */
+    @CircuitBreaker(name = "mediaGrpc", fallbackMethod = "validateFallback")
     public Result validate(UUID caller, UUID conversationId, List<UUID> mediaIds) {
         if (mediaIds == null || mediaIds.isEmpty()) return Result.ok();
 
@@ -62,6 +72,17 @@ public class MediaGrpcClient {
 
         if (resp.getValid()) return Result.ok();
         return Result.invalid(resp.getInvalidList());
+    }
+
+    /** Same signature as validate + trailing Throwable. Invoked when the
+     *  circuit is open OR any exception escapes the wrapped call. */
+    @SuppressWarnings("unused")
+    private Result validateFallback(UUID caller, UUID conversationId,
+                                    List<UUID> mediaIds, Throwable t) {
+        log.warn("MediaGrpcClient.validate fallback: {} ({})",
+                t.getClass().getSimpleName(), t.getMessage());
+        throw new ServiceUnavailableException(
+                "media-service is unavailable, please retry shortly", t);
     }
 
     public record Result(boolean valid, List<InvalidAttachment> invalid) {

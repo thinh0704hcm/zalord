@@ -1,5 +1,6 @@
 package zalord.auth_service.grpc;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
@@ -8,6 +9,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import zalord.auth_service.exception.ServiceUnavailableException;
 import zalord.user.v1.CreateProfileRequest;
 import zalord.user.v1.UserInternalGrpc;
 
@@ -38,6 +40,12 @@ public class UserGrpcClient {
         log.info("UserGrpcClient → {}", target);
     }
 
+    /**
+     * Wrapped by Resilience4j. Transport/deadline failures count toward the
+     * "userGrpc" breaker; once it opens, /register fails fast with 503 instead
+     * of every request blocking for 5s on the gRPC deadline.
+     */
+    @CircuitBreaker(name = "userGrpc", fallbackMethod = "createProfileFallback")
     public void createProfile(UUID userId, String displayName, String phoneNumber) {
         try {
             stub.withDeadlineAfter(5, TimeUnit.SECONDS)
@@ -49,9 +57,20 @@ public class UserGrpcClient {
         } catch (StatusRuntimeException ex) {
             // Surface gRPC error so the calling transaction rolls back the
             // auth-side insert. Strong consistency: if user-service can't
-            // create the profile, register fails as a whole.
+            // create the profile, register fails as a whole. Throwing here
+            // also counts toward the circuit breaker's failure rate.
             throw new RuntimeException("user-service CreateProfile failed: " + ex.getStatus(), ex);
         }
+    }
+
+    /** Same params + Throwable; invoked when the circuit is OPEN. */
+    @SuppressWarnings("unused")
+    private void createProfileFallback(UUID userId, String displayName,
+                                       String phoneNumber, Throwable t) {
+        log.warn("UserGrpcClient.createProfile fallback: {} ({})",
+                t.getClass().getSimpleName(), t.getMessage());
+        throw new ServiceUnavailableException(
+                "user-service is unavailable, please retry shortly", t);
     }
 
     @PreDestroy

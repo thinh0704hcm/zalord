@@ -30,6 +30,7 @@
 		<java.version>21</java.version>
 		<grpc.version>1.69.0</grpc.version>
 		<protobuf.version>4.29.3</protobuf.version>
+		<resilience4j.version>2.2.0</resilience4j.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -168,6 +169,36 @@
 			<artifactId>annotations-api</artifactId>
 			<version>6.0.53</version>
 			<scope>provided</scope>
+		</dependency>
+
+		<!-- Prometheus scrape target. Spring Boot Actuator exposes JVM + HTTP
+		     metrics; this registry serializes them to OpenMetrics text format
+		     at /actuator/prometheus for Prometheus to pull. Version pinned —
+		     Spring Boot 4.0.6 parent BOM doesn't manage this artifact. -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+			<version>1.16.5</version>
+		</dependency>
+
+		<!-- Resilience4j circuit breaker on the UserGrpcClient: if user-service
+		     dies, register fails fast (503) instead of every /register call
+		     hanging for 5s on the gRPC deadline. -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-spring-boot3</artifactId>
+			<version>${resilience4j.version}</version>
+		</dependency>
+		<!-- AOP weaver — Spring Boot 4 parent BOM doesn't manage the
+		     starter-aop version, so depend on aspectjweaver + spring-aop
+		     directly. Required for the @CircuitBreaker annotation interceptor. -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-aop</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
 		</dependency>
 	</dependencies>
 

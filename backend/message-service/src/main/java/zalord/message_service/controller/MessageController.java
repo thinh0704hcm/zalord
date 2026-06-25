@@ -64,4 +64,15 @@ public class MessageController {
         PageResponse<MessageResponse> data = service.history(callerUserId, conversationId, page, size);
         return ResponseEntity.ok(new ApiResponse<>(HttpStatus.OK, "OK", data, null));
     }
+
+    @DeleteMapping("/{messageId}")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Recall a message (\"thu hồi cho tất cả\")",
+            description = "Marks the message as retracted for everyone in the conversation. Only the sender can recall their own message. The row stays in the DB so pagination + reply snapshots don't break; clients render \"Tin nhắn đã được thu hồi\" in place of the body. Publishes message.recalled — live clients update instantly via WebSocket.")
+    public ResponseEntity<ApiResponse<Void>> recall(
+            @Parameter(hidden = true) @RequestHeader("X-User-Id") UUID callerUserId,
+            @PathVariable UUID messageId) {
+        service.recall(callerUserId, messageId);
+        return ResponseEntity.ok(new ApiResponse<>(HttpStatus.OK, "Recalled", null, null));
+    }
 }

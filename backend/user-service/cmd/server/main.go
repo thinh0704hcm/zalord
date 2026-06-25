@@ -19,6 +19,7 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/service"
 	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/config"
 	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/logger"
+	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/metrics"
 	userv1 "github.com/thinh0704hcm/zalord/backend/user-service/proto/user/v1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -79,6 +80,9 @@ func main() {
 
 	// HTTP
 	r := gin.Default()
+	r.Use(metrics.Middleware())
+	// Prometheus scrape endpoint — direct docker-network access, not via Kong.
+	r.GET("/metrics", metrics.Handler())
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
 	// OpenAPI spec (raw JSON). Public — the aggregated Swagger UI fetches it

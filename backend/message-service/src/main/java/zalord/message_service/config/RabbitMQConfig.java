@@ -26,6 +26,11 @@ public class RabbitMQConfig {
     // consumes this and pushes "Seen" markers over WebSocket.
     public static final String MESSAGE_READ_ROUTING_KEY    = "message.read";
 
+    // Routing key for "sender retracted a message" events. chat-service
+    // pushes a placeholder WS frame; InboxProjector rewrites the preview
+    // if the recalled msg was the conv's last one.
+    public static final String MESSAGE_RECALLED_ROUTING_KEY = "message.recalled";
+
     // Smoke-test queue — chat-service (Sprint Core-2) will declare its own.
     public static final String MESSAGE_QUEUE = "message.queue";
     public static final String MESSAGE_BINDING_KEY = "message.#";
