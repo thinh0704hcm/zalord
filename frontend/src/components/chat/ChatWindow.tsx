@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import EmojiPicker, { Categories } from 'emoji-picker-react';
-import { UserPlus, Search, PanelRight, Smile, Users, ThumbsUp } from 'lucide-react';
+import { UserPlus, Users, ThumbsUp } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
 
@@ -72,7 +71,6 @@ const Daystamp = ({ date }: { date: string }) => {
 };
 
 export default function ChatWindow({ chat, onConversationReady }: ChatWindowProps) {
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isAddMembersModalOpen, setIsAddMembersModalOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [groupMemberCount, setGroupMemberCount] = useState<number | null>(null);
@@ -439,8 +437,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               <UserPlus size={18} />
             </button>
           )}
-          <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"><Search size={18} /></button>
-          <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"><PanelRight size={18} /></button>
         </div>
       </div>
 
@@ -637,44 +633,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         
         {/* Input Field */}
         <div className="flex items-center gap-2 px-4 py-1.5 relative">
-          {showEmojiPicker && (
-            <div className="absolute bottom-[100%] right-4 mb-3 z-50 w-[360px] h-[400px] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] rounded-lg border border-gray-200 flex flex-col overflow-hidden">
-              {/* Tabs */}
-              <div className="flex border-b border-gray-200 h-[48px] bg-white flex-shrink-0">
-                <button className="flex-1 text-[#6e7781] font-semibold text-[14px] hover:bg-gray-50 transition-colors">STICKER</button>
-                <button className="flex-1 text-[#0068ff] font-semibold text-[14px] border-b-2 border-[#0068ff] bg-white">EMOJI</button>
-              </div>
-              
-              {/* Emoji Content */}
-              <div className="flex-1 bg-white relative emoji-picker-zalo min-h-0">
-                <style>{`
-                  .emoji-picker-zalo aside.EmojiPickerReact.epr-main { border: none !important; border-radius: 0 !important; }
-                  .emoji-picker-zalo .epr-category-nav { display: none !important; }
-                  .emoji-picker-zalo .epr-header { display: none !important; }
-                  .emoji-picker-zalo .epr-body { padding-top: 4px !important; }
-                  .emoji-picker-zalo .epr-emoji-category-label { display: none !important; }
-                `}</style>
-                <EmojiPicker 
-                  onEmojiClick={() => setShowEmojiPicker(false)}
-                  width={360}
-                  height={352}
-                  searchDisabled={true}
-                  skinTonesDisabled={true}
-                  previewConfig={{ showPreview: false }}
-                  categories={[
-                    { name: 'Cảm xúc', category: Categories.SMILEYS_PEOPLE },
-                    { name: 'Động vật & Thiên nhiên', category: Categories.ANIMALS_NATURE },
-                    { name: 'Đồ ăn & Thức uống', category: Categories.FOOD_DRINK },
-                    { name: 'Hoạt động', category: Categories.ACTIVITIES },
-                    { name: 'Du lịch & Địa điểm', category: Categories.TRAVEL_PLACES },
-                    { name: 'Đồ vật', category: Categories.OBJECTS },
-                    { name: 'Biểu tượng', category: Categories.SYMBOLS },
-                    { name: 'Cờ', category: Categories.FLAGS }
-                  ]}
-                />
-              </div>
-            </div>
-          )}
           <input 
             type="text" 
             placeholder={`Nhập @, tin nhắn tới ${chat.name}`}
@@ -683,17 +641,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent border-none outline-none text-[15px] py-1 text-gray-800 placeholder-gray-500"
           />
-          <div className="flex items-center gap-1 text-gray-600">
-            <div 
-              className={`w-8 h-8 flex items-center justify-center rounded-md cursor-pointer transition-colors ${showEmojiPicker ? 'bg-blue-50' : 'hover:bg-gray-100'}`}
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            >
-              <Smile size={24} strokeWidth={1.5} className={`${showEmojiPicker ? 'text-[#0068ff]' : 'text-gray-500'} transition-colors`} />
-            </div>
-            <div title="Gửi nhanh biểu tượng cảm xúc" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors flex-shrink-0">
-              <span className="text-xl hover:scale-110 transition-transform">👍</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
