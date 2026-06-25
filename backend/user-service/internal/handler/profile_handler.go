@@ -42,8 +42,8 @@ type UpdateProfileRequest struct {
 
 func toResponse(p *queries.Profile) ProfileResponse {
 	var dateOfBirth *string
-	if p.DateOfBirth.Valid {
-		formatted := p.DateOfBirth.Time.Format("2006-01-02")
+	if p.DateOfBirth != nil {
+		formatted := p.DateOfBirth.Format("2006-01-02")
 		dateOfBirth = &formatted
 	}
 

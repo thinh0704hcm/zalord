@@ -83,7 +83,7 @@ func (r *profileRepository) GetByPhone(ctx context.Context, phone string) (*quer
 }
 
 func (r *profileRepository) SearchByName(ctx context.Context, name string, limit int32) ([]queries.Profile, error) {
-	return r.queries.SearchProfilesByName(ctx, queries.SearchProfilesByNameParams{DisplayName: name, Limit: limit})
+	return r.queries.SearchProfilesByName(ctx, queries.SearchProfilesByNameParams{Column1: &name, Limit: limit})
 }
 
 func (r *profileRepository) List(ctx context.Context, limit, offset int32) ([]queries.Profile, error) {

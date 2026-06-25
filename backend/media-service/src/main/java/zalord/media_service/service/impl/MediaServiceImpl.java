@@ -148,6 +148,14 @@ public class MediaServiceImpl implements IMediaService {
         }
         authorizeRead(caller, m);
 
+        if (m.getKind() == MediaKind.AVATAR) {
+            String url = props.getPublicEndpoint() + "/" + bucketFor(m.getKind()) + "/" + m.getStorageKey();
+            return DownloadUrlResponse.builder()
+                    .downloadUrl(url)
+                    .expiresAt(java.time.Instant.now().plus(3650, java.time.temporal.ChronoUnit.DAYS))
+                    .build();
+        }
+
         String url = presigner.presignGetObject(
                 GetObjectPresignRequest.builder()
                         .signatureDuration(DOWNLOAD_URL_TTL)
@@ -159,7 +167,7 @@ public class MediaServiceImpl implements IMediaService {
 
         return DownloadUrlResponse.builder()
                 .downloadUrl(url)
-                .expiresAt(Instant.now().plus(DOWNLOAD_URL_TTL))
+                .expiresAt(java.time.Instant.now().plus(DOWNLOAD_URL_TTL))
                 .build();
     }
 
