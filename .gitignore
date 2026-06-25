@@ -327,6 +327,9 @@ CLAUDE.md
 .claude/
 docs/only-me/
 
-# Kubernetes secrets (never commit real values)
+
+# SOPS encrypted secrets (commit these)
+# deploy/k8s/**/*-secret.example.yaml   # tracked, encrypted
+
+# Plaintext secrets (never commit)
 deploy/k8s/**/*-secret.yaml
-!deploy/k8s/**/*-secret.example.yaml

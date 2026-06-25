@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: deploy/k8s/overlays/dev/.*-secret\.example\.yaml$
+    age: age1gsw3rsazcn7x6mt70xuw4xedffaxdukadl4xw6ll5vz0qe8ep3gs6he35k
+  - path_regex: deploy/k8s/overlays/prod/.*-secret\.example\.yaml$
+    age: age1gsw3rsazcn7x6mt70xuw4xedffaxdukadl4xw6ll5vz0qe8ep3gs6he35k
