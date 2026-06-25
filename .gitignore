@@ -326,3 +326,7 @@ $RECYCLE.BIN/
 CLAUDE.md
 .claude/
 docs/only-me/
+
+# Kubernetes secrets (never commit real values)
+deploy/k8s/**/*-secret.yaml
+!deploy/k8s/**/*-secret.example.yaml
