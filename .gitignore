@@ -328,8 +328,9 @@ CLAUDE.md
 docs/only-me/
 
 
-# SOPS encrypted secrets (commit these)
-# deploy/k8s/**/*-secret.example.yaml   # tracked, encrypted
+# SOPS encrypted secrets — these ARE committed (encrypted with age)
+# deploy/k8s/**/*-secret.enc.yaml
 
-# Plaintext secrets (never commit)
+# Plaintext secrets — NEVER commit these
 deploy/k8s/**/*-secret.yaml
+deploy/k8s/**/*-secret.example.yaml

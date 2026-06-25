@@ -1,16 +1,10 @@
 apiVersion: v1
-data:
-  DB_HOST: message-pg
-  DB_NAME: message-db
-  DB_PORT: "5432"
-  GRPC_PORT: "9082"
-  MQ_HOST: rabbitmq
-  MQ_PORT: "5672"
-  REDIS_HOST: redis
-  REDIS_PORT: "6379"
-  SERVER_PORT: "8083"
-  ZALORD_MEDIA_SERVICE_GRPC_TARGET: media-service:9086
 kind: ConfigMap
 metadata:
   name: message-service-config
   namespace: zalord-dev
+data:
+  POSTGRES_HOST: message-pg
+  POSTGRES_PORT: "5432"
+  SERVER_PORT: "8083"
+  ZALORD_MEDIA_SERVICE_GRPC_TARGET: media-service:9086
