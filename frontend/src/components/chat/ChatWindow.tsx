@@ -11,6 +11,7 @@ import { inboxService } from '../../services/inbox';
 import { conversationService } from '../../services/conversation';
 import { isMessageCreatedFrame, isMessageReadFrame, isTypingFrame, isMessageRecalledFrame, isGroupMemberEventFrame, wsService } from '../../services/websocket';
 import { userService } from '../../services/user';
+import { mediaService } from '../../services/media';
 import { groupService } from '../../services/group';
 
 interface ChatWindowProps {
@@ -111,7 +112,14 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const userMessagesRef = useRef<UserMessage[]>([]);
   const preservedMessagesRef = useRef<UserMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const oldestMessageCursorRef = useRef<string | null>(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const previousChatRef = useRef<Chat | undefined>(undefined);
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const senderNameCacheRef = useRef<Record<string, string>>({});
   const typingIdleTimeoutRef = useRef<number | null>(null);
   const remoteTypingTimeoutsRef = useRef<Record<string, number>>({});
@@ -301,11 +309,21 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       
       setIsSidebarOpen(false);
       setIsKicked(false);
+      setHasMoreMessages(true);
+      oldestMessageCursorRef.current = null;
 
       if (chat && typeof chat.id === 'string' && !chat.isPending) {
         const conversationId = chat.id;
         messageService.history(conversationId).then(async res => {
           const responseItems = (res.items || res.content || []) as MessageHistoryItem[];
+          
+          if (responseItems.length < 50) {
+            setHasMoreMessages(false);
+          }
+          if (responseItems.length > 0) {
+            oldestMessageCursorRef.current = responseItems[responseItems.length - 1].createdAt;
+          }
+
           const historyMsgs: UserMessage[] = (await Promise.all(responseItems.map(async (m) => {
             const msgDate = new Date(m.createdAt);
             const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
@@ -349,7 +367,75 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         queueMicrotask(() => setLastMessageReaders([]));
       }
     }
+  }, [chat, currentUserId, getMessageDateKey]);
 
+  const loadMoreMessages = async () => {
+    if (isLoadingMore || !hasMoreMessages || !chat || typeof chat.id !== 'string') return;
+    const cursor = oldestMessageCursorRef.current;
+    if (!cursor) return;
+    
+    setIsLoadingMore(true);
+    try {
+      const res = await messageService.history(chat.id, cursor);
+      const responseItems = (res.items || res.content || []) as MessageHistoryItem[];
+      
+      if (responseItems.length < 50) {
+        setHasMoreMessages(false);
+      }
+      
+      if (responseItems.length > 0) {
+        oldestMessageCursorRef.current = responseItems[responseItems.length - 1].createdAt;
+        
+        const historyMsgs: UserMessage[] = (await Promise.all(responseItems.map(async (m) => {
+          const msgDate = new Date(m.createdAt);
+          const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
+          const isSender = currentUserId === m.senderId;
+          const isRecalled = !!m.recalledAt;
+          return {
+            id: m.messageId || m.id,
+            text: isRecalled ? 'Tin nhắn đã được thu hồi' : m.content,
+            time: timeStr,
+            dateKey: getMessageDateKey(msgDate),
+            senderId: m.senderId,
+            senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
+            isSender,
+            replyTo: m.replyTo,
+            isRecalled
+          };
+        }))).reverse();
+
+        const container = scrollContainerRef.current;
+        const scrollHeightBefore = container?.scrollHeight || 0;
+        
+        setUserMessages(prev => {
+          const merged = [...historyMsgs];
+          prev.forEach(message => {
+            if (message.id && merged.some(existing => existing.id === message.id)) return;
+            merged.push(message);
+          });
+          return merged;
+        });
+
+        setTimeout(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight - scrollHeightBefore;
+          }
+        }, 0);
+      }
+    } catch (err) {
+      console.error('Failed to load more messages:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (e.currentTarget.scrollTop === 0) {
+      loadMoreMessages();
+    }
+  };
+
+  useEffect(() => {
     previousChatRef.current = chat;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat, currentUserId]);
@@ -444,11 +530,13 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && inputText.trim() && chat) {
+    if (e.key === 'Enter' && (inputText.trim() || pendingAttachments.length > 0) && !isUploading && chat) {
       const text = inputText.trim();
       const currentReply = replyingTo;
+      const currentAttachments = [...pendingAttachments];
       setInputText("");
       setReplyingTo(null);
+      setPendingAttachments([]);
       sendTypingState(false, true);
       clearOwnTypingTimers();
       
@@ -461,7 +549,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       // Optimistic update
       setUserMessages(prev => [...prev, { 
         id: optimisticId, 
-        text: text, 
+        text: text || (currentAttachments.length > 0 ? '[Tệp đính kèm]' : ''), 
         time: timeStr, 
         dateKey, 
         senderId: currentUserId || undefined, 
@@ -470,6 +558,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         replyTo: currentReply ? { messageId: currentReply.id, senderId: currentReply.senderId, preview: currentReply.content } : null
       }]);
       
+      setIsUploading(true);
       // Send via API. A searched user opens a temporary chat first; create the
       // real DIRECT conversation only when the first message is sent.
       try {
@@ -480,9 +569,17 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           conversationId = conversation.id;
         }
 
+        let attachmentIds: string[] = [];
+        if (currentAttachments.length > 0) {
+          const uploadPromises = currentAttachments.map(file => mediaService.uploadAttachment(conversationId, file));
+          const uploadedMedia = await Promise.all(uploadPromises);
+          attachmentIds = uploadedMedia.map(m => m.id);
+        }
+
         const sentMessage = await messageService.send({
           conversationId,
-          content: text,
+          content: text || undefined,
+          attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
           replyToMessageId: currentReply?.id
         });
 
@@ -506,8 +603,11 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         if (chat.pendingDirectUserId) {
           onConversationReady?.(chat.id, conversationId, text);
         }
+
       } catch (error) {
-        console.error('Failed to send message', error);
+        console.error('Failed to send message:', error);
+      } finally {
+        setIsUploading(false);
       }
     }
   };
@@ -594,7 +694,16 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-2 pb-3 flex flex-col gap-3">
+      <div 
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-2 pb-3 flex flex-col gap-3"
+      >
+        {isLoadingMore && (
+          <div className="text-center text-xs text-gray-400 py-2">
+            Đang tải...
+          </div>
+        )}
         {/* Spacer to push messages to bottom */}
         <div className="flex-1 min-h-0"></div>
         {chat.name === 'KTPM2023.3' && (
@@ -893,17 +1002,43 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         <div className="flex items-center gap-0.5 text-[#001a33] px-1.5 h-[46px] border-t border-b border-[#d6dbe1]">
           <div title="Gửi Sticker" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordStickerIcon className="w-6 h-6" /></div>
           <div title="Gửi hình ảnh" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordPhotoIcon className="w-6 h-6" /></div>
-          <div title="Đính kèm File" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordAttachIcon className="w-6 h-6" /></div>
+          <div title="Đính kèm File" onClick={() => fileInputRef.current?.click()} className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordAttachIcon className="w-6 h-6" /></div>
           <div title="Gửi danh thiếp" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordNamecardIcon className="w-6 h-6" /></div>
           <div title="Chụp kèm với cửa sổ Zalo (Alt + Ctrl + S)" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordScreenshotIcon className="w-6 h-6" /></div>
           <div title="Định dạng tin nhắn (Ctrl + Shift + X)" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordTextFormatIcon className="w-6 h-6" /></div>
           <div title="Chèn tin nhắn nhanh" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordQuickMsgIcon className="w-6 h-6" /></div>
           <div title="Gửi nhanh số tài khoản" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordBankCardIcon className="w-6 h-6" /></div>
           <div title="Tùy chọn thêm" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordMoreIcon className="w-6 h-6" /></div>
+          <input
+            type="file"
+            multiple
+            className="hidden"
+            ref={fileInputRef}
+            onChange={(e) => {
+              if (e.target.files) {
+                setPendingAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+              }
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }}
+          />
         </div>
         
+        {/* Attachments preview */}
+        {pendingAttachments.length > 0 && (
+          <div className="bg-white px-4 py-2 border-b border-[#eaedf0] flex flex-wrap gap-2 max-h-[100px] overflow-y-auto">
+            {pendingAttachments.map((file, idx) => (
+              <div key={idx} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded p-1.5 text-sm max-w-[200px]">
+                <div className="flex-1 truncate text-gray-700 font-medium text-xs">{file.name}</div>
+                <button onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 p-0.5 transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Input Field */}
-        <div className="flex items-center gap-2 px-4 py-1.5 relative">
+        <div className="flex items-center gap-2 px-4 py-1.5 relative bg-white">
           <input 
             type="text" 
             placeholder={`Nhập @, tin nhắn tới ${chat.name}`}

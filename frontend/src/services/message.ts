@@ -37,10 +37,10 @@ export const messageService = {
       throw new Error(getApiErrorMessage(error, 'Không thể gửi tin nhắn'), { cause: error });
     }
   },
-  history: async (conversationId: string, page = 1, size = 50) => {
+  history: async (conversationId: string, cursor?: string, size = 50) => {
     try {
       const response = await api.get('/messages', {
-        params: { conversationId, page, size }
+        params: { conversationId, cursor, size }
       });
       return response.data.data; // This is a PageResponse containing content
     } catch (error: unknown) {

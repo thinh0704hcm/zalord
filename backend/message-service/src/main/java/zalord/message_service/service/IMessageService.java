@@ -12,7 +12,7 @@ public interface IMessageService {
 
     MessageResponse send(UUID callerUserId, SendMessageRequest request);
 
-    PageResponse<MessageResponse> history(UUID callerUserId, UUID conversationId, int page, int size);
+    PageResponse<MessageResponse> history(UUID callerUserId, UUID conversationId, java.time.Instant cursor, int size);
 
     List<MessageReaderResponse> lastMessageReaders(UUID callerUserId, UUID conversationId);
     /**

@@ -59,9 +59,9 @@ public class MessageController {
     public ResponseEntity<ApiResponse<PageResponse<MessageResponse>>> history(
             @Parameter(hidden = true) @RequestHeader("X-User-Id") UUID callerUserId,
             @RequestParam UUID conversationId,
-            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) java.time.Instant cursor,
             @RequestParam(defaultValue = "50") int size) {
-        PageResponse<MessageResponse> data = service.history(callerUserId, conversationId, page, size);
+        PageResponse<MessageResponse> data = service.history(callerUserId, conversationId, cursor, size);
         return ResponseEntity.ok(new ApiResponse<>(HttpStatus.OK, "OK", data, null));
     }
 

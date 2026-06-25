@@ -192,18 +192,34 @@ public class MessageServiceImpl implements IMessageService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<MessageResponse> history(UUID caller, UUID conversationId, int page, int size) {
+    public PageResponse<MessageResponse> history(UUID caller, UUID conversationId, java.time.Instant cursor, int size) {
         ConversationMember member = memberRepo.findByConversationIdAndUserId(conversationId, caller)
                 .orElseThrow(() -> new NotMemberException("You are not a member of this conversation"));
 
-        if (page < 1) page = 1;
         if (size < 1) size = 50;
         if (size > 200) size = 200;
 
-        Pageable pageable = PageRequest.of(page - 1, size);
+        Pageable pageable = PageRequest.of(0, size);
         Page<Message> result;
-        if (member.getLeftAt() != null) {
-            result = messageRepo.findByConversationIdAndCreatedAtLessThanEqualOrderByCreatedAtDesc(conversationId, member.getLeftAt(), pageable);
+        
+        java.time.Instant maxTimestamp = member.getLeftAt();
+        
+        if (cursor != null) {
+            if (maxTimestamp == null || cursor.isBefore(maxTimestamp)) {
+                maxTimestamp = cursor;
+            }
+        }
+        
+        if (maxTimestamp != null) {
+            // If it's precisely cursor, we use LessThan to avoid duplicates.
+            // But wait, if it's leftAt, it should be LessThanEqual because the user can see messages up to leftAt.
+            // For simplicity, if cursor is provided, we only want older messages, so LessThan is correct.
+            // If it's just leftAt, LessThanEqual would be better.
+            if (cursor != null && maxTimestamp.equals(cursor)) {
+                result = messageRepo.findByConversationIdAndCreatedAtLessThanOrderByCreatedAtDesc(conversationId, maxTimestamp, pageable);
+            } else {
+                result = messageRepo.findByConversationIdAndCreatedAtLessThanEqualOrderByCreatedAtDesc(conversationId, maxTimestamp, pageable);
+            }
         } else {
             result = messageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
         }
@@ -220,7 +236,7 @@ public class MessageServiceImpl implements IMessageService {
                 .map(m -> toResponse(m, attachmentsByMsg.getOrDefault(m.getId(), List.of())))
                 .toList();
 
-        return PageResponse.of(items, page, size, result.getTotalElements());
+        return PageResponse.of(items, 1, size, result.getTotalElements());
     }
 
     @Override

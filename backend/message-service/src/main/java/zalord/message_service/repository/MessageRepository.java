@@ -13,6 +13,8 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
 
     Page<Message> findByConversationIdAndCreatedAtLessThanEqualOrderByCreatedAtDesc(UUID conversationId, java.time.Instant createdAt, Pageable pageable);
 
+    Page<Message> findByConversationIdAndCreatedAtLessThanOrderByCreatedAtDesc(UUID conversationId, java.time.Instant createdAt, Pageable pageable);
+
     /** Used by /inbox/{id}/read when client doesn't pass a specific messageId. */
     java.util.Optional<Message> findFirstByConversationIdOrderByCreatedAtDesc(UUID conversationId);
 
