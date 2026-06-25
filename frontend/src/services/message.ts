@@ -56,5 +56,12 @@ export const messageService = {
       console.error('Failed to load latest message readers:', error);
       return [];
     }
+  },
+  recall: async (messageId: string) => {
+    try {
+      await api.delete(`/messages/${messageId}`);
+    } catch (error: unknown) {
+      throw new Error(getApiErrorMessage(error, 'Không thể thu hồi tin nhắn'), { cause: error });
+    }
   }
 };

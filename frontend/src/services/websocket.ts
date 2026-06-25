@@ -37,10 +37,22 @@ export type PresenceEventFrameData = {
   at: string;
 };
 
+export type MessageRecalledFrameData = {
+  messageId: string;
+  conversationId: string;
+  senderId: string;
+  recalledAt: string;
+};
+
 export type IncomingWebSocketFrame = WebSocketFrame<unknown>;
 export type MessageCreatedFrame = {
   type: 'message.created';
   data: MessageCreatedFrameData;
+};
+
+export type MessageRecalledFrame = {
+  type: 'message.recalled';
+  data: MessageRecalledFrameData;
 };
 
 export type TypingFrame = {
@@ -74,6 +86,12 @@ export const isMessageCreatedFrame = (frame: IncomingWebSocketFrame): frame is M
     && typeof frame.data.conversationId === 'string'
     && typeof frame.data.senderId === 'string'
     && typeof frame.data.content === 'string';
+};
+
+export const isMessageRecalledFrame = (frame: IncomingWebSocketFrame): frame is MessageRecalledFrame => {
+  if (frame.type !== 'message.recalled' || !isRecord(frame.data)) return false;
+  return typeof frame.data.messageId === 'string'
+    && typeof frame.data.conversationId === 'string';
 };
 
 export const isTypingFrame = (frame: IncomingWebSocketFrame): frame is TypingFrame => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, Users, ThumbsUp, Reply, X } from 'lucide-react';
+import { UserPlus, Users, ThumbsUp, Quote, X, RotateCcw } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
 import { Avatar } from './Avatar';
@@ -8,7 +8,7 @@ import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
 import { inboxService } from '../../services/inbox';
 import { conversationService } from '../../services/conversation';
-import { isMessageCreatedFrame, isMessageReadFrame, isTypingFrame, wsService } from '../../services/websocket';
+import { isMessageCreatedFrame, isMessageReadFrame, isTypingFrame, isMessageRecalledFrame, wsService } from '../../services/websocket';
 import { userService } from '../../services/user';
 import { groupService } from '../../services/group';
 
@@ -32,6 +32,7 @@ type UserMessage = {
   senderName?: string;
   isSender?: boolean;
   replyTo?: ReplyToSnippet | null;
+  isRecalled?: boolean;
 };
 
 type SeenReader = {
@@ -48,6 +49,7 @@ type MessageHistoryItem = {
   createdAt: string;
   senderId: string;
   replyTo?: ReplyToSnippet | null;
+  recalledAt?: string;
 };
 
 const getMessageDateKey = (date: Date) => date.toISOString().slice(0, 10);
@@ -114,6 +116,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const isTypingSentRef = useRef(false);
 
   const [replyingTo, setReplyingTo] = useState<{ id: string; content: string; senderName: string; senderId: string } | null>(null);
+  const [recallingMessageId, setRecallingMessageId] = useState<string | null>(null);
 
   const currentUserId = (() => {
     try {
@@ -299,15 +302,17 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             const msgDate = new Date(m.createdAt);
             const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
             const isSender = currentUserId === m.senderId;
+            const isRecalled = !!m.recalledAt;
             return {
               id: m.messageId || m.id,
-              text: m.content,
+              text: isRecalled ? 'Tin nhắn đã được thu hồi' : m.content,
               time: timeStr,
               dateKey: getMessageDateKey(msgDate),
               senderId: m.senderId,
               senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
               isSender,
-              replyTo: m.replyTo
+              replyTo: m.replyTo,
+              isRecalled
             };
           }))).reverse();
 
@@ -372,6 +377,14 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         void refreshLastMessageReaders(msg.data.conversationId);
       }
 
+      if (isMessageRecalledFrame(msg) && msg.data.conversationId === chat?.id) {
+        setUserMessages(prev => prev.map(m => 
+          m.id === msg.data.messageId 
+            ? { ...m, text: 'Tin nhắn đã được thu hồi', isRecalled: true, replyTo: null } 
+            : m
+        ));
+      }
+
       if (isTypingFrame(msg)) {
         const data = msg.data;
         const userId = data.userId;
@@ -405,6 +418,18 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       clearAllTypingUsers();
     };
   }, [chat?.id]);
+
+  const handleRecallMessage = async (messageId: string) => {
+    try {
+      await messageService.recall(messageId);
+      setUserMessages(prev => prev.map(msg => 
+        msg.id === messageId ? { ...msg, text: 'Tin nhắn đã được thu hồi', isRecalled: true, replyTo: null } : msg
+      ));
+      setRecallingMessageId(null);
+    } catch (error) {
+      console.error('Failed to recall message:', error);
+    }
+  };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputText.trim() && chat) {
@@ -686,14 +711,21 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                       </div>
                     )}
                     <div className="flex items-center gap-2 w-full justify-end">
-                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity mr-2">
-                         <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Bạn', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
-                           <Reply size={14} />
-                         </button>
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity mr-2 gap-1.5">
+                         {!msg.isRecalled && (
+                           <>
+                             <button onClick={() => msg.id && setRecallingMessageId(msg.id)} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:bg-gray-50 shadow-sm transition-colors" title="Thu hồi">
+                               <RotateCcw size={14} />
+                             </button>
+                             <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Bạn', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
+                               <Quote size={14} />
+                             </button>
+                           </>
+                         )}
                       </div>
-                      <div className="bg-[#e5efff] border-[#cce1ff] rounded-lg px-3 py-2 shadow-sm border w-fit max-w-full">
-                        <div className="text-[#081c36] text-[15px]">{msg.text}</div>
-                        <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                      <div className={`rounded-lg px-3 py-2 shadow-sm border w-fit max-w-full ${msg.isRecalled ? 'bg-white border-gray-200' : 'bg-[#e5efff] border-[#cce1ff]'}`}>
+                        <div className={`text-[15px] ${msg.isRecalled ? 'text-gray-400 italic' : 'text-[#081c36]'}`}>{msg.text}</div>
+                        <div className={`text-[12px] mt-1 text-right ${msg.isRecalled ? 'text-gray-400' : 'text-[#7589A3]'}`}>{msg.time}</div>
                       </div>
                     </div>
                   </div>
@@ -734,14 +766,16 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                   )}
                   <div className="flex items-center gap-2 w-full justify-start">
                     <div className="bg-white border-[#e5e7eb] rounded-lg px-3 py-2 shadow-sm border w-fit max-w-full">
-                      <div className="text-[#081c36] text-[15px]">{msg.text}</div>
-                      <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                      <div className={`text-[15px] ${msg.isRecalled ? 'text-gray-400 italic' : 'text-[#081c36]'}`}>{msg.text}</div>
+                      <div className={`text-[12px] mt-1 text-right ${msg.isRecalled ? 'text-gray-400' : 'text-[#7589A3]'}`}>{msg.time}</div>
                     </div>
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-1">
-                       <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Ai đó', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
-                         <Reply size={14} />
-                       </button>
-                    </div>
+                    {!msg.isRecalled && (
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                         <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Ai đó', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
+                           <Quote size={14} />
+                         </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -791,6 +825,29 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         onConfirm={handleAddMembers}
         existingMemberIds={groupMemberIds}
       />
+
+      {recallingMessageId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg p-6 w-96 shadow-xl text-center flex flex-col items-center">
+            <h3 className="text-lg font-semibold text-[#081c36] mb-2">Thu hồi tin nhắn</h3>
+            <p className="text-gray-600 mb-6 text-sm">Bạn có chắc muốn thu hồi tin nhắn này không?</p>
+            <div className="flex justify-end gap-3 w-full">
+              <button
+                onClick={() => setRecallingMessageId(null)}
+                className="flex-1 py-2 text-[15px] font-medium text-[#081c36] bg-[#eef0f1] hover:bg-[#dfe2e7] rounded-md transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => handleRecallMessage(recallingMessageId)}
+                className="flex-1 py-2 text-[15px] font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+              >
+                Thu hồi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="bg-white flex flex-col flex-shrink-0">
