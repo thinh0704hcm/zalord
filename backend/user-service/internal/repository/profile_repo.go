@@ -6,12 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	queries "github.com/thinh0704hcm/zalord/backend/user-service/db/sqlc"
 )
 
 type ProfileRepository interface {
 	CreateProfile(ctx context.Context, userId uuid.UUID, displayName, phoneNumber string) error
-	UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string) (*queries.Profile, error)
+	UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string, notificationsEnabled *bool) (*queries.Profile, error)
 	GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error)
 	GetByPhone(ctx context.Context, phone string) (*queries.Profile, error)
 	SearchByName(ctx context.Context, name string, limit int32) ([]queries.Profile, error)
@@ -35,13 +36,19 @@ func (r *profileRepository) CreateProfile(ctx context.Context, userId uuid.UUID,
 	})
 }
 
-func (r *profileRepository) UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string) (*queries.Profile, error) {
+func (r *profileRepository) UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string, notificationsEnabled *bool) (*queries.Profile, error) {
+	var notifsEnabled pgtype.Bool
+	if notificationsEnabled != nil {
+		notifsEnabled = pgtype.Bool{Bool: *notificationsEnabled, Valid: true}
+	}
+
 	prof, err := r.queries.UpdateMyProfile(ctx, queries.UpdateMyProfileParams{
-		UserID:      userId,
-		DisplayName: displayName,
-		Gender:      gender,
-		DateOfBirth: dateOfBirth,
-		AvatarUrl:   avatarUrl,
+		UserID:               userId,
+		DisplayName:          displayName,
+		Gender:               gender,
+		DateOfBirth:          dateOfBirth,
+		AvatarUrl:            avatarUrl,
+		NotificationsEnabled: notifsEnabled,
 	})
 	if err != nil {
 		return nil, err

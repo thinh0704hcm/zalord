@@ -58,7 +58,13 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 export default function SidebarNav() {
   const [activeTab, setActiveTab] = useState('message');
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    try {
+      return Notification.permission === 'granted' && localStorage.getItem('zalord_notifications') !== 'false';
+    } catch (e) {
+      return false;
+    }
+  });
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [profileMode, setProfileMode] = useState<ProfileMode>('view');
@@ -88,6 +94,21 @@ export default function SidebarNav() {
         setDraftGender(nextProfile.gender ?? '');
         setDraftBirthday(nextProfile.dateOfBirth ?? '');
         setAvatarUrl(nextProfile.avatarUrl);
+        
+        if (nextProfile.notificationsEnabled !== undefined) {
+          if (nextProfile.notificationsEnabled) {
+            if (Notification.permission === 'granted') {
+              setNotificationsEnabled(true);
+              localStorage.setItem('zalord_notifications', 'true');
+            } else {
+              setNotificationsEnabled(false);
+              localStorage.setItem('zalord_notifications', 'false');
+            }
+          } else {
+            setNotificationsEnabled(false);
+            localStorage.setItem('zalord_notifications', 'false');
+          }
+        }
 
         const storedUser = getStoredUser();
         localStorage.setItem(
@@ -338,7 +359,50 @@ export default function SidebarNav() {
                 <div className="absolute left-[56px] bottom-0 w-[160px] bg-white rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-[#e7e9ee] overflow-hidden z-50 py-1">
                   <div 
                     className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                    onClick={async () => {
+                      if (!profile) return;
+                      if (!notificationsEnabled) {
+                        // Turning ON
+                        if (Notification.permission === 'default' || Notification.permission === 'denied') {
+                          const permission = await Notification.requestPermission();
+                          if (permission === 'granted') {
+                            setNotificationsEnabled(true);
+                            localStorage.setItem('zalord_notifications', 'true');
+                            try {
+                              await userService.updateMe({
+                                displayName: profile.displayName,
+                                notificationsEnabled: true
+                              });
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }
+                        } else if (Notification.permission === 'granted') {
+                          setNotificationsEnabled(true);
+                          localStorage.setItem('zalord_notifications', 'true');
+                          try {
+                            await userService.updateMe({
+                              displayName: profile.displayName,
+                              notificationsEnabled: true
+                            });
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }
+                      } else {
+                        // Turning OFF
+                        setNotificationsEnabled(false);
+                        localStorage.setItem('zalord_notifications', 'false');
+                        try {
+                          await userService.updateMe({
+                            displayName: profile.displayName,
+                            notificationsEnabled: false
+                          });
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }
+                    }}
                   >
                     <span className="text-sm font-medium text-gray-800">Thông báo</span>
                     <div 

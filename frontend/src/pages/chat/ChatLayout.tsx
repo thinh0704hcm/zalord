@@ -163,6 +163,7 @@ export default function ChatLayout() {
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [chatListError, setChatListError] = useState('');
   const activeChatIdRef = useRef<string | number | null>(null);
+  const lastNotifiedMsgIdRef = useRef<string | null>(null);
   const activeChat = chats.find(c => c.id === activeChatId);
   const presenceUserIds = useMemo(() => Array.from(new Set(chats
     .filter(chat => !chat.group)
@@ -322,6 +323,26 @@ export default function ChatLayout() {
         const chat = updatedChats[existingChatIndex];
         const currentUserId = getCurrentUserId();
         const isCurrentUserSender = senderId === currentUserId;
+
+        if (!isCurrentUserSender && (document.hidden || activeChatIdRef.current !== conversationId)) {
+          if (lastNotifiedMsgIdRef.current !== data.messageId) {
+            lastNotifiedMsgIdRef.current = data.messageId;
+            if (localStorage.getItem('zalord_notifications') !== 'false' && Notification.permission === 'granted') {
+              const title = `Tin nhắn mới từ ${chat.name}`;
+              const body = content || '[Có tin nhắn mới]';
+              const iconUrl = Array.isArray(chat.avatar) ? undefined : chat.avatar;
+              try {
+                const notification = new Notification(title, { body, icon: iconUrl || undefined });
+                notification.onclick = () => {
+                  window.focus();
+                  // Optionally navigate to the chat: window.location.href = `/?c=${conversationId}`
+                };
+              } catch (e) {
+                console.error("Failed to show notification", e);
+              }
+            }
+          }
+        }
 
         updatedChats[existingChatIndex] = {
           ...chat,

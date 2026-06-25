@@ -21,39 +21,48 @@ import (
 // sqlc-generated DB struct so the wire contract uses camelCase (frontend-friendly)
 // and can evolve independently of the DB schema.
 type ProfileResponse struct {
-	ID          uuid.UUID `json:"id"`
-	UserID      uuid.UUID `json:"userId"`
-	DisplayName string    `json:"displayName"`
-	PhoneNumber string    `json:"phoneNumber"`
-	AvatarURL   *string   `json:"avatarUrl"`
-	Gender      *string   `json:"gender"`
-	DateOfBirth *string   `json:"dateOfBirth"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID                   uuid.UUID `json:"id"`
+	UserID               uuid.UUID `json:"userId"`
+	DisplayName          string    `json:"displayName"`
+	PhoneNumber          string    `json:"phoneNumber"`
+	AvatarURL            *string   `json:"avatarUrl"`
+	Gender               *string   `json:"gender"`
+	DateOfBirth          *string   `json:"dateOfBirth"`
+	NotificationsEnabled *bool     `json:"notificationsEnabled"`
+	CreatedAt            time.Time `json:"createdAt"`
 }
 
 type UpdateProfileRequest struct {
-	DisplayName string  `json:"displayName"`
-	Gender      *string `json:"gender"`
-	DateOfBirth *string `json:"dateOfBirth"`
-	AvatarUrl   *string `json:"avatarUrl"`
+	DisplayName          string  `json:"displayName"`
+	Gender               *string `json:"gender"`
+	DateOfBirth          *string `json:"dateOfBirth"`
+	AvatarUrl            *string `json:"avatarUrl"`
+	NotificationsEnabled *bool   `json:"notificationsEnabled"`
 }
 
 func toResponse(p *queries.Profile) ProfileResponse {
 	var dateOfBirth *string
-	if p.DateOfBirth != nil {
-		formatted := p.DateOfBirth.Format("2006-01-02")
+	if p.DateOfBirth.Valid {
+		formatted := p.DateOfBirth.Time.Format("2006-01-02")
 		dateOfBirth = &formatted
 	}
 
+	var notifsEnabled *bool
+	if p.NotificationsEnabled.Valid {
+		b := p.NotificationsEnabled.Bool
+		notifsEnabled = &b
+	}
+
 	return ProfileResponse{
-		ID:          p.ID,
-		UserID:      p.UserID,
-		DisplayName: p.DisplayName,
-		PhoneNumber: p.PhoneNumber,
-		AvatarURL:   p.AvatarUrl,
-		Gender:      p.Gender,
-		DateOfBirth: dateOfBirth,
-		CreatedAt:   p.CreatedAt,
+		ID:                   p.ID,
+		UserID:               p.UserID,
+		DisplayName:          p.DisplayName,
+		PhoneNumber:          p.PhoneNumber,
+		AvatarURL:            p.AvatarUrl,
+		Gender:               p.Gender,
+		DateOfBirth:          dateOfBirth,
+		NotificationsEnabled: notifsEnabled,
+		CreatedAt:            p.CreatedAt,
 	}
 }
 
@@ -182,7 +191,7 @@ func (h *ProfileHandler) UpdateMe(c *gin.Context) {
 		}
 	}
 
-	prof, err := h.svc.UpdateMyProfile(c.Request.Context(), userID, displayName, gender, dateOfBirth, avatarUrl)
+	prof, err := h.svc.UpdateMyProfile(c.Request.Context(), userID, displayName, gender, dateOfBirth, avatarUrl, req.NotificationsEnabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: "profile not found"})
 		return

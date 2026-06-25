@@ -9,6 +9,7 @@ export interface UserProfile {
   bio: string | null;
   gender?: string | null;
   dateOfBirth?: string | null;
+  notificationsEnabled?: boolean;
 }
 
 export type UpdateProfilePayload = {
@@ -16,6 +17,7 @@ export type UpdateProfilePayload = {
   avatarUrl?: string | null;
   gender?: string | null;
   dateOfBirth?: string | null;
+  notificationsEnabled?: boolean;
 };
 
 type ApiErrorShape = {

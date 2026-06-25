@@ -6,6 +6,7 @@ CREATE TABLE profiles (
   avatar_url    TEXT,
   gender        VARCHAR(20),
   date_of_birth DATE,
+  notifications_enabled BOOLEAN DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at    TIMESTAMPTZ
 );

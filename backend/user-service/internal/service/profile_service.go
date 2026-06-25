@@ -18,7 +18,7 @@ import (
 type ProfileService interface {
 	ConsumeProfileCreated(ctx context.Context, body []byte) error
 	CreateProfile(ctx context.Context, userId uuid.UUID, displayName, phoneNumber string) error
-	UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string) (*queries.Profile, error)
+	UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string, notificationsEnabled *bool) (*queries.Profile, error)
 	GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error)
 	GetByPhone(ctx context.Context, phone string) (*queries.Profile, error)
 	SearchByName(ctx context.Context, name string, limit int) ([]queries.Profile, error)
@@ -65,8 +65,8 @@ func (p *profileService) CreateProfile(ctx context.Context, userId uuid.UUID, di
 	return nil
 }
 
-func (p *profileService) UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string) (*queries.Profile, error) {
-	return p.profileRepo.UpdateMyProfile(ctx, userId, displayName, gender, dateOfBirth, avatarUrl)
+func (p *profileService) UpdateMyProfile(ctx context.Context, userId uuid.UUID, displayName string, gender *string, dateOfBirth *time.Time, avatarUrl *string, notificationsEnabled *bool) (*queries.Profile, error) {
+	return p.profileRepo.UpdateMyProfile(ctx, userId, displayName, gender, dateOfBirth, avatarUrl, notificationsEnabled)
 }
 
 func (p *profileService) GetByUserID(ctx context.Context, userId uuid.UUID) (*queries.Profile, error) {
