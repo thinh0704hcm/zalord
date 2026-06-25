@@ -18,6 +18,7 @@ public record MediaResponse(
         Long sizeBytes,
         MediaStatus status,
         Instant createdAt,
-        Instant finalizedAt
+        Instant finalizedAt,
+        String url
 ) {
 }

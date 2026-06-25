@@ -11,6 +11,7 @@ public interface IMediaService {
     UploadUrlResponse requestUploadUrl(UUID callerUserId, UploadUrlRequest request);
     MediaResponse finalize(UUID callerUserId, UUID mediaId);
     MediaResponse get(UUID callerUserId, UUID mediaId);
+    java.util.List<MediaResponse> listByConversation(UUID callerUserId, UUID conversationId);
     DownloadUrlResponse downloadUrl(UUID callerUserId, UUID mediaId);
     void delete(UUID callerUserId, UUID mediaId);
     byte[] downloadAvatar(UUID callerUserId, UUID mediaId);

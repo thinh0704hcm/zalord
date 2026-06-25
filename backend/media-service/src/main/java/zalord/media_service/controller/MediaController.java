@@ -60,6 +60,15 @@ public class MediaController {
         return ResponseEntity.ok(new ApiResponse<>(HttpStatus.OK, "OK", service.get(callerUserId, id), null));
     }
 
+    @GetMapping("/conversation/{conversationId}")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "List all media in a conversation")
+    public ResponseEntity<ApiResponse<java.util.List<MediaResponse>>> listByConversation(
+            @Parameter(hidden = true) @RequestHeader("X-User-Id") UUID callerUserId,
+            @PathVariable UUID conversationId) {
+        return ResponseEntity.ok(new ApiResponse<>(HttpStatus.OK, "OK", service.listByConversation(callerUserId, conversationId), null));
+    }
+
     @GetMapping("/{id}/url")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Get a presigned GET URL to download the media",

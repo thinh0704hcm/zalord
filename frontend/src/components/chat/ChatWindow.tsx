@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { UserPlus, Users, ThumbsUp, Quote, X, RotateCcw } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { UserPlus, Users, ThumbsUp, Quote, X, RotateCcw, Folder, Download } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
 import GroupSidebar from './GroupSidebar';
@@ -102,9 +103,36 @@ const Daystamp = ({ date }: { date: string }) => {
   );
 };
 
+function ImagePreviewModal({ url, onClose }: { url: string, onClose: () => void }) {
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = 'unset'; };
+  }, []);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80" onClick={onClose}>
+      <button 
+        className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full p-2 transition-colors"
+        onClick={onClose}
+        title="Đóng (Esc)"
+      >
+        <X size={24} />
+      </button>
+      <img 
+        src={url} 
+        className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl" 
+        onClick={(e) => e.stopPropagation()} 
+        alt="Preview"
+      />
+    </div>,
+    document.body
+  );
+}
+
 function AttachmentItem({ id }: { id: string }) {
   const [media, setMedia] = useState<MediaResponse | null>(null);
   const [hasError, setHasError] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   
   useEffect(() => {
     let mounted = true;
@@ -121,49 +149,218 @@ function AttachmentItem({ id }: { id: string }) {
     return () => { mounted = false; };
   }, [id]);
 
-  const handleDownload = async () => {
-    try {
-      const res = await api.get(`/media/${id}/url`);
-      const downloadUrl = res.data.data.url;
-      window.open(downloadUrl, '_blank');
-    } catch (e) {
-      console.error('Failed to get download URL', e);
-    }
-  };
-
   if (hasError) return <div className="text-xs text-red-400 italic p-1 border border-red-200 bg-red-50 rounded mt-1 max-w-[200px]">Tệp không tồn tại hoặc đã bị xóa</div>;
   if (!media) return <div className="text-xs text-gray-500 italic p-1">Đang tải tệp đính kèm...</div>;
 
   const isImage = media.mimeType?.startsWith('image/');
   
-  if (isImage) {
+  if (isImage && media.url) {
     return (
       <div 
-        className="mt-2 rounded overflow-hidden border border-gray-200 cursor-pointer hover:opacity-90 max-w-[200px]"
-        onClick={handleDownload}
-        title="Bấm để tải xuống/xem"
+        className="relative max-w-sm rounded-lg overflow-hidden border border-gray-200 cursor-pointer group"
       >
-        <div className="bg-gray-100 p-2 flex items-center gap-2">
-          <ZalordPhotoIcon className="w-5 h-5 text-gray-500" />
-          <span className="text-xs text-gray-700 truncate">{media.fileName || media.id}</span>
-        </div>
+        <img 
+          src={media.url} 
+          alt={media.fileName || 'Image'} 
+          className="max-w-full h-auto object-cover max-h-64" 
+          onClick={() => setIsPreviewOpen(true)}
+        />
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (media.url) {
+              const a = document.createElement('a');
+              a.href = media.url;
+              a.download = media.fileName || media.id;
+              a.target = '_blank';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }
+          }}
+          className="absolute top-2 right-2 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Tải xuống"
+        >
+          <Download size={16} />
+        </button>
+        {isPreviewOpen && <ImagePreviewModal url={media.url} onClose={() => setIsPreviewOpen(false)} />}
       </div>
     );
   }
 
   return (
     <div 
-      className="mt-2 flex items-center gap-3 p-2 bg-white rounded border border-gray-200 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors w-fit max-w-[250px]"
-      onClick={handleDownload}
-      title="Bấm để tải xuống"
+      className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg max-w-sm cursor-pointer hover:bg-gray-50 transition-colors group"
+      onClick={() => {
+        if (media.url) {
+          const a = document.createElement('a');
+          a.href = media.url;
+          a.download = media.fileName || media.id;
+          a.target = '_blank';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      }}
     >
       <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-blue-50 rounded text-blue-600">
         <ZalordAttachIcon className="w-5 h-5" />
       </div>
-      <div className="flex flex-col min-w-0">
+      <div className="flex flex-col min-w-0 flex-1">
         <span className="text-sm font-medium text-gray-800 truncate">{media.fileName || media.id}</span>
         {media.sizeBytes && <span className="text-xs text-gray-500">{(media.sizeBytes / 1024).toFixed(1)} KB</span>}
       </div>
+      <div className="w-8 h-8 flex items-center justify-center text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0">
+        <Download size={18} />
+      </div>
+    </div>
+  );
+}
+
+function PendingAttachmentItem({ file, onRemove }: { file: File, onRemove: () => void }) {
+  const isImage = file.type.startsWith('image/');
+  const [preview, setPreview] = useState<string | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    if (isImage) {
+      const url = URL.createObjectURL(file);
+      setPreview(url);
+      return () => URL.revokeObjectURL(url);
+    }
+  }, [file, isImage]);
+
+  return (
+    <div className="relative group">
+      {isImage && preview ? (
+        <>
+          <div 
+            className="w-16 h-16 rounded overflow-hidden border border-gray-200 cursor-pointer"
+            onClick={() => setIsPreviewOpen(true)}
+          >
+            <img src={preview} alt={file.name} className="w-full h-full object-cover" />
+          </div>
+          {isPreviewOpen && <ImagePreviewModal url={preview} onClose={() => setIsPreviewOpen(false)} />}
+        </>
+      ) : (
+        <div className="bg-gray-100 rounded px-3 py-1.5 flex items-center gap-2">
+          <ZalordAttachIcon className="w-4 h-4 text-gray-500" />
+          <span className="text-sm text-gray-700 truncate max-w-[150px]">{file.name}</span>
+        </div>
+      )}
+      <button
+        onClick={onRemove}
+        className="absolute -top-2 -right-2 bg-white rounded-full p-0.5 shadow border border-gray-200 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+function MediaSidebar({ conversationId, onClose }: { conversationId: string, onClose: () => void }) {
+  const [media, setMedia] = useState<MediaResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setIsLoading(true);
+    mediaService.listByConversation(conversationId)
+      .then(res => {
+        if (mounted) {
+          setMedia(res);
+          setIsLoading(false);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        if (mounted) setIsLoading(false);
+      });
+    return () => { mounted = false; };
+  }, [conversationId]);
+
+  const images = media.filter(m => m.mimeType?.startsWith('image/'));
+  const files = media.filter(m => !m.mimeType?.startsWith('image/'));
+
+  return (
+    <div className="w-[300px] bg-white border-l border-[#eaedf0] flex flex-col h-full flex-shrink-0">
+      <div className="h-[64px] border-b border-[#eaedf0] flex items-center justify-between px-4">
+        <h3 className="font-semibold text-[#001a33]">Kho lưu trữ</h3>
+        <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-500">
+          <X size={20} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+        {isLoading ? (
+          <div className="text-center text-sm text-gray-500 mt-4">Đang tải...</div>
+        ) : (
+          <>
+            <div>
+              <h4 className="font-medium text-gray-800 mb-3 text-sm flex items-center gap-2">
+                <ZalordPhotoIcon className="w-4 h-4" /> Hình ảnh ({images.length})
+              </h4>
+              {images.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {images.map(img => (
+                    <div 
+                      key={img.id} 
+                      className="aspect-square bg-gray-100 rounded overflow-hidden cursor-pointer hover:opacity-90 border border-gray-200"
+                      onClick={() => img.url && setPreviewUrl(img.url)}
+                      title={img.fileName || img.id}
+                    >
+                      {img.url ? <img src={img.url} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">Lỗi</div>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 text-center py-4 bg-gray-50 rounded">Chưa có hình ảnh nào</div>
+              )}
+            </div>
+
+            <div>
+              <h4 className="font-medium text-gray-800 mb-3 text-sm flex items-center gap-2">
+                <ZalordAttachIcon className="w-4 h-4" /> Tài liệu ({files.length})
+              </h4>
+              {files.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {files.map(file => (
+                    <div 
+                      key={file.id} 
+                      className="flex flex-col items-center gap-1 p-2 bg-white border border-gray-200 rounded cursor-pointer hover:bg-gray-50 group text-center relative"
+                      onClick={() => {
+                        if (file.url) {
+                          const a = document.createElement('a');
+                          a.href = file.url;
+                          a.download = file.fileName || file.id;
+                          a.target = '_blank';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }
+                      }}
+                    >
+                      <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <ZalordAttachIcon className="w-5 h-5" />
+                      </div>
+                      <div className="flex flex-col min-w-0 w-full px-1">
+                        <span className="text-[13px] font-medium text-gray-700 truncate" title={file.fileName || file.id}>{file.fileName || file.id}</span>
+                        {file.sizeBytes && <span className="text-[11px] text-gray-500">{(file.sizeBytes / 1024).toFixed(1)} KB</span>}
+                      </div>
+                      <div className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center text-gray-300 group-hover:text-blue-500 transition-colors">
+                        <Download size={14} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 text-center py-4 bg-gray-50 rounded">Chưa có tài liệu nào</div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+      {previewUrl && <ImagePreviewModal url={previewUrl} onClose={() => setPreviewUrl(null)} />}
     </div>
   );
 }
@@ -171,6 +368,7 @@ function AttachmentItem({ id }: { id: string }) {
 export default function ChatWindow({ chat, onConversationReady }: ChatWindowProps) {
   const [isAddMembersModalOpen, setIsAddMembersModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isMediaSidebarOpen, setIsMediaSidebarOpen] = useState(false);
   const [isKicked, setIsKicked] = useState(false);
   const [inputText, setInputText] = useState("");
   const [groupMemberCount, setGroupMemberCount] = useState<number | null>(null);
@@ -599,6 +797,28 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData.items;
+    const newFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file') {
+        const file = items[i].getAsFile();
+        if (file) {
+          let finalFile = file;
+          // When pasting raw image pixels, browsers default the file name to 'image.png'
+          if (file.type.startsWith('image/') && file.name === 'image.png') {
+            const uniqueName = `image_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.png`;
+            finalFile = new File([file], uniqueName, { type: file.type });
+          }
+          newFiles.push(finalFile);
+        }
+      }
+    }
+    if (newFiles.length > 0) {
+      setPendingAttachments(prev => [...prev, ...newFiles]);
+    }
+  };
+
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && (inputText.trim() || pendingAttachments.length > 0) && !isUploading && chat) {
       const text = inputText.trim();
@@ -626,12 +846,10 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         senderName: 'Bạn', 
         isSender: true,
         replyTo: currentReply ? { messageId: currentReply.id, senderId: currentReply.senderId, preview: currentReply.content } : null,
-        attachmentIds: undefined // For optimistic UI, we don't have the UUIDs yet.
+        attachmentIds: undefined 
       }]);
       
       setIsUploading(true);
-      // Send via API. A searched user opens a temporary chat first; create the
-      // real DIRECT conversation only when the first message is sent.
       try {
         let conversationId = String(chat.id);
 
@@ -729,7 +947,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   return (
     <div className="flex-1 h-screen flex flex-row">
       <div className="flex-1 flex flex-col bg-[#eef0f1] relative min-w-0">
-      {/* Header */}
       <div className="h-[64px] bg-white border-b border-[#d6dbe1] flex items-center justify-between px-4 flex-shrink-0">
         <div className="flex items-center gap-3">
           <Avatar url={chat.avatarUrl} name={chat.name} className="w-[42px] h-[42px] text-[15px]" />
@@ -754,6 +971,16 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           </div>
         </div>
         <div className="flex items-center gap-1 text-gray-600">
+          <button
+            onClick={() => {
+              setIsMediaSidebarOpen(!isMediaSidebarOpen);
+              setIsSidebarOpen(false);
+            }}
+            className={`p-1.5 rounded-md transition-colors ${isMediaSidebarOpen ? 'bg-gray-100 text-[#0068ff]' : 'hover:bg-gray-100'}`}
+            title="Kho lưu trữ"
+          >
+            <Folder size={18} />
+          </button>
           {chat.group && !isKicked && (
             <button
               onClick={() => setIsAddMembersModalOpen(true)}
@@ -766,7 +993,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         </div>
       </div>
 
-      {/* Messages Area */}
       <div 
         ref={scrollContainerRef}
         onScroll={handleScroll}
@@ -777,109 +1003,11 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             Đang tải...
           </div>
         )}
-        {/* Spacer to push messages to bottom */}
         <div className="flex-1 min-h-0"></div>
-        {chat.name === 'KTPM2023.3' && (
-          <>
-
-        {/* Date Divider */}
-        {/* eslint-disable-next-line react-hooks/purity */}
-        <Daystamp date={new Date(Date.now() - 86400000).toISOString()} />
-
-        {/* Incoming Message Group */}
-        <div className="flex items-start gap-2.5 max-w-[65%]">
-              <div className="w-[48px] h-[48px] rounded-full bg-[#eaedf0] flex items-center justify-center text-[#0068ff] font-semibold text-lg flex-shrink-0">
-                {typeof chat.avatar === 'string' ? chat.avatar : (chat.avatar[0] || 'G')}
-              </div>
-          <div className="flex flex-col gap-[2px]">
-            {/* Message 1 */}
-            <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm border border-gray-200 relative group mb-3">
-              <div className="text-[12px] text-gray-500 mb-1">Ngọc Quí</div>
-              
-              {/* Link Preview */}
-              <div className="mb-2">
-                <a href="#" className="text-[#0068ff] hover:underline break-all text-[14px] leading-relaxed">
-                  https://se.uit.edu.vn/vi/tin-tức/12-su-kien-noi-bat...1ển-game-trên-nền-tảng-roblox.html
-                </a>
-              </div>
-              <div className="bg-gray-50 border-l-[3px] border-gray-300 p-2 text-sm rounded-r-md">
-                <div className="font-semibold text-gray-800 text-[13px] mb-0.5 line-clamp-1">Đăng ký tham gia lớp pilot môn học SE370 - Phát triển...</div>
-                <div className="text-gray-600 line-clamp-2 text-[12px] leading-snug">Kênh thông tin khoa Công Nghệ Phần Mềm, ĐH CNTT. locate. Phòng E7.2, tòa nhà E, trường Đại học Công Nghệ...</div>
-                <div className="text-[#0068ff] text-[11px] mt-1 hover:underline cursor-pointer">se.uit.edu.vn</div>
-              </div>
-
-              {/* Reactions */}
-              <div className="absolute -bottom-3 right-2 flex items-center gap-1">
-                 <div className="bg-white rounded-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-gray-100 px-1.5 py-0.5 flex items-center gap-1.5 h-[22px]">
-                     <div className="flex items-center">
-                         <span className="text-[14px] leading-none">❤️</span>
-                     </div>
-                     <span className="text-[#001a33] font-medium text-[11px] pr-0.5">1</span>
-                 </div>
-                 <div className="relative group/react flex items-center justify-end">
-                    <div className="absolute bottom-0 right-0 w-[240px] h-[30px] hidden group-hover/react:block"></div>
-                    <div className="w-[22px] h-[22px] bg-white rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-50 text-gray-500 relative z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ThumbsUp size={12} strokeWidth={2} />
-                    </div>
-                 </div>
-              </div>
-            </div>
-
-            {/* Message 2 */}
-            <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm border border-gray-200 relative group mb-3">
-              <div className="text-[14px] text-gray-800 leading-snug">
-                Mấy e tham khảo thử nhé
-              </div>
-              <div className="text-[11px] text-gray-500 mt-1">
-                15:10
-              </div>
-              
-              
-              {/* Reactions */}
-              <div className="absolute -bottom-3 right-2 flex items-center gap-1">
-                 {/* Reaction Pill */}
-                 <div className="bg-white rounded-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-gray-100 px-1.5 py-0.5 flex items-center gap-1.5 h-[22px]">
-                     <div className="flex space-x-px items-center">
-                         <span className="text-[14px] leading-none">😂</span>
-                         <span className="text-[14px] leading-none">😭</span>
-                         <span className="text-[14px] leading-none">👍</span>
-                     </div>
-                     <span className="text-[#001a33] font-medium text-[11px] pr-0.5">5</span>
-                 </div>
-                 
-                 {/* Quick React Button */}
-                 <div className="relative group/react flex items-center justify-end">
-                    {/* Transparent Hitbox */}
-                    <div className="absolute bottom-0 right-0 w-[240px] h-[30px] hidden group-hover/react:block"></div>
-                    
-                    <div className="w-[22px] h-[22px] bg-white rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.15)] border border-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-50 text-gray-500 relative z-10">
-                        <ThumbsUp size={12} strokeWidth={2} />
-                    </div>
-                    
-                    {/* Hover Popup */}
-                    <div className="absolute bottom-full right-0 pb-1.5 hidden group-hover/react:flex z-20 w-max">
-                       <div className="bg-white rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.15)] border border-gray-200 px-2 py-1.5 flex items-center gap-1.5">
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">👍</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">❤️</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😂</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😮</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😭</span>
-                           <span className="hover:scale-125 transition-transform cursor-pointer text-[22px] leading-none">😡</span>
-                       </div>
-                    </div>
-                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-          </>
-        )}
-
         {userMessages.length > 0 && (
           <Daystamp date={new Date().toISOString()} />
         )}
         
-        {/* Dynamic User Messages Container */}
         <div className="flex flex-col gap-[2px] w-full">
           {userMessages.map((msg, index) => {
             const isSender = msg.isSender !== false;
@@ -949,7 +1077,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                 {shouldReserveIncomingAvatarSpace && (
                   shouldShowIncomingAvatar ? (
                     <Avatar 
-                      url={chat?.group ? undefined : chat?.avatarUrl} // For group we might not have the sender's avatar URL yet unless we fetch it. We'll pass undefined for group sender for now.
+                      url={chat?.group ? undefined : chat?.avatarUrl}
                       name={avatarText} 
                       className="w-10 h-10 text-[14px]" 
                     />
@@ -1067,7 +1195,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         </div>
       )}
 
-      {/* Input Area */}
       {isKicked ? (
         <div className="bg-[#e9eaec] flex items-center justify-center h-[90px] text-gray-500 text-[14px] border-t border-[#d6dbe1] flex-shrink-0">
           Bạn không còn là thành viên của nhóm này
@@ -1085,7 +1212,6 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             </button>
           </div>
         )}
-        {/* Toolbar */}
         <div className="flex items-center gap-0.5 text-[#001a33] px-1.5 h-[46px] border-t border-b border-[#d6dbe1]">
           <div title="Gửi Sticker" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordStickerIcon className="w-6 h-6" /></div>
           <div title="Gửi hình ảnh" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordPhotoIcon className="w-6 h-6" /></div>
@@ -1111,16 +1237,14 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           />
         </div>
         
-        {/* Attachments preview */}
         {pendingAttachments.length > 0 && (
-          <div className="bg-white px-4 py-2 border-b border-[#eaedf0] flex flex-wrap gap-2 max-h-[100px] overflow-y-auto">
-            {pendingAttachments.map((file, idx) => (
-              <div key={idx} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded p-1.5 text-sm max-w-[200px]">
-                <div className="flex-1 truncate text-gray-700 font-medium text-xs">{file.name}</div>
-                <button onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 p-0.5 transition-colors">
-                  <X size={14} />
-                </button>
-              </div>
+          <div className="px-4 py-2 flex flex-wrap gap-2 border-b border-gray-100">
+            {pendingAttachments.map((file, index) => (
+              <PendingAttachmentItem 
+                key={index} 
+                file={file} 
+                onRemove={() => setPendingAttachments(prev => prev.filter((_, i) => i !== index))} 
+              />
             ))}
           </div>
         )}
@@ -1133,6 +1257,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             value={inputText}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             className="flex-1 bg-transparent border-none outline-none text-[15px] py-1 text-gray-800 placeholder-gray-500"
           />
         </div>
@@ -1140,8 +1265,11 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       )}
       </div>
 
-      {isSidebarOpen && chat.group && !isKicked && (
-        <GroupSidebar groupId={chat.id.toString()} />
+      {chat.group && isSidebarOpen && (
+        <GroupSidebar group={chat.group} onClose={() => setIsSidebarOpen(false)} />
+      )}
+      {isMediaSidebarOpen && (
+        <MediaSidebar conversationId={String(chat.id)} onClose={() => setIsMediaSidebarOpen(false)} />
       )}
     </div>
   );

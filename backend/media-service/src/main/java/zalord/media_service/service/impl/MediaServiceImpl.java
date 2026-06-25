@@ -142,6 +142,18 @@ public class MediaServiceImpl implements IMediaService {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.List<MediaResponse> listByConversation(UUID caller, UUID conversationId) {
+        if (!membership.isMember(conversationId, caller)) {
+            throw new ForbiddenException("Not a member of this conversation");
+        }
+        return repo.findByConversationIdAndStatusOrderByCreatedAtDesc(conversationId, MediaStatus.READY)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DownloadUrlResponse downloadUrl(UUID caller, UUID mediaId) {
         Media m = loadActive(mediaId);
         if (m.getStatus() != MediaStatus.READY) {
@@ -162,7 +174,8 @@ public class MediaServiceImpl implements IMediaService {
                         .signatureDuration(DOWNLOAD_URL_TTL)
                         .getObjectRequest(g -> g
                                 .bucket(bucketFor(m.getKind()))
-                                .key(m.getStorageKey()))
+                                .key(m.getStorageKey())
+                                .responseContentDisposition("attachment; filename=\"" + m.getFileName() + "\""))
                         .build()
         ).url().toString();
 
@@ -229,6 +242,21 @@ public class MediaServiceImpl implements IMediaService {
     }
 
     private MediaResponse toResponse(Media m) {
+        String url;
+        if (m.getKind() == MediaKind.AVATAR) {
+            url = props.getPublicEndpoint() + "/" + bucketFor(m.getKind()) + "/" + m.getStorageKey();
+        } else {
+            url = presigner.presignGetObject(
+                    GetObjectPresignRequest.builder()
+                            .signatureDuration(DOWNLOAD_URL_TTL)
+                            .getObjectRequest(g -> g
+                                    .bucket(bucketFor(m.getKind()))
+                                    .key(m.getStorageKey())
+                                    .responseContentDisposition("attachment; filename=\"" + m.getFileName() + "\""))
+                            .build()
+            ).url().toString();
+        }
+
         return MediaResponse.builder()
                 .id(m.getId())
                 .ownerId(m.getOwnerId())
@@ -240,6 +268,7 @@ public class MediaServiceImpl implements IMediaService {
                 .status(m.getStatus())
                 .createdAt(m.getCreatedAt())
                 .finalizedAt(m.getFinalizedAt())
+                .url(url)
                 .build();
     }
     @Override

@@ -52,5 +52,10 @@ export const mediaService = {
     
     await mediaService.uploadFileToMinio(uploadUrl, file);
     return await mediaService.finalizeUpload(mediaId);
+  },
+
+  listByConversation: async (conversationId: string): Promise<MediaResponse[]> => {
+    const response = await api.get(`/media/conversation/${conversationId}`);
+    return response.data.data;
   }
 };
