@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, ChevronLeft, Pencil, X } from 'lucide-react';
+import { Camera, ChevronLeft, Image, Pencil, User, X } from 'lucide-react';
 import { userService, type UserProfile } from '../../services/user';
 import { 
   ZalordMessageFilledIcon,
@@ -77,6 +77,7 @@ export default function SidebarNav() {
   const [updateError, setUpdateError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -455,43 +456,42 @@ export default function SidebarNav() {
                 </div>
               </>
             ) : (
-              <>
-                <div className="px-5 py-5">
-                  <div className="space-y-4">
-                    <label className="block">
-                      <span className="mb-1.5 block text-[14px] font-medium text-[#344054]">Đường dẫn ảnh đại diện</span>
-                      <input
-                        value={draftAvatarUrl}
-                        onChange={(event) => setDraftAvatarUrl(event.target.value)}
-                        placeholder="https://example.com/avatar.jpg"
-                        className="h-10 w-full rounded-md border border-[#d0d5dd] px-3 text-[15px] text-[#081c36] outline-none focus:border-[#0068ff] focus:ring-2 focus:ring-[#0068ff]/15"
-                      />
-                    </label>
+              <div className="px-5 pt-4 pb-12 min-h-[440px]">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept="image/png, image/jpeg, image/jpg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      console.log('Selected file:', file);
+                      // TODO: Handle image preview and upload when backend supports it
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full items-center justify-center gap-2 rounded-[4px] bg-[#e5efff] py-2.5 text-[14px] font-medium text-[#0068ff] transition-colors hover:bg-[#d6e5ff]"
+                >
+                  <Image size={18} strokeWidth={2} />
+                  Tải lên từ máy tính
+                </button>
+                
+                <h3 className="mt-6 text-[15px] font-medium text-[#081c36]">
+                  Ảnh đại diện của tôi
+                </h3>
+                
+                <div className="mt-14 flex flex-col items-center justify-center">
+                  <div className="flex h-[100px] w-[100px] items-center justify-center rounded-full bg-[#f2f4f7]">
+                    <User size={52} strokeWidth={2} fill="#b0b9c6" className="text-[#b0b9c6] mt-2" />
                   </div>
+                  <p className="mt-5 text-[14px] text-[#304057]">
+                    Bạn chưa cập nhật ảnh đại diện nào
+                  </p>
                 </div>
-
-                {updateError && (
-                  <div className="px-5 pb-2 text-[13px] text-red-500">{updateError}</div>
-                )}
-
-                <div className="flex justify-end gap-3 border-t border-[#eef0f4] px-5 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setProfileMode('view')}
-                    className="h-10 rounded-md px-5 text-[15px] font-medium text-[#081c36] hover:bg-[#f0f2f5]"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={applyAvatarUpdate}
-                    disabled={isUpdating}
-                    className="h-10 rounded-md bg-[#0068ff] px-6 text-[15px] font-semibold text-white hover:bg-[#0057d9] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isUpdating ? 'Đang cập nhật...' : 'Cập nhật'}
-                  </button>
-                </div>
-              </>
+              </div>
             )}
           </div>
         </div>
