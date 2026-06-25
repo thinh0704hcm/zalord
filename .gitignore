@@ -326,3 +326,10 @@ $RECYCLE.BIN/
 CLAUDE.md
 .claude/
 docs/only-me/
+
+
+# SOPS encrypted secrets (commit these)
+# deploy/k8s/**/*-secret.example.yaml   # tracked, encrypted
+
+# Plaintext secrets (never commit)
+deploy/k8s/**/*-secret.yaml

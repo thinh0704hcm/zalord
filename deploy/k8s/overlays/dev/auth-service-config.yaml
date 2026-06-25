@@ -1,0 +1,12 @@
+apiVersion: v1
+data:
+  POSTGRES_DB: auth-db
+  POSTGRES_HOST: auth-pg
+  POSTGRES_PORT: "5432"
+  REFRESH_EXPIRY_DAYS: "7"
+  SERVER_PORT: "8081"
+  ZALORD_USER_SERVICE_GRPC_TARGET: user-service:9082
+kind: ConfigMap
+metadata:
+  name: auth-service-config
+  namespace: zalord-dev
