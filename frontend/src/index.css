@@ -23,3 +23,12 @@
 ::-webkit-scrollbar-button {
   display: none;
 }
+
+/* Ensure all buttons have pointer cursor globally */
+button, 
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  cursor: pointer;
+}

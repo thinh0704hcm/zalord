@@ -4,6 +4,7 @@ export interface SendMessageRequest {
   conversationId: string;
   content?: string;
   attachmentIds?: string[];
+  replyToMessageId?: string;
 }
 
 export interface MessageReaderResponse {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, Users, ThumbsUp } from 'lucide-react';
+import { UserPlus, Users, ThumbsUp, Reply, X } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
 import { Avatar } from './Avatar';
@@ -17,6 +17,12 @@ interface ChatWindowProps {
   onConversationReady?: (temporaryId: string | number, conversationId: string, lastMessage?: string) => void;
 }
 
+type ReplyToSnippet = {
+  messageId: string;
+  senderId: string;
+  preview: string;
+};
+
 type UserMessage = {
   id?: string;
   text: string;
@@ -25,6 +31,7 @@ type UserMessage = {
   senderId?: string;
   senderName?: string;
   isSender?: boolean;
+  replyTo?: ReplyToSnippet | null;
 };
 
 type SeenReader = {
@@ -40,6 +47,7 @@ type MessageHistoryItem = {
   content: string;
   createdAt: string;
   senderId: string;
+  replyTo?: ReplyToSnippet | null;
 };
 
 const getMessageDateKey = (date: Date) => date.toISOString().slice(0, 10);
@@ -104,6 +112,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const remoteTypingTimeoutsRef = useRef<Record<string, number>>({});
   const lastTypingSentAtRef = useRef(0);
   const isTypingSentRef = useRef(false);
+
+  const [replyingTo, setReplyingTo] = useState<{ id: string; content: string; senderName: string; senderId: string } | null>(null);
 
   const currentUserId = (() => {
     try {
@@ -278,6 +288,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
       if (!isSameTemporaryChatResolved) {
         setUserMessages([]);
+        setReplyingTo(null);
       }
 
       if (chat && typeof chat.id === 'string' && !chat.isPending) {
@@ -295,7 +306,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               dateKey: getMessageDateKey(msgDate),
               senderId: m.senderId,
               senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
-              isSender
+              isSender,
+              replyTo: m.replyTo
             };
           }))).reverse();
 
@@ -348,7 +360,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             dateKey: getMessageDateKey(createdAt),
             senderId: data.senderId,
             senderName,
-            isSender: false
+            isSender: false,
+            replyTo: data.replyTo
           }];
         });
         void markConversationRead(data.conversationId, data.messageId)
@@ -396,7 +409,9 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputText.trim() && chat) {
       const text = inputText.trim();
+      const currentReply = replyingTo;
       setInputText("");
+      setReplyingTo(null);
       sendTypingState(false, true);
       clearOwnTypingTimers();
       
@@ -407,7 +422,16 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       const optimisticId = `optimistic-${Date.now()}`;
 
       // Optimistic update
-      setUserMessages(prev => [...prev, { id: optimisticId, text: text, time: timeStr, dateKey, senderId: currentUserId || undefined, senderName: 'Bạn', isSender: true }]);
+      setUserMessages(prev => [...prev, { 
+        id: optimisticId, 
+        text: text, 
+        time: timeStr, 
+        dateKey, 
+        senderId: currentUserId || undefined, 
+        senderName: 'Bạn', 
+        isSender: true,
+        replyTo: currentReply ? { messageId: currentReply.id, senderId: currentReply.senderId, preview: currentReply.content } : null
+      }]);
       
       // Send via API. A searched user opens a temporary chat first; create the
       // real DIRECT conversation only when the first message is sent.
@@ -421,7 +445,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
         const sentMessage = await messageService.send({
           conversationId,
-          content: text
+          content: text,
+          replyToMessageId: currentReply?.id
         });
 
         setUserMessages(prev => {
@@ -644,17 +669,40 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
             if (isSender) {
               return (
-                <div key={index} className="flex w-full justify-end">
-                  <div className="max-w-[70%] bg-[#e5efff] border-[#cce1ff] rounded-lg px-3 py-2 shadow-sm border">
-                    <div className="text-[#081c36] text-[15px]">{msg.text}</div>
-                    <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                <div key={index} id={msg.id ? `msg-${msg.id}` : undefined} className="flex w-full justify-end group transition-colors duration-500 rounded-lg">
+                  <div className="max-w-[70%] flex flex-col items-end">
+                    {msg.replyTo && (
+                      <div 
+                        className="bg-white border border-[#e5e7eb] border-l-[3px] border-l-[#0068ff] shadow-sm px-3 py-2 text-sm rounded-t-lg rounded-bl-lg mb-[2px] cursor-pointer hover:bg-gray-50 transition-colors w-fit max-w-full text-left"
+                        onClick={() => {
+                           const el = document.getElementById(`msg-${msg.replyTo!.messageId}`);
+                           el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                           el?.classList.add('bg-blue-50');
+                           setTimeout(() => el?.classList.remove('bg-blue-50'), 1500);
+                        }}
+                      >
+                         <div className="font-semibold text-[#0068ff] text-[12px] mb-0.5 line-clamp-1">Trả lời tin nhắn</div>
+                         <div className="text-gray-500 line-clamp-2 text-[12px] leading-snug">{msg.replyTo.preview}</div>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 w-full justify-end">
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity mr-2">
+                         <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Bạn', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
+                           <Reply size={14} />
+                         </button>
+                      </div>
+                      <div className="bg-[#e5efff] border-[#cce1ff] rounded-lg px-3 py-2 shadow-sm border w-fit max-w-full">
+                        <div className="text-[#081c36] text-[15px]">{msg.text}</div>
+                        <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
             }
 
             return (
-              <div key={index} className="flex w-full justify-start items-start gap-2.5">
+              <div key={index} id={msg.id ? `msg-${msg.id}` : undefined} className="flex w-full justify-start items-start gap-2.5 group transition-colors duration-500 rounded-lg">
                 {shouldReserveIncomingAvatarSpace && (
                   shouldShowIncomingAvatar ? (
                     <Avatar 
@@ -666,12 +714,35 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                     <div className="w-10 flex-shrink-0" />
                   )
                 )}
-                <div className="max-w-[70%] bg-white border-[#e5e7eb] rounded-lg px-3 py-2 shadow-sm border">
+                <div className="max-w-[70%] flex flex-col items-start">
                   {chat?.group && isFirstMessageInIncomingGroup && msg.senderName && (
-                    <div className="text-[#7589A3] text-[12px] font-medium mb-1">{msg.senderName}</div>
+                    <div className="text-[#7589A3] text-[12px] font-medium mb-1 pl-1">{msg.senderName}</div>
                   )}
-                  <div className="text-[#081c36] text-[15px]">{msg.text}</div>
-                  <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                  {msg.replyTo && (
+                    <div 
+                      className="bg-white border border-[#e5e7eb] border-l-[3px] border-l-[#0068ff] shadow-sm px-3 py-2 text-sm rounded-t-lg rounded-br-lg mb-[2px] cursor-pointer hover:bg-gray-50 transition-colors w-fit max-w-full text-left"
+                      onClick={() => {
+                         const el = document.getElementById(`msg-${msg.replyTo!.messageId}`);
+                         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                         el?.classList.add('bg-blue-50');
+                         setTimeout(() => el?.classList.remove('bg-blue-50'), 1500);
+                      }}
+                    >
+                       <div className="font-semibold text-[#0068ff] text-[12px] mb-0.5 line-clamp-1">Trả lời tin nhắn</div>
+                       <div className="text-gray-500 line-clamp-2 text-[12px] leading-snug">{msg.replyTo.preview}</div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 w-full justify-start">
+                    <div className="bg-white border-[#e5e7eb] rounded-lg px-3 py-2 shadow-sm border w-fit max-w-full">
+                      <div className="text-[#081c36] text-[15px]">{msg.text}</div>
+                      <div className="text-[#7589A3] text-[12px] mt-1 text-right">{msg.time}</div>
+                    </div>
+                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                       <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Ai đó', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
+                         <Reply size={14} />
+                       </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -723,6 +794,17 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
       {/* Input Area */}
       <div className="bg-white flex flex-col flex-shrink-0">
+        {replyingTo && (
+          <div className="flex items-center justify-between px-4 py-2 bg-[#f2f4f7] border-t border-[#d6dbe1] text-[13px] text-[#081c36]">
+            <div className="flex flex-col border-l-[3px] border-[#0068ff] pl-2 overflow-hidden">
+              <span className="font-semibold text-[#0068ff] mb-0.5">Trả lời {replyingTo.senderName}</span>
+              <span className="text-gray-600 truncate">{replyingTo.content}</span>
+            </div>
+            <button onClick={() => setReplyingTo(null)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200 transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+        )}
         {/* Toolbar */}
         <div className="flex items-center gap-0.5 text-[#001a33] px-1.5 h-[46px] border-t border-b border-[#d6dbe1]">
           <div title="Gửi Sticker" className="w-8 h-8 flex items-center justify-center rounded-md cursor-pointer hover:bg-gray-100 transition-colors"><ZalordStickerIcon className="w-6 h-6" /></div>
