@@ -18,6 +18,13 @@ export type TypingFrameData = {
   userId?: string;
 };
 
+export type MessageReadFrameData = {
+  conversationId: string;
+  readerId: string;
+  lastReadMessageId: string;
+  readAt: string;
+};
+
 export type PresenceStatus = 'online' | 'offline';
 
 export type PresenceStateFrameData = {
@@ -39,6 +46,11 @@ export type MessageCreatedFrame = {
 export type TypingFrame = {
   type: 'typing';
   data: TypingFrameData;
+};
+
+export type MessageReadFrame = {
+  type: 'message.read';
+  data: MessageReadFrameData;
 };
 
 export type PresenceStateFrame = {
@@ -68,6 +80,14 @@ export const isTypingFrame = (frame: IncomingWebSocketFrame): frame is TypingFra
   if (frame.type !== 'typing' || !isRecord(frame.data)) return false;
   return typeof frame.data.conversationId === 'string'
     && typeof frame.data.isTyping === 'boolean';
+};
+
+export const isMessageReadFrame = (frame: IncomingWebSocketFrame): frame is MessageReadFrame => {
+  if (frame.type !== 'message.read' || !isRecord(frame.data)) return false;
+  return typeof frame.data.conversationId === 'string'
+    && typeof frame.data.readerId === 'string'
+    && typeof frame.data.lastReadMessageId === 'string'
+    && typeof frame.data.readAt === 'string';
 };
 
 const isPresenceStatus = (value: unknown): value is PresenceStatus =>

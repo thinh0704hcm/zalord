@@ -60,14 +60,10 @@ public interface ConversationViewRepository extends JpaRepository<ConversationVi
     @Modifying
     @Query("UPDATE ConversationView v " +
            "SET v.unreadCount = 0, " +
-           "    v.lastReadMessageId = :messageId, " +
-           "    v.lastReadAt = :readAt, " +
            "    v.updatedAt = CURRENT_TIMESTAMP " +
            "WHERE v.userId = :userId AND v.conversationId = :conversationId")
     int markRead(@Param("userId") UUID userId,
-                 @Param("conversationId") UUID conversationId,
-                 @Param("messageId") UUID messageId,
-                 @Param("readAt") Instant readAt);
+                 @Param("conversationId") UUID conversationId);
 
     @Modifying
     @Query("DELETE FROM ConversationView v WHERE v.userId = :userId AND v.conversationId = :conversationId")

@@ -53,6 +53,20 @@ CREATE TABLE message_attachments (
 
 CREATE INDEX idx_msg_att_message ON message_attachments (message_id);
 
+-- First-read receipts per message/user. A row means the user has read this
+-- specific message; read_at is preserved as the first time that happened.
+CREATE TABLE message_read_receipts (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id       UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    user_id          UUID NOT NULL,
+    read_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT message_read_receipts_unique UNIQUE (message_id, user_id)
+);
+
+CREATE INDEX idx_msg_reads_message ON message_read_receipts (message_id, read_at DESC);
+CREATE INDEX idx_msg_reads_conversation_user ON message_read_receipts (conversation_id, user_id);
+
 -- ─── CQRS READ MODEL ─────────────────────────────────────────────────────────
 -- conversation_views denormalises the inbox: one row per (user, conversation),
 -- with cached last-message preview + unread_count. Updated by InboxProjector
@@ -67,8 +81,6 @@ CREATE TABLE conversation_views (
     last_message_at       TIMESTAMPTZ,
     last_sender_id        UUID,
     unread_count          INT NOT NULL DEFAULT 0,
-    last_read_message_id  UUID,                                 -- read receipt: last seen msg
-    last_read_at          TIMESTAMPTZ,                          -- when the user marked it read
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT conv_views_unique UNIQUE (user_id, conversation_id)
 );

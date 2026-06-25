@@ -6,8 +6,9 @@ import { Avatar } from './Avatar';
 
 import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
+import { inboxService } from '../../services/inbox';
 import { conversationService } from '../../services/conversation';
-import { isMessageCreatedFrame, isTypingFrame, wsService } from '../../services/websocket';
+import { isMessageCreatedFrame, isMessageReadFrame, isTypingFrame, wsService } from '../../services/websocket';
 import { userService } from '../../services/user';
 import { groupService } from '../../services/group';
 
@@ -24,6 +25,21 @@ type UserMessage = {
   senderId?: string;
   senderName?: string;
   isSender?: boolean;
+};
+
+type SeenReader = {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  readAt: string;
+};
+
+type MessageHistoryItem = {
+  messageId?: string;
+  id?: string;
+  content: string;
+  createdAt: string;
+  senderId: string;
 };
 
 const getMessageDateKey = (date: Date) => date.toISOString().slice(0, 10);
@@ -77,7 +93,9 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const [groupMemberCount, setGroupMemberCount] = useState<number | null>(null);
   const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
+  const [lastMessageReaders, setLastMessageReaders] = useState<SeenReader[]>([]);
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+  const userMessagesRef = useRef<UserMessage[]>([]);
   const preservedMessagesRef = useRef<UserMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousChatRef = useRef<Chat | undefined>(undefined);
@@ -165,15 +183,65 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
     }
   };
 
+  const refreshLastMessageReaders = async (conversationId?: string) => {
+    if (!conversationId || chat?.isPending) {
+      setLastMessageReaders([]);
+      return;
+    }
+
+    const readers = await messageService.lastReaders(conversationId);
+    
+    // Explicitly exclude both the current viewer and the sender of the last message
+    // (Backend also excludes them, but this adds a bulletproof frontend guarantee)
+    const msgs = userMessagesRef.current;
+    const latestSenderId = msgs.length > 0 ? msgs[msgs.length - 1].senderId : null;
+    
+    const visibleReaders = readers.filter(reader => 
+      reader.userId !== currentUserId && reader.userId !== latestSenderId
+    );
+
+    if (visibleReaders.length === 0) {
+      setLastMessageReaders([]);
+      return;
+    }
+
+    const profiles = await Promise.allSettled(
+      visibleReaders.map(reader => userService.findByUserId(reader.userId))
+    );
+
+    setLastMessageReaders(visibleReaders.map((reader, index) => {
+      const profile = profiles[index].status === 'fulfilled' ? profiles[index].value : null;
+
+      return {
+        userId: reader.userId,
+        displayName: profile?.displayName ?? `Người dùng ${reader.userId.slice(0, 8)}`,
+        avatarUrl: profile?.avatarUrl ?? null,
+        readAt: reader.readAt,
+      };
+    }));
+  };
+
+  const markConversationRead = async (conversationId?: string, messageId?: string) => {
+    if (!conversationId || chat?.isPending || !messageId) return;
+
+    try {
+      await inboxService.markRead(conversationId, messageId);
+    } catch (error) {
+      console.error('Failed to mark conversation as read:', error);
+    }
+  };
+
   useEffect(() => {
     if (!chat?.group || typeof chat.id !== 'string') {
-      setGroupMemberCount(null);
-      setGroupMemberIds([]);
+      queueMicrotask(() => {
+        setGroupMemberCount(null);
+        setGroupMemberIds([]);
+      });
       return;
     }
 
     if (chat.totalMembers) {
-      setGroupMemberCount(chat.totalMembers);
+      queueMicrotask(() => setGroupMemberCount(chat.totalMembers ?? null));
     }
 
     let cancelled = false;
@@ -209,14 +277,14 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       );
 
       if (!isSameTemporaryChatResolved) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setUserMessages([]);
       }
 
       if (chat && typeof chat.id === 'string' && !chat.isPending) {
-        messageService.history(chat.id).then(async res => {
-          const responseItems = res.items || res.content || [];
-          const historyMsgs = (await Promise.all(responseItems.map(async (m: any) => {
+        const conversationId = chat.id;
+        messageService.history(conversationId).then(async res => {
+          const responseItems = (res.items || res.content || []) as MessageHistoryItem[];
+          const historyMsgs: UserMessage[] = (await Promise.all(responseItems.map(async (m) => {
             const msgDate = new Date(m.createdAt);
             const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
             const isSender = currentUserId === m.senderId;
@@ -230,6 +298,10 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               isSender
             };
           }))).reverse();
+
+          const latestMessageId = historyMsgs[historyMsgs.length - 1]?.id;
+          void markConversationRead(conversationId, latestMessageId);
+          void refreshLastMessageReaders(conversationId);
 
           setUserMessages(prev => {
             const preserved = isSameTemporaryChatResolved ? preservedMessagesRef.current : [];
@@ -248,6 +320,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 100);
         });
+      } else {
+        queueMicrotask(() => setLastMessageReaders([]));
       }
     }
 
@@ -277,6 +351,12 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             isSender: false
           }];
         });
+        void markConversationRead(data.conversationId, data.messageId)
+          .then(() => refreshLastMessageReaders(data.conversationId));
+      }
+
+      if (isMessageReadFrame(msg) && msg.data.conversationId === chat?.id) {
+        void refreshLastMessageReaders(msg.data.conversationId);
       }
 
       if (isTypingFrame(msg)) {
@@ -359,6 +439,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           return next;
         });
 
+        void refreshLastMessageReaders(conversationId);
+
         if (chat.pendingDirectUserId) {
           onConversationReady?.(chat.id, conversationId, text);
         }
@@ -440,7 +522,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-2 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto px-4 py-2 pb-3 flex flex-col gap-3">
         {/* Spacer to push messages to bottom */}
         <div className="flex-1 min-h-0"></div>
         {chat.name === 'KTPM2023.3' && (
@@ -607,6 +689,24 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             </div>
           )}
           <div ref={messagesEndRef} />
+
+          {lastMessageReaders.length > 0 && (
+            <div className="pointer-events-none mt-1 ml-auto flex -space-x-2 pr-1">
+              {lastMessageReaders.slice(0, 5).map(reader => (
+                <Avatar
+                  key={reader.userId}
+                  url={reader.avatarUrl}
+                  name={reader.displayName}
+                  className="h-6 w-6 border-2 border-[#eef0f1] text-[10px] shadow-sm"
+                />
+              ))}
+              {lastMessageReaders.length > 5 && (
+                <div className="flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#eef0f1] bg-white px-1 text-[10px] font-semibold text-[#081c36] shadow-sm">
+                  +{lastMessageReaders.length - 5}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

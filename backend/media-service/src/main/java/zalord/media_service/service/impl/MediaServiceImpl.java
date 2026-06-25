@@ -8,6 +8,7 @@ import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import zalord.media_service.config.MinioProperties;
 import zalord.media_service.dto.request.UploadUrlRequest;
@@ -230,5 +231,23 @@ public class MediaServiceImpl implements IMediaService {
                 .createdAt(m.getCreatedAt())
                 .finalizedAt(m.getFinalizedAt())
                 .build();
+    }
+    @Override
+    public byte[] downloadAvatar(UUID callerUserId, UUID mediaId) {
+        Media m = loadActive(mediaId);
+        if (m.getKind() != MediaKind.AVATAR) {
+            throw new InvalidRequestException("Media is not an avatar");
+        }
+
+        try {
+            return s3.getObject(GetObjectRequest.builder()
+                            .bucket(bucketFor(m.getKind()))
+                            .key(storageKey(m.getKind(), m.getOwnerId(), m.getConversationId(), m.getId()))
+                            .build())
+                    .readAllBytes();
+        } catch (Exception e) {
+            log.error("Failed to download avatar {}", mediaId, e);
+            throw new RuntimeException("Failed to download avatar", e);
+        }
     }
 }

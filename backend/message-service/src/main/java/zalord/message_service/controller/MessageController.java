@@ -9,11 +9,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import zalord.message_service.dto.request.SendMessageRequest;
+import zalord.message_service.dto.response.MessageReaderResponse;
 import zalord.message_service.dto.response.MessageResponse;
 import zalord.message_service.dto.response.PageResponse;
 import zalord.message_service.model.ApiResponse;
 import zalord.message_service.service.IMessageService;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -37,6 +39,17 @@ public class MessageController {
         MessageResponse data = service.send(callerUserId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new ApiResponse<>(HttpStatus.CREATED, "Message sent", data, null));
+    }
+
+    @GetMapping("/conversations/{conversationId}/last-readers")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Get readers of the latest message",
+            description = "Returns conversation members, excluding the caller, whose read cursor is on the latest message in the conversation.")
+    public ResponseEntity<ApiResponse<List<MessageReaderResponse>>> lastMessageReaders(
+            @Parameter(hidden = true) @RequestHeader("X-User-Id") UUID callerUserId,
+            @PathVariable UUID conversationId) {
+        List<MessageReaderResponse> data = service.lastMessageReaders(callerUserId, conversationId);
+        return ResponseEntity.ok(new ApiResponse<>(HttpStatus.OK, "OK", data, null));
     }
 
     @GetMapping

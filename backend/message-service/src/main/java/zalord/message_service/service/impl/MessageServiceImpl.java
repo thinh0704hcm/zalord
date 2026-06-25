@@ -12,6 +12,7 @@ import zalord.media.v1.InvalidAttachment;
 import zalord.message_service.config.RabbitMQConfig;
 import zalord.message_service.dto.event.MessageCreatedEvent;
 import zalord.message_service.dto.request.SendMessageRequest;
+import zalord.message_service.dto.response.MessageReaderResponse;
 import zalord.message_service.dto.response.MessageResponse;
 import zalord.message_service.dto.response.PageResponse;
 import zalord.message_service.exception.InvalidRequestException;
@@ -23,6 +24,7 @@ import zalord.message_service.model.MessageAttachment;
 import zalord.message_service.model.OutboxEvent;
 import zalord.message_service.repository.ConversationMemberRepository;
 import zalord.message_service.repository.MessageAttachmentRepository;
+import zalord.message_service.repository.MessageReadReceiptRepository;
 import zalord.message_service.repository.MessageRepository;
 import zalord.message_service.repository.OutboxEventRepository;
 import zalord.message_service.service.IMessageService;
@@ -32,6 +34,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -41,6 +44,7 @@ public class MessageServiceImpl implements IMessageService {
 
     private final MessageRepository messageRepo;
     private final ConversationMemberRepository memberRepo;
+    private final MessageReadReceiptRepository readReceiptRepo;
     private final MessageAttachmentRepository attachmentRepo;
     private final OutboxEventRepository outboxRepo;
     private final ObjectMapper objectMapper;
@@ -48,12 +52,14 @@ public class MessageServiceImpl implements IMessageService {
 
     public MessageServiceImpl(MessageRepository messageRepo,
                               ConversationMemberRepository memberRepo,
+                              MessageReadReceiptRepository readReceiptRepo,
                               MessageAttachmentRepository attachmentRepo,
                               OutboxEventRepository outboxRepo,
                               ObjectMapper objectMapper,
                               MediaGrpcClient mediaGrpc) {
         this.messageRepo = messageRepo;
         this.memberRepo = memberRepo;
+        this.readReceiptRepo = readReceiptRepo;
         this.attachmentRepo = attachmentRepo;
         this.outboxRepo = outboxRepo;
         this.objectMapper = objectMapper;
@@ -159,6 +165,25 @@ public class MessageServiceImpl implements IMessageService {
                 .toList();
 
         return PageResponse.of(items, page, size, result.getTotalElements());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MessageReaderResponse> lastMessageReaders(UUID caller, UUID conversationId) {
+        boolean isMember = memberRepo.existsByConversationIdAndUserId(conversationId, caller);
+        if (!isMember) {
+            throw new NotMemberException("You are not a member of this conversation");
+        }
+
+        Optional<Message> latest = messageRepo.findFirstByConversationIdOrderByCreatedAtDesc(conversationId);
+        if (latest.isEmpty()) {
+            return List.of();
+        }
+
+        Message latestMessage = latest.get();
+        return readReceiptRepo.findReadersOfMessage(latestMessage.getId(), caller, latestMessage.getSenderId()).stream()
+                .map(receipt -> new MessageReaderResponse(receipt.getUserId(), receipt.getReadAt()))
+                .toList();
     }
 
     private void enqueueOutbox(MessageCreatedEvent event) {

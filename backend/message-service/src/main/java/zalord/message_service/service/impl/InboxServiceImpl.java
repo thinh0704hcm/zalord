@@ -17,6 +17,7 @@ import zalord.message_service.model.ConversationView;
 import zalord.message_service.model.Message;
 import zalord.message_service.model.OutboxEvent;
 import zalord.message_service.repository.ConversationViewRepository;
+import zalord.message_service.repository.MessageReadReceiptRepository;
 import zalord.message_service.repository.MessageRepository;
 import zalord.message_service.repository.OutboxEventRepository;
 import zalord.message_service.service.IInboxService;
@@ -31,15 +32,18 @@ public class InboxServiceImpl implements IInboxService {
 
     private final ConversationViewRepository viewRepo;
     private final MessageRepository messageRepo;
+    private final MessageReadReceiptRepository readReceiptRepo;
     private final OutboxEventRepository outboxRepo;
     private final ObjectMapper objectMapper;
 
     public InboxServiceImpl(ConversationViewRepository viewRepo,
                             MessageRepository messageRepo,
+                            MessageReadReceiptRepository readReceiptRepo,
                             OutboxEventRepository outboxRepo,
                             ObjectMapper objectMapper) {
         this.viewRepo = viewRepo;
         this.messageRepo = messageRepo;
+        this.readReceiptRepo = readReceiptRepo;
         this.outboxRepo = outboxRepo;
         this.objectMapper = objectMapper;
     }
@@ -62,8 +66,6 @@ public class InboxServiceImpl implements IInboxService {
                         .lastMessageAt(v.getLastMessageAt())
                         .lastSenderId(v.getLastSenderId())
                         .unreadCount(v.getUnreadCount() == null ? 0 : v.getUnreadCount())
-                        .lastReadMessageId(v.getLastReadMessageId())
-                        .lastReadAt(v.getLastReadAt())
                         .build())
                 .toList();
 
@@ -85,24 +87,26 @@ public class InboxServiceImpl implements IInboxService {
                 // Empty conversation — nothing to mark read.
                 return;
             }
-        } else {
-            Message msg = messageRepo.findById(resolved)
-                    .orElseThrow(() -> new InvalidRequestException("Message not found: " + messageId));
-            if (!msg.getConversationId().equals(conversationId)) {
-                throw new InvalidRequestException("Message does not belong to this conversation");
-            }
+        }
+
+        final UUID finalResolved = resolved;
+        Message target = messageRepo.findById(finalResolved)
+                .orElseThrow(() -> new InvalidRequestException("Message not found: " + finalResolved));
+        if (!target.getConversationId().equals(conversationId)) {
+            throw new InvalidRequestException("Message does not belong to this conversation");
         }
 
         Instant readAt = Instant.now();
-        int updated = viewRepo.markRead(userId, conversationId, resolved, readAt);
+        int updated = viewRepo.markRead(userId, conversationId);
         if (updated == 0) {
             // No conversation_view yet → caller has nothing in their inbox for
             // this conv. Skip silently (matches the prior behaviour).
             return;
         }
 
-        enqueueReadOutbox(new MessageReadEvent(conversationId, userId, resolved, readAt));
-        log.info("Marked read conv={} user={} lastMsg={}", conversationId, userId, resolved);
+        int insertedReceipts = readReceiptRepo.insertFirstReadsUpTo(userId, conversationId, target.getCreatedAt(), readAt);
+        enqueueReadOutbox(new MessageReadEvent(conversationId, userId, finalResolved, readAt));
+        log.info("Marked read conv={} user={} upToMsg={} insertedReceipts={}", conversationId, userId, finalResolved, insertedReceipts);
     }
 
     private void enqueueReadOutbox(MessageReadEvent event) {
