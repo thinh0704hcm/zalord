@@ -132,8 +132,9 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/zalord-k8s-dev
 
-          cp deploy/k8s/overlays/dev/namespace.yaml /tmp/zalord-k8s-dev/
-          cp deploy/k8s/overlays/dev/*-config.yaml  /tmp/zalord-k8s-dev/
+          cp deploy/k8s/overlays/dev/namespace.yaml    /tmp/zalord-k8s-dev/
+          cp deploy/k8s/overlays/dev/*-config.yaml    /tmp/zalord-k8s-dev/
+          cp deploy/k8s/overlays/dev/infra-*.yaml     /tmp/zalord-k8s-dev/
 
           for secret in deploy/k8s/overlays/dev/*-secret.enc.yaml; do
             target="/tmp/zalord-k8s-dev/$(basename "${secret%.enc.yaml}.yaml")"
