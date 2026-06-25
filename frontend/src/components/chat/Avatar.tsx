@@ -12,9 +12,10 @@ interface AvatarProps {
   name: string;
   size?: number | string; // size in px or string class, we can use className to override size anyway
   className?: string; // extra classes like w-10 h-10
+  title?: string; // tooltips
 }
 
-export function Avatar({ url, name, size, className = '' }: AvatarProps) {
+export function Avatar({ url, name, size, className = '', title }: AvatarProps) {
   const style = size ? { width: size, height: size } : undefined;
   
   if (url) {
@@ -22,6 +23,7 @@ export function Avatar({ url, name, size, className = '' }: AvatarProps) {
       <img 
         src={url} 
         alt={name} 
+        title={title || name}
         style={style} 
         className={`rounded-full object-cover flex-shrink-0 ${className}`} 
       />
@@ -32,7 +34,7 @@ export function Avatar({ url, name, size, className = '' }: AvatarProps) {
     <div 
       style={style} 
       className={`rounded-full flex items-center justify-center text-white font-medium flex-shrink-0 bg-gradient-to-b from-[#87baff] to-[#0068ff] ${className}`}
-      title={name}
+      title={title || name}
     >
       {getInitials(name)}
     </div>

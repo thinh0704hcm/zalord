@@ -691,17 +691,21 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           <div ref={messagesEndRef} />
 
           {lastMessageReaders.length > 0 && (
-            <div className="pointer-events-none mt-1 ml-auto flex -space-x-2 pr-1">
+            <div className="mt-1 ml-auto flex -space-x-2 pr-1">
               {lastMessageReaders.slice(0, 5).map(reader => (
                 <Avatar
                   key={reader.userId}
                   url={reader.avatarUrl}
                   name={reader.displayName}
+                  title={`${reader.displayName} đã xem`}
                   className="h-6 w-6 border-2 border-[#eef0f1] text-[10px] shadow-sm"
                 />
               ))}
               {lastMessageReaders.length > 5 && (
-                <div className="flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#eef0f1] bg-white px-1 text-[10px] font-semibold text-[#081c36] shadow-sm">
+                <div 
+                  className="flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#eef0f1] bg-white px-1 text-[10px] font-semibold text-[#081c36] shadow-sm cursor-default"
+                  title={`${lastMessageReaders.slice(5).map(r => r.displayName).join('\n')}`}
+                >
                   +{lastMessageReaders.length - 5}
                 </div>
               )}
