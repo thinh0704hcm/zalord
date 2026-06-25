@@ -1,0 +1,68 @@
+name: Deploy K8s Dev
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-k8s-dev.yml"
+      - ".sops.yaml"
+      - "deploy/k8s/overlays/dev/**"
+
+concurrency:
+  group: deploy-k8s-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SOPS
+        run: |
+          curl -sL https://github.com/getsops/sops/releases/download/v3.13.1/sops-v3.13.1.linux.amd64 -o /usr/local/bin/sops
+          chmod 755 /usr/local/bin/sops
+          sops --version
+
+      - name: Configure SOPS age key
+        run: |
+          mkdir -p ~/.config/sops/age
+          printf '%s\n' "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vietnam-vps
+          chmod 600 ~/.ssh/vietnam-vps
+          ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Build deploy bundle
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/zalord-k8s-dev
+          cp deploy/k8s/overlays/dev/*-config.yaml /tmp/zalord-k8s-dev/
+          cp deploy/k8s/overlays/dev/namespace.yaml /tmp/zalord-k8s-dev/ 2>/dev/null || true
+          for secret in deploy/k8s/overlays/dev/*-secret.example.yaml; do
+            target="/tmp/zalord-k8s-dev/$(basename "${secret%.example.yaml}.yaml")"
+            sops -d "$secret" > "$target"
+          done
+
+      - name: Copy manifests
+        run: |
+          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "rm -rf ~/zalord-k8s-dev && mkdir -p ~/zalord-k8s-dev"
+          scp -i ~/.ssh/vietnam-vps -P "${{ secrets.VPS_PORT }}" /tmp/zalord-k8s-dev/*.yaml "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/zalord-k8s-dev/"
+
+      - name: Apply manifests
+        run: |
+          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -s" <<'REMOTE'
+            set -euo pipefail
+            kubectl create namespace zalord-dev --dry-run=client -o yaml | kubectl apply -f -
+            kubectl apply -f ~/zalord-k8s-dev/
+            rm -rf ~/zalord-k8s-dev
+            kubectl get configmaps,secrets -n zalord-dev
+REMOTE
