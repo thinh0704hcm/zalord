@@ -32,6 +32,7 @@ ensure_bucket() {
 }
 
 ensure_bucket "$BUCKET_AVATARS"
+mc anonymous set download "local/$BUCKET_AVATARS"
 ensure_bucket "$BUCKET_ATTACHMENTS"
 
 echo "[minio-init] done"
