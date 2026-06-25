@@ -13,4 +13,5 @@ public interface IMediaService {
     MediaResponse get(UUID callerUserId, UUID mediaId);
     DownloadUrlResponse downloadUrl(UUID callerUserId, UUID mediaId);
     void delete(UUID callerUserId, UUID mediaId);
+    byte[] downloadAvatar(UUID callerUserId, UUID mediaId);
 }

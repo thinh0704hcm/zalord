@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Search, XCircle } from 'lucide-react';
+import { Avatar } from './Avatar';
 import { userService, type UserProfile } from '../../services/user';
 import { inboxService } from '../../services/inbox';
 
@@ -153,11 +154,7 @@ export default function AddMembersModal({ isOpen, onClose, onConfirm, existingMe
         <div className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-[#0068ff] bg-[#0068ff]' : 'border-[#d6dbe1] bg-white'}`}>
           {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
         </div>
-        {contact.avatarUrl ? (
-          <img src={contact.avatarUrl} alt={contact.name} className="w-10 h-10 rounded-full object-cover" />
-        ) : (
-          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[14px] font-medium bg-gray-400">{contact.avatar}</div>
-        )}
+        <Avatar url={contact.avatarUrl || null} name={contact.name} className="w-10 h-10 text-[14px]" />
         <div className="min-w-0 flex flex-col">
           <span className="text-[14px] text-[#081c36] font-medium truncate">{contact.name}</span>
           <span className="text-[12px] text-[#7589A3] truncate">{isAlreadyMember ? 'Đã trong nhóm' : contact.phoneNumber}</span>
@@ -228,7 +225,7 @@ export default function AddMembersModal({ isOpen, onClose, onConfirm, existingMe
                   return (
                     <div key={id} className="flex items-center justify-between bg-[#e5efff] rounded-full p-1 pr-1.5 gap-1 border border-transparent hover:border-[#0068ff] transition-colors cursor-default">
                       <div className="flex items-center gap-1.5 overflow-hidden flex-1">
-                        {contact.avatarUrl ? <img src={contact.avatarUrl} alt={contact.name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" /> : <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0 bg-gray-400">{contact.avatar}</div>}
+                        <Avatar url={contact.avatarUrl || null} name={contact.name} className="w-6 h-6 text-[10px]" />
                         <span className="text-[13px] font-medium text-[#0068ff] truncate">{contact.name}</span>
                       </div>
                       <XCircle size={16} fill="#0068ff" color="white" className="flex-shrink-0 cursor-pointer transition-opacity hover:opacity-80" onClick={() => toggleContact(contact)} />

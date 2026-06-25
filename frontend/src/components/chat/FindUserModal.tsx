@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, MessageCircle } from 'lucide-react';
+import { Avatar } from './Avatar';
 import { userService } from '../../services/user';
 import type { UserProfile } from '../../services/user';
 
@@ -86,10 +87,10 @@ export default function FindUserModal({ isOpen, onClose, onStartChat }: FindUser
 
           {userProfile && (
             <div className="mt-4 border border-[#e5e7eb] rounded-lg p-4 flex flex-col items-center gap-3">
-              <img
-                src={userProfile.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile.displayName)}&background=0068ff&color=fff`}
-                alt={userProfile.displayName}
-                className="w-16 h-16 rounded-full object-cover border border-gray-200"
+              <Avatar
+                url={userProfile.avatarUrl}
+                name={userProfile.displayName}
+                className="w-16 h-16 border border-[#eef0f4]"
               />
               <div className="text-center">
                 <h3 className="font-medium text-[16px] text-[#081c36]">{userProfile.displayName}</h3>

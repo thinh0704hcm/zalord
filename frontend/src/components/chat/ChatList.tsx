@@ -3,6 +3,7 @@ import { XCircle } from 'lucide-react';
 import { ZalordAddGroupIcon, ZalordSearchIcon } from './ZalordIcons';
 import type { Chat } from '../../pages/chat/ChatLayout';
 import CreateGroupModal from './CreateGroupModal';
+import { Avatar } from './Avatar';
 import { userService } from '../../services/user';
 import type { UserProfile } from '../../services/user';
 
@@ -164,11 +165,9 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
                   }}
                 >
                   {searchedUser.avatarUrl ? (
-                    <img src={searchedUser.avatarUrl} alt="avatar" className="w-[48px] h-[48px] rounded-full object-cover flex-shrink-0" />
+                    <Avatar url={searchedUser.avatarUrl} name={searchedUser.displayName} className="w-[46px] h-[46px] flex-shrink-0 text-lg" />
                   ) : (
-                    <div className="w-[48px] h-[48px] rounded-full bg-[#0068ff] flex items-center justify-center text-white font-medium text-[16px] flex-shrink-0">
-                      {normalizeAvatarText(searchedUser.displayName)}
-                    </div>
+                    <Avatar url={null} name={searchedUser.displayName} className="w-[46px] h-[46px] flex-shrink-0 text-lg" />
                   )}
                   <div className="flex flex-col">
                     <span className="text-[15px] text-[#081c36] font-medium mb-0.5">{searchedUser.displayName}</span>
@@ -235,58 +234,44 @@ export default function ChatList({ chats, activeChatId, onSelectChat, onCreateGr
   );
 }
 
-const normalizeAvatarText = (value?: string) => {
-  if (!value) return '';
-  const words = value.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '';
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
-};
-
 const renderAvatar = (chat: Chat) => {
-  if (typeof chat.avatar === 'string') {
-    return (
-      <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
-        {normalizeAvatarText(chat.avatar)}
-      </div>
-    );
+  if (!chat.group) {
+    return <Avatar url={chat.avatarUrl} name={chat.name} className="w-[46px] h-[46px] text-lg" />;
   }
 
-  const avatars = chat.avatar;
+  const avatars = chat.groupAvatars || [];
   const total = chat.totalMembers || avatars.length;
 
-  if (total === 3) {
+  if (total === 3 && avatars.length >= 3) {
     return (
       <div className="w-[46px] h-[46px] relative flex-shrink-0">
-        <div className="absolute bottom-0 right-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[1] overflow-hidden">
-          {normalizeAvatarText(avatars[2]) || '??'}
+        <div className="absolute bottom-0 right-0 w-[26px] h-[26px] z-[1] rounded-full border-[1.5px] border-white overflow-hidden bg-[#a3c9ff]">
+          <Avatar url={avatars[2].url} name={avatars[2].name} className="w-full h-full text-[10px]" />
         </div>
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[2] overflow-hidden">
-          {normalizeAvatarText(avatars[1]) || '??'}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[26px] h-[26px] z-[2] rounded-full border-[1.5px] border-white overflow-hidden bg-[#0068ff]">
+          <Avatar url={avatars[1].url} name={avatars[1].name} className="w-full h-full text-[10px]" />
         </div>
-        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[3] overflow-hidden">
-          {normalizeAvatarText(avatars[0]) || '??'}
+        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] z-[3] rounded-full border-[1.5px] border-white overflow-hidden bg-[#0055d4]">
+          <Avatar url={avatars[0].url} name={avatars[0].name} className="w-full h-full text-[10px]" />
         </div>
       </div>
     );
   }
 
-  if (total >= 4) {
-    const remaining = total - 3;
+  if (total >= 4 && avatars.length >= 3) {
     return (
       <div className="w-[46px] h-[46px] relative flex-shrink-0">
-        <div className="absolute top-0 left-0 w-[26px] h-[26px] bg-[#0068ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[1] overflow-hidden">
-          {normalizeAvatarText(avatars[0]) || '??'}
+        <div className="absolute top-0 left-0 w-[26px] h-[26px] z-[1] rounded-full border-[1.5px] border-white overflow-hidden bg-[#0068ff]">
+          <Avatar url={avatars[0].url} name={avatars[0].name} className="w-full h-full text-[10px]" />
         </div>
-        <div className="absolute top-0 right-0 w-[26px] h-[26px] bg-[#0055d4] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[2] overflow-hidden">
-          {normalizeAvatarText(avatars[1]) || '??'}
+        <div className="absolute top-0 right-0 w-[26px] h-[26px] z-[2] rounded-full border-[1.5px] border-white overflow-hidden bg-[#0055d4]">
+          <Avatar url={avatars[1].url} name={avatars[1].name} className="w-full h-full text-[10px]" />
         </div>
-        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] bg-[#a3c9ff] rounded-full flex items-center justify-center text-[10px] font-medium text-white border-[1.5px] border-white z-[2] overflow-hidden">
-          {normalizeAvatarText(avatars[2]) || '??'}
+        <div className="absolute bottom-0 left-0 w-[26px] h-[26px] z-[2] rounded-full border-[1.5px] border-white overflow-hidden bg-[#a3c9ff]">
+          <Avatar url={avatars[2].url} name={avatars[2].name} className="w-full h-full text-[10px]" />
         </div>
-        <div className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-semibold border-[1.5px] border-white z-[3] overflow-hidden ${total === 4 ? 'bg-[#4a90e2] text-white' : 'bg-[#eaedf0] text-[#081c36]'
-          }`}>
-          {total === 4 ? (normalizeAvatarText(avatars[3]) || '??') : remaining}
+        <div className="absolute bottom-0 right-0 w-[26px] h-[26px] z-[3] rounded-full border-[1.5px] border-white overflow-hidden bg-[#e5efff] flex items-center justify-center text-[10px] font-medium text-blue-600">
+          +{total - 3}
         </div>
       </div>
     );
@@ -294,7 +279,7 @@ const renderAvatar = (chat: Chat) => {
 
   return (
     <div className="w-[46px] h-[46px] rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-lg flex-shrink-0">
-      {normalizeAvatarText(avatars[0]) || '??'}
+      <Avatar url={null} name={chat.name} className="w-full h-full text-lg" />
     </div>
   );
 };

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, ChevronLeft, Image, Pencil, User, X } from 'lucide-react';
 import { userService, type UserProfile } from '../../services/user';
+import api from '../../services/api';
+import { Avatar } from './Avatar';
 import { 
   ZalordMessageFilledIcon,
   ZalordContactFilledIcon,
@@ -40,13 +42,6 @@ const getStoredUserName = () => {
 
 const getStoredAvatarUrl = () => getStoredUser().avatarUrl || null;
 
-const getInitials = (name: string) => {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '';
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
-};
-
 const formatPhone = (phone?: string) => phone || UNSET_PROFILE_VALUE;
 
 const formatDateOfBirth = (value?: string | null) => {
@@ -73,8 +68,8 @@ export default function SidebarNav() {
   const [draftName, setDraftName] = useState(getStoredUserName);
   const [draftGender, setDraftGender] = useState('');
   const [draftBirthday, setDraftBirthday] = useState('');
-  const [draftAvatarUrl, setDraftAvatarUrl] = useState('');
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [updateError, setUpdateError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -93,7 +88,6 @@ export default function SidebarNav() {
         setDraftGender(nextProfile.gender ?? '');
         setDraftBirthday(nextProfile.dateOfBirth ?? '');
         setAvatarUrl(nextProfile.avatarUrl);
-        setDraftAvatarUrl(nextProfile.avatarUrl ?? '');
 
         const storedUser = getStoredUser();
         localStorage.setItem(
@@ -186,21 +180,48 @@ export default function SidebarNav() {
   };
 
   const beginAvatarEdit = () => {
-    setDraftAvatarUrl(profile?.avatarUrl ?? avatarUrl ?? '');
     setAvatarPreview(null);
+    setAvatarFile(null);
     setUpdateError('');
     setProfileMode('avatar');
   };
 
   const applyAvatarUpdate = async () => {
+    if (!avatarFile) {
+      setProfileMode('view');
+      return;
+    }
+    
     setIsUpdating(true);
     setUpdateError('');
+    
     try {
+      // 1. Get upload URL
+      const uploadReq = await api.post('/media/upload-url', {
+        kind: 'AVATAR',
+        mimeType: avatarFile.type
+      });
+      const { mediaId, uploadUrl } = uploadReq.data.data;
+      
+      // 2. Upload file
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        body: avatarFile,
+        headers: { 'Content-Type': avatarFile.type }
+      });
+      
+      // 3. Finalize upload
+      await api.post(`/media/${mediaId}/finalize`);
+      
+      // 4. Get the direct URL to save to profile
+      const getUrlReq = await api.get(`/media/${mediaId}/url`);
+      const finalAvatarUrl = getUrlReq.data.data.downloadUrl;
+
       const updatedProfile = await userService.updateMe({
         displayName: profile?.displayName || userName,
         gender: profile?.gender || null,
         dateOfBirth: profile?.dateOfBirth || null,
-        avatarUrl: draftAvatarUrl || null,
+        avatarUrl: finalAvatarUrl,
       });
 
       setProfile(updatedProfile);
@@ -209,7 +230,6 @@ export default function SidebarNav() {
       setDraftGender(updatedProfile.gender ?? '');
       setDraftBirthday(updatedProfile.dateOfBirth ?? '');
       setAvatarUrl(updatedProfile.avatarUrl);
-      setDraftAvatarUrl(updatedProfile.avatarUrl ?? '');
 
       const storedUser = getStoredUser();
       localStorage.setItem(
@@ -222,6 +242,7 @@ export default function SidebarNav() {
       );
       setProfileMode('view');
     } catch (error: unknown) {
+      console.error("Avatar update failed:", error);
       setUpdateError(getErrorMessage(error, 'Không thể cập nhật ảnh đại diện'));
     } finally {
       setIsUpdating(false);
@@ -240,13 +261,13 @@ export default function SidebarNav() {
           <div className="relative mt-2" ref={popupRef}>
             <div 
               onClick={() => setShowProfilePopup(!showProfilePopup)}
-              className="w-10 h-10 rounded-full bg-gradient-to-b from-[#87baff] to-[#0068ff] flex items-center justify-center text-white font-medium text-[14px] overflow-hidden cursor-pointer transition-colors shadow-sm hover:opacity-90"
+              className="cursor-pointer transition-colors shadow-sm hover:opacity-90 rounded-full"
             >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={userName} className="h-full w-full object-cover" />
-              ) : (
-                getInitials(userName)
-              )}
+              <Avatar
+                url={avatarUrl}
+                name={userName}
+                className="w-10 h-10 text-[14px]"
+              />
             </div>
 
             {showProfilePopup && (
@@ -352,7 +373,11 @@ export default function SidebarNav() {
 
                 <div className="relative flex min-h-[100px] items-center gap-5 px-5 pb-5 pt-4 border-b-[6px] border-[#eef0f4]">
                   <div className="relative -mt-[56px] h-[100px] w-[100px] shrink-0 rounded-full border-4 border-white bg-[#2f80ed] shadow-sm flex items-center justify-center text-[36px] font-bold text-white overflow-visible">
-                    {avatarUrl ? <img src={avatarUrl} alt={userName} className="h-full w-full rounded-full object-cover" /> : getInitials(userName)}
+                    <Avatar
+                      url={avatarUrl}
+                      name={userName}
+                      className="w-full h-full text-[36px]"
+                    />
                     <button onClick={beginAvatarEdit} className="absolute bottom-1 right-0 flex h-8 w-8 items-center justify-center rounded-full border border-[#d3d8df] bg-[#f2f4f7] text-[#304057] shadow-sm" title="Đổi ảnh đại diện">
                       <Camera size={17} strokeWidth={1.7} />
                     </button>
@@ -471,6 +496,10 @@ export default function SidebarNav() {
                   </div>
                 </div>
                 
+                {updateError && (
+                  <div className="px-5 pb-2 text-[13px] text-red-500 text-center">{updateError}</div>
+                )}
+                
                 <div className="flex justify-end gap-3 border-t border-[#eef0f4] px-5 py-3 mt-auto">
                   <button
                     type="button"
@@ -499,6 +528,7 @@ export default function SidebarNav() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
+                      setAvatarFile(file);
                       setAvatarPreview(URL.createObjectURL(file));
                     }
                   }}

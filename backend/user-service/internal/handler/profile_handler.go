@@ -35,6 +35,7 @@ type UpdateProfileRequest struct {
 	DisplayName string  `json:"displayName"`
 	Gender      *string `json:"gender"`
 	DateOfBirth *string `json:"dateOfBirth"`
+	AvatarUrl   *string `json:"avatarUrl"`
 }
 
 func toResponse(p *queries.Profile) ProfileResponse {
@@ -173,7 +174,15 @@ func (h *ProfileHandler) UpdateMe(c *gin.Context) {
 		}
 	}
 
-	prof, err := h.svc.UpdateMyProfile(c.Request.Context(), userID, displayName, gender, dateOfBirth)
+	var avatarUrl *string
+	if req.AvatarUrl != nil {
+		trimmed := strings.TrimSpace(*req.AvatarUrl)
+		if trimmed != "" {
+			avatarUrl = &trimmed
+		}
+	}
+
+	prof, err := h.svc.UpdateMyProfile(c.Request.Context(), userID, displayName, gender, dateOfBirth, avatarUrl)
 	if errors.Is(err, pgx.ErrNoRows) {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: "profile not found"})
 		return

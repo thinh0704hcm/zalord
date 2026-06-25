@@ -42,6 +42,7 @@ SELECT id, user_id, display_name, phone_number, avatar_url, gender, date_of_birt
 UPDATE profiles
    SET display_name = $2,
        gender = $3,
-       date_of_birth = $4
+       date_of_birth = $4,
+       avatar_url = COALESCE($5, avatar_url)
  WHERE user_id = $1 AND deleted_at IS NULL
  RETURNING id, user_id, display_name, phone_number, avatar_url, gender, date_of_birth, created_at, deleted_at;

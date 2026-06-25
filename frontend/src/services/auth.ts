@@ -17,7 +17,7 @@ export const authService = {
             id: response.data.data.user?.id,
             username: phone,
             displayName: response.data.data.user?.displayName || phone,
-            avatarUrl: response.data.data.user?.avatarUrl || `https://ui-avatars.com/api/?name=${phone}&background=0068ff&color=fff`
+            avatarUrl: response.data.data.user?.avatarUrl || null
           }
         };
       }

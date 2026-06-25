@@ -17,6 +17,10 @@ until mc alias set local "$ENDPOINT" "$ROOT_USER" "$ROOT_PASSWORD" >/dev/null 2>
 done
 echo "[minio-init] MinIO ready"
 
+echo "[minio-init] Configuring CORS..."
+mc admin config set local api cors_allow_origin="*"
+mc admin service restart local || echo "Restart failed but continuing..."
+
 ensure_bucket() {
     local bucket="$1"
     if mc ls "local/$bucket" >/dev/null 2>&1; then

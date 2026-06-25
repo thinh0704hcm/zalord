@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { UserPlus, Users, ThumbsUp } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
+import { Avatar } from './Avatar';
 
 import type { Chat } from '../../pages/chat/ChatLayout';
 import { messageService } from '../../services/message';
@@ -413,9 +414,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       {/* Header */}
       <div className="h-[64px] bg-white border-b border-[#d6dbe1] flex items-center justify-between px-4 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-[42px] h-[42px] rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold flex-shrink-0 overflow-hidden">
-            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name)}&background=0068ff&color=fff`} alt="Avatar" className="w-full h-full object-cover" />
-          </div>
+          <Avatar url={chat.avatarUrl} name={chat.name} className="w-[42px] h-[42px] text-[15px]" />
           <div className="flex flex-col justify-center">
             <h2 className="font-semibold text-gray-900 text-[16px] leading-tight">{chat.name}</h2>
             <div className="flex items-center text-[13px] text-gray-500 mt-0.5">
@@ -576,9 +575,11 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               <div key={index} className="flex w-full justify-start items-start gap-2.5">
                 {shouldReserveIncomingAvatarSpace && (
                   shouldShowIncomingAvatar ? (
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-[14px] flex-shrink-0 overflow-hidden">
-                      {getAvatarText(avatarText) || '??'}
-                    </div>
+                    <Avatar 
+                      url={chat?.group ? undefined : chat?.avatarUrl} // For group we might not have the sender's avatar URL yet unless we fetch it. We'll pass undefined for group sender for now.
+                      name={avatarText} 
+                      className="w-10 h-10 text-[14px]" 
+                    />
                   ) : (
                     <div className="w-10 flex-shrink-0" />
                   )

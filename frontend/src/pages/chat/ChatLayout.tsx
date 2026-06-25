@@ -23,6 +23,8 @@ export interface Chat {
   isPending?: boolean;
   otherUserId?: string | null;
   presenceStatus?: PresenceStatus;
+  avatarUrl?: string | null;
+  groupAvatars?: Array<{ url: string | null, name: string }>;
 }
 
 const relativeTime = (value: string | null) => {
@@ -92,8 +94,8 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
         group.members.map(member => userService.findByUserId(member.userId))
       );
       const memberAvatars = memberProfiles
-        .map(result => result.status === 'fulfilled' ? getInitials(result.value.displayName) : '')
-        .filter(Boolean);
+        .map(result => result.status === 'fulfilled' ? { url: result.value.avatarUrl, name: result.value.displayName } : null)
+        .filter((item): item is { url: string | null, name: string } => item !== null);
 
       return {
         id: item.conversationId,
@@ -102,7 +104,8 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
         time: relativeTime(item.lastMessageAt),
         lastMessageAt: item.lastMessageAt,
         unread: item.unreadCount || 0,
-        avatar: memberAvatars.length > 0 ? memberAvatars : [getInitials(group.name)],
+        avatar: [], // Deprecated for groups
+        groupAvatars: memberAvatars.length > 0 ? memberAvatars : [{ url: null, name: group.name }],
         totalMembers: group.members.length,
         group: true,
         otherUserId: null
@@ -127,9 +130,12 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
   let name = fallbackUserLabel(item.otherUserId);
   let avatar: string | string[] = getInitials(name);
 
+  let avatarUrl: string | null = null;
+
   try {
     const profile = await userService.findByUserId(item.otherUserId);
     name = profile.displayName;
+    avatarUrl = profile.avatarUrl || null;
     avatar = getInitials(profile.displayName);
   } catch (error) {
     console.warn('Failed to load profile for inbox item', item.otherUserId, error);
@@ -143,6 +149,8 @@ const inboxItemToChat = async (item: InboxItemResponse, currentUserId: string | 
     lastMessageAt: item.lastMessageAt,
     unread: item.unreadCount || 0,
     avatar,
+    avatarUrl,
+    totalMembers: 2,
     otherUserId: item.otherUserId,
     presenceStatus: 'offline'
   };
