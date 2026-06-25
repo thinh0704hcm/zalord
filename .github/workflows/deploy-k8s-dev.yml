@@ -134,21 +134,21 @@ jobs:
             docker buildx imagetools create -t "$image:latest" "$image:$IMAGE_TAG"
           done
 
-      - name: Pull latest and prune replaced images
+      - name: Prune replaced images and pull latest
         run: |
           ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
             set -euo pipefail
             export KUBECONFIG=~/.kube/zalord-dev-deployer.config
-            for service in ${{ env.SERVICE_IMAGES }}; do
-              sudo -n /usr/local/bin/zalord-k3s-image pull docker.io/${{ env.DOCKER_NAMESPACE }}/zalord-\$service:latest
-            done
             if kubectl get deploy -n zalord-dev -o name | grep -q .; then
               for deploy in \$(kubectl get deploy -n zalord-dev -o name); do
                 kubectl rollout status -n zalord-dev \"\$deploy\" --timeout=180s
               done
-              sudo -n /usr/local/bin/zalord-k3s-image prune
             else
-              echo \"No Deployments in zalord-dev yet; skipping image prune.\"
+              echo \"No Deployments in zalord-dev yet; pruning unused image cache only.\"
             fi
+            sudo -n /usr/local/bin/zalord-k3s-image prune
+            for service in ${{ env.SERVICE_IMAGES }}; do
+              sudo -n /usr/local/bin/zalord-k3s-image pull docker.io/${{ env.DOCKER_NAMESPACE }}/zalord-\$service:latest
+            done
             kubectl get configmaps,secrets -n zalord-dev
           '"
