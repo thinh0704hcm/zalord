@@ -17,6 +17,7 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/session"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/eventbus"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/logger"
+	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/metrics"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/redisx"
 	"go.uber.org/zap"
 )
@@ -78,6 +79,10 @@ func main() {
 	go relay.Run(ctx)
 
 	r := gin.Default()
+	r.Use(metrics.Middleware())
+	// Prometheus scrape endpoint. Not behind auth — Prometheus scrapes
+	// directly via the docker network, never via Kong.
+	r.GET("/metrics", metrics.Handler())
 	r.GET("/health", func(c *gin.Context) {
 		users, conns := reg.Stats()
 		c.JSON(http.StatusOK, gin.H{

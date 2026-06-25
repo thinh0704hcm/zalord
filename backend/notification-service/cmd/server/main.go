@@ -18,6 +18,7 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/notification-service/internal/service"
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/eventbus"
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/logger"
+	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/metrics"
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/mq"
 	"go.uber.org/zap"
 )
@@ -101,6 +102,9 @@ func main() {
 
 	// HTTP
 	r := gin.Default()
+	r.Use(metrics.Middleware())
+	// Prometheus scrape endpoint — direct docker-network access, not via Kong.
+	r.GET("/metrics", metrics.Handler())
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
 	docs.SwaggerInfo.BasePath = "/"

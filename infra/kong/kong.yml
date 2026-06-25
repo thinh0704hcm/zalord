@@ -20,6 +20,18 @@ _format_version: "3.0"
 # merge (`<<:` + `enabled: true`). Defining them here — not inside a route —
 # means deleting any single route never breaks the others' plugins.
 plugins:
+  # Expose Kong's request/latency/status metrics in Prometheus format on the
+  # admin port at /metrics. Per-route + per-consumer dimensions stay off for
+  # now — high cardinality, mostly noise until we need it.
+  - name: prometheus
+    enabled: true
+    config:
+      per_consumer: false
+      status_code_metrics: true
+      latency_metrics: true
+      upstream_health_metrics: false
+      bandwidth_metrics: false
+
   - name: cors
     enabled: true
     config:
@@ -45,12 +57,31 @@ plugins:
       credentials: true
       max_age: 3600
 
+  # Default per-IP throttle applied to EVERY proxied request. Loose enough
+  # that normal use never trips it; tight enough that a runaway client gets
+  # 429 before they fill anyone's queue. Policy=local because we only run
+  # one Kong replica; switch to "redis" if we ever scale Kong horizontally.
+  - name: rate-limiting
+    enabled: true
+    config:
+      minute: 600          # 10 req/s sustained per IP — generous for chat UX
+      policy: local
+      fault_tolerant: true # if the limit store breaks, let traffic through
+      hide_client_headers: false
+
   - &jwt-def
     name: jwt
     enabled: false
     config:
       claims_to_verify:
         - exp
+
+  # NOTE: per-route stricter throttle (10/min/IP for auth endpoints) is
+  # inlined directly in each route's plugins block below. Kong's declarative
+  # config treats a top-level plugin with no route/service as global; we
+  # already declared one rate-limiting plugin globally, and declaring a
+  # second top-level instance would collide on the same primary key. Inline
+  # config is the cleanest way to override the global value per route.
 
   - &identity-def
     name: pre-function
@@ -109,7 +140,8 @@ services:
   - name: auth-service
     url: http://auth-service:8081
     routes:
-      # Public — no token required.
+      # Public — no token required. Tight rate-limit here OVERRIDES the
+      # global default — Kong picks the more-specific plugin per route.
       - name: auth-public
         strip_path: false
         paths:
@@ -117,6 +149,14 @@ services:
           - "/api/v1/auth/login"
           - "/api/v1/auth/refresh"
           - "/api/v1/auth/logout"
+        plugins:
+          - name: rate-limiting
+            enabled: true
+            config:
+              minute: 10
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
 
       # Admin-only — token verified here; ADMIN enforced in the controller
       # via the injected X-User-Roles header.
@@ -129,6 +169,12 @@ services:
             enabled: true
           - <<: *identity-def
             enabled: true
+          - name: rate-limiting
+            enabled: true
+            config:
+              minute: 10
+              policy: local
+              fault_tolerant: true
 
   # ── user-service: protected — same identity injection ─────────────────────
   - name: user-service

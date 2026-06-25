@@ -34,8 +34,43 @@ spring:
 zalord:
   event-bus: ${EVENT_BUS:rabbitmq}   # rabbitmq | kafka — for message.created chain
 
+# Circuit breaker config for gRPC calls into media-service. Tuning rationale:
+#   - sliding-window 10 calls + 50% threshold = need 5 failures in the last 10
+#     to trip. Fast enough to fail in seconds at message-send rate, slow enough
+#     that a single network blip doesn't open the circuit.
+#   - 30s OPEN window = gives media-service time to restart / scale up.
+#   - 3 permitted half-open calls = probe with a few requests before fully
+#     closing, so we don't slam a still-fragile dependency.
+resilience4j:
+  circuitbreaker:
+    instances:
+      mediaGrpc:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+
 server:
   port: ${SERVER_PORT:8083}
+
+# Actuator: expose health (for docker healthcheck), info, and prometheus
+# (scrape target). Tag every metric with `application=message-service` so
+# Grafana can split panels by service.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      access: read-only
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 logging:
   level:

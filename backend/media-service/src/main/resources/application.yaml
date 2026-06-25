@@ -25,6 +25,18 @@ spring:
 server:
   port: ${SERVER_PORT:8086}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      access: read-only
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 logging:
   level:
     zalord.media_service: ${LOG_LEVEL:DEBUG}

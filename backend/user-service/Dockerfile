@@ -1,12 +1,11 @@
 FROM golang:1.26.1-alpine AS builder
 
 WORKDIR /app
-
-COPY go.mod go.sum ./
-RUN go mod download
-
+COPY go.mod ./
+COPY go.sum ./
+RUN go mod download || true
 COPY . .
-RUN CGO_ENABLED=0 go build -o server ./cmd/server
+RUN go mod tidy && CGO_ENABLED=0 go build -o server ./cmd/server
 
 FROM alpine:latest
 

@@ -1,0 +1,14 @@
+# Auto-import every JSON in /var/lib/grafana/dashboards as a dashboard.
+apiVersion: 1
+
+providers:
+  - name: zalord-default
+    orgId: 1
+    folder: Zalord
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -15,6 +15,8 @@ volumes:
   redisdata:
   rabbitdata:
   kafkadata:
+  prometheus_data:
+  grafana_data:
   frontend_node_modules:
 
 services:
@@ -287,8 +289,13 @@ services:
     ports:
       - "${RABBITMQ_HOST_PORT:-5672}:5672"
       - "${RABBITMQ_MGMT_HOST_PORT:-15672}:15672"
+      # Prometheus scrape endpoint. The rabbitmq_prometheus plugin (enabled
+      # via enabled_plugins below) serves /metrics on this port.
+      - "${RABBITMQ_PROM_HOST_PORT:-15692}:15692"
     volumes:
       - rabbitdata:/var/lib/rabbitmq
+      # Override the default plugin list to add rabbitmq_prometheus.
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -655,5 +662,68 @@ services:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     mem_limit: 512m
+    networks: [zalord-net]
+
+  # ── kafka-exporter — translates JMX/Admin-API to Prometheus metrics ───────
+  # apache/kafka image doesn't ship a Prometheus endpoint. This sidecar runs
+  # in the same docker network, polls the broker, and serves /metrics on :9308.
+  # Headline metrics for the thesis: consumer-group lag per topic+partition.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: zalord-kafka-exporter
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command:
+      - --kafka.server=kafka:9092
+      - --log.level=info
+    mem_limit: 64m
+    networks: [zalord-net]
+
+  # ── Prometheus — scrapes every app + infra exporter every 15s ─────────────
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: zalord-prometheus
+    restart: unless-stopped
+    depends_on:
+      kong:
+        condition: service_healthy
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle           # /-/reload for hot config reload
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    mem_limit: 256m
+    networks: [zalord-net]
+
+  # ── Grafana — datasource + dashboard provisioned at startup ───────────────
+  # No DB/setup wizard — first boot reads /etc/grafana/provisioning and is
+  # immediately usable. Admin login: admin/admin (override via env in prod).
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: zalord-grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_started
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    mem_limit: 192m
     networks: [zalord-net]
 

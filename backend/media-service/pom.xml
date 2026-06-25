@@ -38,6 +38,14 @@
 			<artifactId>url-connection-client</artifactId>
 			<version>${aws.sdk.version}</version>
 		</dependency>
+		<!-- Prometheus scrape target via Spring Boot Actuator. Version pinned —
+		     Spring Boot 4.0.6 parent BOM doesn't manage this artifact. -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+			<version>1.16.5</version>
+		</dependency>
+
 		<!-- gRPC server for internal ValidateAttachments RPC -->
 		<dependency>
 			<groupId>io.grpc</groupId>
