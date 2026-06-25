@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/deploy-k8s-dev.yml"
       - ".sops.yaml"
+      - "backend/**"
       - "deploy/k8s/overlays/dev/**"
 
 concurrency:
@@ -17,10 +18,60 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
+      SERVICE_IMAGES: >-
+        auth-service
+        user-service
+        message-service
+        chat-service
+        group-service
+        media-service
+        notification-service
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DOCKER_NAMESPACE"
+          test -n "$DOCKER_PASSWORD"
+          test -n "$SOPS_AGE_KEY"
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_PORT"
+          test -n "$VPS_SSH_KEY"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push immutable images
+        run: |
+          set -euo pipefail
+          for service in $SERVICE_IMAGES; do
+            image="$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG"
+            docker buildx build \
+              --platform linux/amd64 \
+              --push \
+              -t "$image" \
+              "backend/$service"
+          done
 
       - name: Install SOPS
         run: |
@@ -29,15 +80,19 @@ jobs:
           sops --version
 
       - name: Configure SOPS age key
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           mkdir -p ~/.config/sops/age
-          printf '%s\n' "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          printf '%s\n' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
           chmod 600 ~/.config/sops/age/keys.txt
 
       - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vietnam-vps
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vietnam-vps
           chmod 600 ~/.ssh/vietnam-vps
           ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
@@ -52,17 +107,48 @@ jobs:
             sops -d "$secret" > "$target"
           done
 
-      - name: Copy manifests
+      - name: Apply manifests over SSH stdin
         run: |
-          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "rm -rf ~/zalord-k8s-dev && mkdir -p ~/zalord-k8s-dev"
-          scp -i ~/.ssh/vietnam-vps -P "${{ secrets.VPS_PORT }}" /tmp/zalord-k8s-dev/*.yaml "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/zalord-k8s-dev/"
+          for manifest in /tmp/zalord-k8s-dev/*.yaml; do
+            printf '\n---\n'
+            cat "$manifest"
+          done > /tmp/zalord-k8s-dev.yaml
+          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "KUBECONFIG=~/.kube/zalord-dev-deployer.config kubectl apply -n zalord-dev -f -" < /tmp/zalord-k8s-dev.yaml
 
-      - name: Apply manifests
+      - name: Pull proven immutable images
         run: |
           ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
             set -euo pipefail
-            kubectl create namespace zalord-dev --dry-run=client -o yaml | kubectl apply -f -
-            kubectl apply -f ~/zalord-k8s-dev/
-            rm -rf ~/zalord-k8s-dev
+            export KUBECONFIG=~/.kube/zalord-dev-deployer.config
+            for service in ${{ env.SERVICE_IMAGES }}; do
+              sudo -n /usr/local/bin/zalord-k3s-image pull docker.io/${{ env.DOCKER_NAMESPACE }}/zalord-\$service:${{ env.IMAGE_TAG }}
+            done
+          '"
+
+      - name: Promote latest tags after successful deploy
+        run: |
+          set -euo pipefail
+          for service in $SERVICE_IMAGES; do
+            image="$DOCKER_NAMESPACE/zalord-$service"
+            docker buildx imagetools create -t "$image:latest" "$image:$IMAGE_TAG"
+          done
+
+      - name: Pull latest and prune replaced images
+        run: |
+          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
+            set -euo pipefail
+            export KUBECONFIG=~/.kube/zalord-dev-deployer.config
+            for service in ${{ env.SERVICE_IMAGES }}; do
+              sudo -n /usr/local/bin/zalord-k3s-image pull docker.io/${{ env.DOCKER_NAMESPACE }}/zalord-\$service:latest
+            done
+            if kubectl get deploy -n zalord-dev -o name | grep -q .; then
+              for deploy in \$(kubectl get deploy -n zalord-dev -o name); do
+                kubectl rollout status -n zalord-dev \"\$deploy\" --timeout=180s
+              done
+              sudo -n /usr/local/bin/zalord-k3s-image prune
+            else
+              echo \"No Deployments in zalord-dev yet; skipping image prune.\"
+            fi
             kubectl get configmaps,secrets -n zalord-dev
           '"
