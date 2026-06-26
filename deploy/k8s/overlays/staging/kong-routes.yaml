@@ -130,3 +130,18 @@ spec:
   to:
     - group: ""
       kind: Service
+---
+# ReferenceGrant in kong namespace: allows HTTPRoutes from zalord-staging to reference Gateway in kong
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-staging-routes
+  namespace: kong
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: zalord-staging
+  to:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
