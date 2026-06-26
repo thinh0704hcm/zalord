@@ -65,7 +65,7 @@
 
 \begin{frame}{Giới thiệu Zalord}
 \begin{columns}[T]
-\column{0.52\textwidth}
+\column{0.5\textwidth}
 \begin{block}{Zalord là gì?}
 \begin{itemize}
   \item Ứng dụng chat real-time kiến trúc \textbf{Microservices}
@@ -74,6 +74,8 @@
   \item Frontend: React 19 + TypeScript + Vite + WebSocket
 \end{itemize}
 \end{block}
+
+\column{0.5\textwidth}
 \begin{block}{Tech stack tổng quan}
 \begin{itemize}
   \item \textbf{Gateway}: Kong 3.7 (DB-less declarative)
@@ -84,11 +86,12 @@
   \item \textbf{CI/CD}: GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ GKE / k3s
 \end{itemize}
 \end{block}
+\end{columns}
+\end{frame}
 
-\column{0.46\textwidth}
+\begin{frame}{Danh sách Microservices}
 \begin{table}[h]
 \centering
-\small
 \begin{tabular}{|l|l|r|}
 \hline
 \textbf{Service} & \textbf{Lang} & \textbf{Port} \\
@@ -103,12 +106,12 @@ notification-service & Go & 8087 \\
 \hline
 \end{tabular}
 \end{table}
+
 \vspace{0.2cm}
 \begin{alertblock}{gRPC Internal (không qua Kong)}
 auth $\rightarrow$ user (CreateProfile :9082) \\
 message $\rightarrow$ media (ValidateAttachments :9086)
 \end{alertblock}
-\end{columns}
 \end{frame}
 
 \begin{frame}{Kiến trúc tổng quan}
