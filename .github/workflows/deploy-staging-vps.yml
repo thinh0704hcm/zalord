@@ -2,14 +2,15 @@ name: Deploy Staging VPS
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - staging
-    paths:
-      - ".github/workflows/deploy-staging-vps.yml"
-      - ".sops.yaml"
-      - "backend/**"
-      - "deploy/k8s/overlays/staging/**"
+    inputs:
+      image_tag:
+        description: 'Commit SHA image tag (from CI build)'
+        required: true
+        type: string
+  workflow_run:
+    workflows: ["CI — Dev"]
+    branches: [staging]
+    types: [completed]
 
 concurrency:
   group: deploy-staging-vps
@@ -17,9 +18,14 @@ concurrency:
 
 jobs:
   deploy:
+    # Only deploy if triggered manually or if CI succeeded
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     env:
-      IMAGE_TAG: ${{ github.sha }}
+      # workflow_dispatch → input; workflow_run → head_sha; fallback → github.sha
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.event.workflow_run.head_sha || github.sha }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-staging
       REMOTE_KUBECONFIG: ~/.kube/zalord-dev-deployer.config
@@ -40,7 +46,6 @@ jobs:
 
       - name: Validate required secrets
         env:
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY_STAGING }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -49,7 +54,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$DOCKER_NAMESPACE"
-          test -n "$DOCKER_PASSWORD"
           test -n "$SOPS_AGE_KEY"
           test -n "$VPS_HOST"
           test -n "$VPS_USER"
@@ -60,12 +64,12 @@ jobs:
         id: filter
         run: |
           set -euo pipefail
-          before="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
-              || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              || [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
             echo "restart_all=false" >> "$GITHUB_OUTPUT"
           else
+            before="${{ github.event.before }}"
             services=""
             for svc in $SERVICE_IMAGES; do
               if git diff --name-only "$before" "${{ github.sha }}" | grep -q "^backend/$svc/"; then
@@ -74,35 +78,12 @@ jobs:
             done
             echo "services=$(echo "$services" | xargs)" >> "$GITHUB_OUTPUT"
             if git diff --name-only "$before" "${{ github.sha }}" \
-                | grep -q "^deploy/k8s/overlays/staging/.*\\(config\\|secret\\)"; then
+                | grep -q "^deploy/k8s/overlays/staging/.*\(config\|secret\)"; then
               echo "restart_all=true" >> "$GITHUB_OUTPUT"
             else
               echo "restart_all=false" >> "$GITHUB_OUTPUT"
             fi
           fi
-
-      - name: Set up Docker Buildx
-        if: steps.filter.outputs.services != ''
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        if: steps.filter.outputs.services != ''
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push immutable images
-        if: steps.filter.outputs.services != ''
-        run: |
-          set -euo pipefail
-          for service in ${{ steps.filter.outputs.services }}; do
-            docker buildx build \
-              --platform linux/amd64 \
-              --push \
-              -t "docker.io/$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG" \
-              "backend/$service"
-          done
 
       - name: Install deploy tools
         run: |
@@ -146,8 +127,7 @@ jobs:
           if [ -n "${{ steps.filter.outputs.services }}" ]; then
             for svc in ${{ steps.filter.outputs.services }}; do
               f="deploy/k8s/overlays/staging/$svc-workload.yaml"
-              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' \
-                < "$f" > "/tmp/zalord-k8s-staging/$(basename "$f")"
+              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-staging/$(basename "$f")"
             done
           fi
 
@@ -163,7 +143,12 @@ jobs:
             "bash -lc '
               set -euo pipefail
               export KUBECONFIG=${{ env.REMOTE_KUBECONFIG }}
-              kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+              kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml 2>/dev/null | kubectl apply -f - 2>/dev/null || \
+                echo \"WARN: Could not create namespace (RBAC limited). Checking if it exists...\"
+              if ! kubectl get namespace ${{ env.K8S_NAMESPACE }} >/dev/null 2>&1; then
+                echo \"FATAL: namespace ${{ env.K8S_NAMESPACE }} does not exist\"
+                exit 1
+              fi
               kubectl delete job -n ${{ env.K8S_NAMESPACE }} kafka-init minio-init --ignore-not-found=true --wait=true
               kubectl apply -n ${{ env.K8S_NAMESPACE }} -f -
             '" < /tmp/zalord-k8s-staging.yaml
@@ -185,12 +170,12 @@ jobs:
           ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
             set -euo pipefail
             export KUBECONFIG=${{ env.REMOTE_KUBECONFIG }}
-            services="${{ steps.filter.outputs.services }}"
-            if [ -n "$services" ]; then
+            services=\"${{ steps.filter.outputs.services }}\"
+            if [ -n \"\$services\" ]; then
               for service in \$services; do
                 kubectl rollout status -n ${{ env.K8S_NAMESPACE }} deployment/\$service --timeout=180s
               done
-            elif [ "${{ steps.filter.outputs.restart_all }}" = "true" ] \
+            elif [ \"${{ steps.filter.outputs.restart_all }}\" = \"true\" ] \
                 && kubectl get deploy -n ${{ env.K8S_NAMESPACE }} -o name | grep -q .; then
               for deploy in \$(kubectl get deploy -n ${{ env.K8S_NAMESPACE }} -o name); do
                 kubectl rollout status -n ${{ env.K8S_NAMESPACE }} \$deploy --timeout=180s

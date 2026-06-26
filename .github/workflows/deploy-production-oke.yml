@@ -3,6 +3,10 @@ name: Deploy Production OKE
 on:
   workflow_dispatch:
     inputs:
+      image_tag:
+        description: 'Commit SHA image tag (from CI build)'
+        required: true
+        type: string
       canary:
         description: 'Deploy as canary (split traffic 90/10)'
         required: false
@@ -14,7 +18,6 @@ on:
     paths:
       - ".github/workflows/deploy-production-oke.yml"
       - ".sops.yaml"
-      - "backend/**"
       - "deploy/k8s/overlays/prod/**"
 
 concurrency:
@@ -25,7 +28,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      IMAGE_TAG: ${{ github.sha }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-prod
       KUBECONFIG: /home/runner/.kube/oke.config
@@ -56,13 +59,11 @@ jobs:
 
       - name: Validate required secrets
         env:
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY_PROD }}
           OKE_KUBECONFIG_B64: ${{ secrets.OKE_KUBECONFIG_B64 }}
         run: |
           set -euo pipefail
           test -n "$DOCKER_NAMESPACE"
-          test -n "$DOCKER_PASSWORD"
           test -n "$SOPS_AGE_KEY"
           test -n "$OKE_KUBECONFIG_B64"
 
@@ -84,35 +85,12 @@ jobs:
             done
             echo "services=$(echo "$services" | xargs)" >> "$GITHUB_OUTPUT"
             if git diff --name-only "$before" "${{ github.sha }}" \
-                | grep -q "^deploy/k8s/overlays/prod/.*\\(config\\|secret\\)"; then
+                | grep -q "^deploy/k8s/overlays/prod/.*\(config\|secret\)"; then
               echo "restart_all=true" >> "$GITHUB_OUTPUT"
             else
               echo "restart_all=false" >> "$GITHUB_OUTPUT"
             fi
           fi
-
-      - name: Set up Docker Buildx
-        if: steps.filter.outputs.services != ''
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        if: steps.filter.outputs.services != ''
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push immutable images
-        if: steps.filter.outputs.services != ''
-        run: |
-          set -euo pipefail
-          for service in ${{ steps.filter.outputs.services }}; do
-            docker buildx build \
-              --platform linux/amd64 \
-              --push \
-              -t "docker.io/$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG" \
-              "backend/$service"
-          done
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -124,6 +102,8 @@ jobs:
           sudo apt-get install -y gettext-base
           curl -sL https://github.com/getsops/sops/releases/download/v3.13.1/sops-v3.13.1.linux.amd64 -o /usr/local/bin/sops
           chmod 755 /usr/local/bin/sops
+          # OCI CLI needed for OKE kubeconfig exec-plugin auth
+          pip install --quiet oci
 
       - name: Configure SOPS age key
         env:
@@ -160,8 +140,7 @@ jobs:
           if [ -n "${{ steps.filter.outputs.services }}" ]; then
             for svc in ${{ steps.filter.outputs.services }}; do
               f="deploy/k8s/overlays/prod/$svc-workload.yaml"
-              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' \
-                < "$f" > "/tmp/zalord-k8s-prod/$(basename "$f")"
+              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-prod/$(basename "$f")"
             done
           fi
 
@@ -232,7 +211,13 @@ jobs:
             kubectl get deploy "$svc" -n "$K8S_NAMESPACE" -o json \
               | jq --arg name "${svc}-canary" \
                    --arg image "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$IMAGE_TAG" \
-                   '.metadata.name=$name | .metadata.labels."app.kubernetes.io/component"="canary" | del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .status) | .spec.replicas=1 | .spec.selector.matchLabels.app=$name | .spec.template.metadata.labels.app=$name | .spec.template.spec.containers[0].image=$image' \
+                   '.metadata.name=$name |
+                    .metadata.labels."app.kubernetes.io/component"="canary" |
+                    del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .status) |
+                    .spec.replicas=1 |
+                    .spec.selector.matchLabels.app=$name |
+                    .spec.template.metadata.labels.app=$name |
+                    .spec.template.spec.containers[0].image=$image' \
               | kubectl apply -n "$K8S_NAMESPACE" -f -
             echo "  Canary deployed: ${svc}-canary → $IMAGE_TAG"
           done
