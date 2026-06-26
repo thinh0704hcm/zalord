@@ -55,6 +55,8 @@ jobs:
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to Docker Hub
@@ -69,7 +71,7 @@ jobs:
           for svc in $services; do
             echo "Building zalord-$svc:$IMAGE_TAG..."
             docker buildx build \
-              --platform linux/amd64 \
+              --platform linux/amd64,linux/arm64 \
               --push \
               -t "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}" \
               "backend/$svc"
