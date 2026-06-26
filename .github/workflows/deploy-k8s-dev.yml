@@ -141,7 +141,8 @@ jobs:
           done
 
           if [ -n "${{ steps.filter.outputs.services }}" ]; then
-            for f in deploy/k8s/overlays/dev/*-workload.yaml; do
+            for svc in ${{ steps.filter.outputs.services }}; do
+              f="deploy/k8s/overlays/dev/$svc-workload.yaml"
               envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' \
                 < "$f" > "/tmp/zalord-k8s-dev/$(basename "$f")"
             done
