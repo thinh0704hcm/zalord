@@ -1,4 +1,4 @@
-\documentclass[aspectratio=169,compress]{beamer}
+\documentclass[aspectratio=169]{beamer}
 \usepackage[utf8]{inputenc}
 \usepackage[vietnamese]{babel}
 \usepackage{graphicx}
@@ -54,10 +54,10 @@
 \begin{itemize}
   \item \textbf{Gateway}: Kong 3.7 (DB-less declarative)
   \item \textbf{Messaging}: RabbitMQ / Kafka (switchable)
-  \item \textbf{Storage}: PostgreSQL $\times$6, Redis, MinIO (S3)
+  \item \textbf{Storage}: PostgreSQL ×6, Redis, MinIO (S3)
   \item \textbf{Observability}: Prometheus + Grafana
   \item \textbf{Deploy}: Docker Compose (dev) / k3s (prod)
-  \item \textbf{CI/CD}: GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ VPS
+  \item \textbf{CI/CD}: GitHub Actions → Docker Hub → VPS
 \end{itemize}
 \end{block}
 
@@ -81,75 +81,98 @@ notification-service & Go & 8087 \\
 \end{table}
 \vspace{0.2cm}
 \begin{alertblock}{gRPC Internal (không qua Kong)}
-auth $\rightarrow$ user (CreateProfile :9082) \\
-message $\rightarrow$ media (ValidateAttachments :9086)
+auth → user (CreateProfile :9082) \\
+message → media (ValidateAttachments :9086)
 \end{alertblock}
 \end{columns}
 \end{frame}
 
 \begin{frame}{Kiến trúc tổng quan}
 \begin{center}
+\resizebox{\textwidth}{0.82\textheight}{
 \begin{tikzpicture}[
-  svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\tiny,
-              align=center, minimum width=2.6cm, minimum height=0.48cm},
-  db/.style={rectangle, draw, fill=orange!15, font=\tiny,
-             align=center, minimum width=1.9cm, minimum height=0.42cm},
-  gw/.style={rectangle, draw, fill=teal!25, rounded corners=3pt, font=\scriptsize\bfseries,
-             minimum width=1.6cm, minimum height=4.0cm, align=center},
-  mq/.style={rectangle, draw, fill=yellow!30, font=\tiny, rounded corners=2pt,
-             minimum width=5.2cm, minimum height=0.42cm, align=center},
-  cli/.style={ellipse, draw, fill=gray!15, font=\tiny, align=center,
-              minimum width=1.6cm, minimum height=0.55cm},
-  arr/.style={->, >=Stealth, thin, gray!60},
-  grpc/.style={->, >=Stealth, thin, red!70},
-  async/.style={->, >=Stealth, thin, dashed, purple!60}
+  svc/.style={rectangle, draw, rounded corners=3pt, fill=blue!15, font=\normalsize,
+              align=center, minimum width=3.2cm, minimum height=0.75cm},
+  db/.style={rectangle, draw, fill=orange!20, font=\normalsize,
+             align=center, minimum width=3cm, minimum height=0.6cm},
+  gw/.style={rectangle, draw, fill=teal!25, rounded corners=4pt, font=\large\bfseries,
+             minimum width=2.5cm, minimum height=5.5cm, align=center},
+  mq/.style={rectangle, draw, fill=yellow!30, font=\normalsize, rounded corners=3pt,
+             minimum width=7cm, minimum height=0.65cm, align=center},
+  cli/.style={ellipse, draw, fill=gray!15, font=\normalsize, align=center,
+              minimum width=2.2cm, minimum height=1cm},
+  arr/.style={->, >=Stealth, thick, gray!70},
+  grpc/.style={->, >=Stealth, thick, red!60},
+  async/.style={->, >=Stealth, thick, dashed, purple!65}
 ]
 % Client
-\node[cli] (client) at (-2.2, 2.3) {Browser\\Mobile};
+\node[cli] (client) at (-3, 3.25) {Browser\\Mobile};
+
 % Kong
-\node[gw] (kong) at (-0.1, 2.3) {Kong\\API GW\\:8080};
-% Services (y: 4.5 down to 0.3, step 0.7)
-\node[svc] (auth)  at (3.0, 4.5)  {auth-service (Java :8081)};
-\node[svc] (user)  at (3.0, 3.8)  {user-service (Go :8082)};
-\node[svc] (msg)   at (3.0, 3.1)  {message-service (Java :8083)};
-\node[svc] (chat)  at (3.0, 2.4)  {chat-service (Go :8084)};
-\node[svc] (grp)   at (3.0, 1.7)  {group-service (Java :8085)};
-\node[svc] (med)   at (3.0, 1.0)  {media-service (Java :8086)};
-\node[svc] (notif) at (3.0, 0.3)  {notification-service (Go :8087)};
-% DBs
-\node[db] (adb)   at (6.0, 4.5)  {PG: auth-db};
-\node[db] (udb)   at (6.0, 3.8)  {PG: user-db};
-\node[db] (mdb)   at (6.0, 3.1)  {PG: msg-db};
-\node[db, fill=green!20] (redis) at (6.0, 2.4)  {Redis};
-\node[db] (gdb)   at (6.0, 1.7)  {PG: grp-db};
-\node[db] (meddb) at (6.0, 1.0)  {PG+MinIO};
-\node[db] (ndb)   at (6.0, 0.3)  {PG: notif-db};
+\node[gw] (kong) at (-0.2, 3.25) {Kong\\API GW\\:8080};
+
+% Services (stacked, y from 6.25 down)
+\node[svc] (auth)  at (4.2, 6.25) {auth-service\\\small Java :8081};
+\node[svc] (user)  at (4.2, 5.25) {user-service\\\small Go :8082};
+\node[svc] (msg)   at (4.2, 4.25) {message-service\\\small Java :8083};
+\node[svc] (chat)  at (4.2, 3.25) {chat-service\\\small Go :8084};
+\node[svc] (grp)   at (4.2, 2.25) {group-service\\\small Java :8085};
+\node[svc] (med)   at (4.2, 1.25) {media-service\\\small Java :8086};
+\node[svc] (notif) at (4.2, 0.25) {notification-service\\\small Go :8087};
+
+% DBs / Stores
+\node[db] (adb)    at (8.2, 6.25) {PG: auth-db};
+\node[db] (udb)    at (8.2, 5.25) {PG: user-db};
+\node[db] (mdb)    at (8.2, 4.25) {PG: message-db};
+\node[db, fill=green!20] (redis) at (8.2, 3.25) {Redis};
+\node[db] (gdb)    at (8.2, 2.25) {PG: group-db};
+\node[db] (meddb)  at (8.2, 1.25) {PG + MinIO};
+\node[db] (ndb)    at (8.2, 0.25) {PG: notif-db};
+
 % Event bus
-\node[mq] (mq) at (3.0, -0.35) {Event Bus: RabbitMQ / Kafka (switchable)};
-% Arrows
-\draw[arr] (client) -- (kong) node[midway, above, font=\tiny] {REST/WSS};
-\foreach \s in {auth, user, msg, chat, grp, med, notif} {
-  \draw[arr] (kong.east) -- (\s.west);
-}
-\draw[arr] (auth) -- (adb); \draw[arr] (user) -- (udb);
-\draw[arr] (msg)  -- (mdb); \draw[arr] (chat) -- (redis);
-\draw[arr] (grp)  -- (gdb); \draw[arr] (med)  -- (meddb);
+\node[mq] (mq) at (4.2, -0.7) {Event Bus: RabbitMQ / Kafka (switchable)};
+
+% Client → Kong
+\draw[arr] (client) -- (kong) node[midway, above, font=\small] {REST/WSS};
+
+% Kong → Services
+\draw[arr] (kong.east) -- (auth.west);
+\draw[arr] (kong.east) -- (user.west);
+\draw[arr] (kong.east) -- (msg.west);
+\draw[arr] (kong.east) -- (chat.west) node[near start, above, font=\tiny] {route};
+\draw[arr] (kong.east) -- (grp.west);
+\draw[arr] (kong.east) -- (med.west);
+\draw[arr] (kong.east) -- (notif.west);
+
+% Service → DB
+\draw[arr] (auth) -- (adb);
+\draw[arr] (user) -- (udb);
+\draw[arr] (msg)  -- (mdb);
+\draw[arr] (chat) -- (redis);
+\draw[arr] (grp)  -- (gdb);
+\draw[arr] (med)  -- (meddb);
 \draw[arr] (notif)-- (ndb);
+
 % gRPC
-\draw[grpc] (auth.west) -- +(-0.45,0) |- (user.west)
-  node[near end, left, font=\tiny] {gRPC};
-\draw[grpc] (msg.west)  -- +(-0.45,0) |- (med.west)
-  node[near end, left, font=\tiny] {gRPC};
-% Async
-\draw[async] (msg.south)  -- +(0,-0.2) -| (mq.north);
-\draw[async] (grp.south)  -- +(0,-0.2) -| (mq.north);
-\draw[async] (mq.north) -| (chat.south);
-\draw[async] (mq.north) -| (notif.south);
+\draw[grpc] (auth.west) -- +(-0.6,0) |- (user.west)
+  node[near end, left, font=\small] {gRPC};
+\draw[grpc] (msg.west) -- +(-0.6,0) |- (med.west)
+  node[near end, left, font=\small] {gRPC};
+
+% Async event bus
+\draw[async] (msg.south)  -- +(0,-0.35) -| (mq.north);
+\draw[async] (grp.south)  -- +(0,-0.35) -| (mq.north);
+\draw[async] (mq.north) -- +(0,0.35) -| (chat.south);
+\draw[async] (mq.north) -- +(0,0.35) -| (notif.south);
+\draw[async] (mq.north) -- +(0,0.25) -| (msg.south);
+
 % Legend
-\draw[arr]   (1.5,-0.8) -- +(0.5,0) node[right, font=\tiny] {REST/WS};
-\draw[grpc]  (2.9,-0.8) -- +(0.5,0) node[right, font=\tiny] {gRPC};
-\draw[async] (4.2,-0.8) -- +(0.5,0) node[right, font=\tiny] {async};
+\draw[arr]   (0,-1.5) -- +(0.8,0) node[right, font=\small] {REST / WS};
+\draw[grpc]  (2.5,-1.5) -- +(0.8,0) node[right, font=\small] {gRPC (sync)};
+\draw[async] (5,-1.5)   -- +(0.8,0) node[right, font=\small] {Event bus (async)};
+
 \end{tikzpicture}
+}
 \end{center}
 \end{frame}
 
@@ -304,8 +327,8 @@ notification-service & Notification & Notification \\
 \column{0.5\textwidth}
 \begin{block}{SRP --- Mỗi service 1 trách nhiệm rõ ràng}
 \begin{itemize}
-  \item \textbf{chat-service}: CHỈ quản lý WebSocket connections + fan-out messages $\rightarrow$ không write business DB, không có business logic
-  \item \textbf{media-service}: CHỈ quản lý upload lifecycle (generate presigned URL $\rightarrow$ MinIO $\rightarrow$ finalize metadata)
+  \item \textbf{chat-service}: CHỈ quản lý WebSocket connections + fan-out messages → không write business DB, không có business logic
+  \item \textbf{media-service}: CHỈ quản lý upload lifecycle (generate presigned URL → MinIO → finalize metadata)
   \item \textbf{notification-service}: CHỈ consume events + persist + serve notification list
   \item \textbf{auth-service}: CHỈ authentication (issue/validate token, session management)
 \end{itemize}
@@ -320,15 +343,15 @@ message-service đảm nhận 2 vai trò: (1) write model cho messages, (2) proj
   \item \textbf{High Cohesion}: dữ liệu và logic cùng domain nằm trong 1 service, không scatter
   \item \textbf{Low Coupling}: chỉ \textbf{2 synchronous dependencies} (gRPC):
     \begin{itemize}
-      \item \small auth $\rightarrow$ user (registration)
-      \item \small message $\rightarrow$ media (validate attachments)
+      \item \small auth → user (registration)
+      \item \small message → media (validate attachments)
     \end{itemize}
   \item Mọi giao tiếp còn lại: \textbf{async event bus}
   \item Downstream services không parse JWT --- trust header từ Kong
 \end{itemize}
 \end{block}
 \begin{block}{Execution Pipeline}
-Request $\rightarrow$ Kong (validate) $\rightarrow$ Service $\rightarrow$ DB / Event Bus\\
+Request → Kong (validate) → Service → DB / Event Bus\\
 Không có cross-service synchronous chain dài hơn 2 hops
 \end{block}
 \end{columns}
@@ -343,12 +366,12 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \column{0.5\textwidth}
 \begin{block}{Synchronous --- gRPC (2 trường hợp)}
 \begin{itemize}
-  \item \textbf{auth $\rightarrow$ user-service} (\texttt{CreateProfile}):
+  \item \textbf{auth → user-service} (\texttt{CreateProfile}):
     \begin{itemize}
       \item \small Cần response ngay để rollback nếu profile creation fail
       \item \small Deadline 5 giây, circuit breaker Resilience4j
     \end{itemize}
-  \item \textbf{message $\rightarrow$ media-service} (\texttt{ValidateAttachments}):
+  \item \textbf{message → media-service} (\texttt{ValidateAttachments}):
     \begin{itemize}
       \item \small Validate media IDs trước khi persist message
       \item \small Deadline 3 giây (hot path user-facing)
@@ -360,9 +383,9 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \column{0.5\textwidth}
 \begin{block}{Asynchronous --- Event Bus (Kafka / RabbitMQ)}
 \begin{itemize}
-  \item \textbf{message.created} $\rightarrow$ chat-service (WebSocket fan-out), notification-service, InboxProjector
-  \item \textbf{group.*} (created/member-added/removed/updated) $\rightarrow$ message-service (project Conversation)
-  \item \textbf{user.created} $\rightarrow$ user-service
+  \item \textbf{message.created} → chat-service (WebSocket fan-out), notification-service, InboxProjector
+  \item \textbf{group.*} (created/member-added/removed/updated) → message-service (project Conversation)
+  \item \textbf{user.created} → user-service
   \item Dùng async vì: fan-out 1-to-many, producers không cần chờ consumers, failure isolation
   \item \textbf{Switchable}: \texttt{EVENT\_BUS=rabbitmq} hoặc \texttt{kafka} --- cùng interface \texttt{EventBus} (Factory pattern)
 \end{itemize}
@@ -434,9 +457,9 @@ Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
 \column{0.5\textwidth}
 \begin{block}{Swagger / OpenAPI Aggregation}
 \begin{itemize}
-  \item Java services: \textbf{springdoc-openapi} $\rightarrow$ \texttt{/v3/api-docs}
-  \item Go services: \textbf{swaggo} $\rightarrow$ \texttt{/v3/api-docs}
-  \item Kong route \texttt{/api-docs/\{svc\}} $\rightarrow$ \texttt{strip\_path: true} $\rightarrow$ forward đến service \texttt{/v3/api-docs}
+  \item Java services: \textbf{springdoc-openapi} → \texttt{/v3/api-docs}
+  \item Go services: \textbf{swaggo} → \texttt{/v3/api-docs}
+  \item Kong route \texttt{/api-docs/\{svc\}} → \texttt{strip\_path: true} → forward đến service \texttt{/v3/api-docs}
   \item \textbf{Swagger UI} container tại \texttt{/docs} aggregate tất cả
 \end{itemize}
 \end{block}
@@ -463,8 +486,8 @@ Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
   \item \textbf{Strong consistency}: trong 1 service (ACID transactions)
   \item \textbf{Eventual consistency}: cross-service qua event bus
     \begin{itemize}
-      \item \small group member change $\rightarrow$ message-service projection có độ trễ nhỏ
-      \item \small message.created $\rightarrow$ inbox view update không đồng thời
+      \item \small group member change → message-service projection có độ trễ nhỏ
+      \item \small message.created → inbox view update không đồng thời
     \end{itemize}
 \end{itemize}
 \end{block}
@@ -485,7 +508,7 @@ Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
 \end{itemize}
 \end{block}
 \begin{alertblock}{Không có Saga Pattern}
-Lý do: không tồn tại distributed transaction nào đủ phức tạp. Flow dài nhất là 2 bước (auth $\rightarrow$ user). Xem \texttt{EXPLANATION.md}.
+Lý do: không tồn tại distributed transaction nào đủ phức tạp. Flow dài nhất là 2 bước (auth → user). Xem \texttt{EXPLANATION.md}.
 \end{alertblock}
 \end{columns}
 \end{frame}
@@ -574,7 +597,7 @@ Lý do: không tồn tại distributed transaction nào đủ phức tạp. Flow
 \hline
 \textbf{Store} & \textbf{Dùng cho} \\
 \hline
-PostgreSQL $\times$6 & Business data (ACID) \\
+PostgreSQL ×6 & Business data (ACID) \\
 Redis & Sessions, presence, pub/sub \\
 MinIO (S3) & Avatars, attachments \\
 ScyllaDB & Schema có, chưa wire \\
@@ -656,7 +679,7 @@ CMD ["./server"]
 \begin{itemize}
   \item Path: \texttt{deploy/k8s/overlays/dev/}
   \item Namespace: \texttt{zalord-dev}
-  \item \textbf{Workloads}: 7 Deployments (services) + StatefulSets (Kafka, RabbitMQ, Redis, PostgreSQL$\times$6, MinIO)
+  \item \textbf{Workloads}: 7 Deployments (services) + StatefulSets (Kafka, RabbitMQ, Redis, PostgreSQL×6, MinIO)
   \item \textbf{Resources}: requests/limits per container (e.g. auth: 100m/384Mi req, 500m/768Mi limit)
   \item \textbf{Probes}: TCP liveness, HTTP readiness (\texttt{/health})
   \item \textbf{Secrets}: SOPS + Age encryption (\texttt{*.secret.enc.yaml}) --- decrypted by CI/CD
@@ -698,7 +721,7 @@ Kafka 3.9, RabbitMQ 3.13, Redis 7, PostgreSQL 16, MinIO --- persistent volumes 1
 \begin{itemize}
   \item \texttt{ZALORD\_USER\_SERVICE\_GRPC\_TARGET=user-service:9082}
   \item \texttt{ZALORD\_MEDIA\_SERVICE\_GRPC\_TARGET=media-service:9086}
-  \item DNS resolve $\rightarrow$ ClusterIP $\rightarrow$ Pod IP
+  \item DNS resolve → ClusterIP → Pod IP
 \end{itemize}
 \end{block}
 
@@ -781,7 +804,7 @@ Kafka 3.9, RabbitMQ 3.13, Redis 7, PostgreSQL 16, MinIO --- persistent volumes 1
 \end{block}
 \begin{block}{Path Rewriting}
 \begin{itemize}
-  \item \texttt{/api-docs/auth} $\rightarrow$ auth-service \texttt{/v3/api-docs} (\texttt{strip\_path: true})
+  \item \texttt{/api-docs/auth} → auth-service \texttt{/v3/api-docs} (\texttt{strip\_path: true})
   \item Main API routes: \texttt{strip\_path: false} (forward nguyên path)
 \end{itemize}
 \end{block}
@@ -880,7 +903,7 @@ Kong KHÔNG dùng \texttt{networking.k8s.io/v1 Ingress} resource.
 \node[box, fill=green!15]   (chat)  at (8,   0) {chat-service};
 \draw[arr] (cli3)  -- (kong3) node[midway, above, font=\tiny] {/ws/chat?token=\{JWT\}};
 \draw[arr] (kong3) -- (chat)  node[midway, above, font=\tiny] {Upgrade + X-User-Id};
-\node[note] at (3.5, -0.55) {Browser không set WS headers\\$\rightarrow$ token qua query param};
+\node[note] at (3.5, -0.55) {Browser không set WS headers\\→ token qua query param};
 
 % No OAuth2/Keycloak note
 \node[draw, fill=red!10, rounded corners, font=\tiny, align=center]
@@ -1009,7 +1032,7 @@ Pre-provisioned: \texttt{zalord-overview.json} --- Datasource: Prometheus, anony
 \textbf{[PLACEHOLDER]}\\[0.2cm]
 OpenTelemetry distributed tracing sẽ cho phép:
 \begin{itemize}
-  \item \small Trace 1 request qua nhiều hops: Kong $\rightarrow$ message-service $\rightarrow$ media gRPC $\rightarrow$ outbox $\rightarrow$ event bus $\rightarrow$ chat
+  \item \small Trace 1 request qua: Kong → message-service → media gRPC call → outbox → event bus → chat-service
   \item \small Xác định latency ở từng hop
   \item \small Tích hợp với Jaeger / Tempo (Grafana)
 \end{itemize}
@@ -1020,7 +1043,9 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \begin{itemize}
   \item Dùng \textbf{Lens IDE} hoặc \textbf{k9s} CLI để giám sát cluster k3s
 \end{itemize}
-{\centering\tiny\textit{[PLACEHOLDER: chụp Lens/k9s với zalord-dev namespace]}\\}
+\begin{alertblock}{}
+\centering\tiny [PLACEHOLDER --- chụp Lens/k9s với zalord-dev namespace]
+\end{alertblock}
 \end{block}
 \end{columns}
 \end{frame}
@@ -1040,7 +1065,7 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \node[state, fill=yellow!30] (half)     at (0, 0) {HALF-OPEN\\{\tiny 3 probe requests}};
 
 \draw[arr] (closed) -- (open)
-  node[midway, right, font=\tiny, align=left, text width=1.6cm] {failure rate $>$50\%\\(10-call window)};
+  node[midway, right, font=\tiny] {failure rate $>$50\%\\(10-call window)};
 \draw[arr] (open) -- (half)
   node[midway, right, font=\tiny] {wait 30s};
 \draw[arr] (half) to[bend right=45] (closed)
@@ -1055,13 +1080,13 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \column{0.5\textwidth}
 \begin{block}{Implementation}
 \begin{itemize}
-  \item \textbf{auth-service} $\rightarrow$ user-service gRPC:
+  \item \textbf{auth-service} → user-service gRPC:
     \begin{itemize}
       \item \small \texttt{@CircuitBreaker(name="userGrpc")}
       \item \small gRPC deadline: \textbf{5 giây}
       \item \small Fallback: \texttt{createProfileFallback()}
     \end{itemize}
-  \item \textbf{message-service} $\rightarrow$ media-service gRPC:
+  \item \textbf{message-service} → media-service gRPC:
     \begin{itemize}
       \item \small \texttt{@CircuitBreaker(name="mediaGrpc")}
       \item \small gRPC deadline: \textbf{3 giây} (hot path)
@@ -1072,7 +1097,7 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \begin{block}{Go services --- Error Handling}
 \begin{itemize}
   \item \textbf{PermanentError}: drop message (ack), log error
-  \item \textbf{Transient error}: nack + requeue $\rightarrow$ RabbitMQ retry
+  \item \textbf{Transient error}: nack + requeue → RabbitMQ retry
   \item Frontend WebSocket: exponential backoff reconnect (cap 15s)
 \end{itemize}
 \end{block}
@@ -1086,23 +1111,23 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \begin{frame}{GitHub Actions Pipeline (Req 15)}
 \begin{center}
 \begin{tikzpicture}[
-  pipebox/.style={rectangle, draw, rounded corners=3pt, font=\small,
+  step/.style={rectangle, draw, rounded corners=3pt, font=\small,
                align=center, minimum width=3.2cm, minimum height=0.75cm,
                fill=blue!12},
   arr/.style={->, >=Stealth, thick},
   scale=0.95
 ]
-\node[pipebox] (trigger) at (0, 0)    {Trigger\\{\tiny push to main (backend/** changed)}};
-\node[pipebox] (detect)  at (3.8, 0)  {Detect changed\\services\\{\tiny git diff --name-only}};
-\node[pipebox] (build)   at (7.6, 0)  {Build \& Push\\Docker images\\{\tiny Buildx linux/amd64}};
-\node[pipebox] (registry) at (11.4,0) {Docker Hub\\{\tiny :\{sha\} tag}};
+\node[step] (trigger) at (0, 0)    {Trigger\\{\tiny push to main (backend/** changed)}};
+\node[step] (detect)  at (3.8, 0)  {Detect changed\\services\\{\tiny git diff --name-only}};
+\node[step] (build)   at (7.6, 0)  {Build \& Push\\Docker images\\{\tiny Buildx linux/amd64}};
+\node[step] (registry) at (11.4,0) {Docker Hub\\{\tiny :\{sha\} tag}};
 
-\node[pipebox] (decrypt) at (0, -1.5)   {Decrypt Secrets\\{\tiny SOPS + Age key}\\{\tiny (GitHub Actions Secret)}};
-\node[pipebox] (ssh)     at (3.8, -1.5) {SSH to VPS\\{\tiny pre-pull images to containerd}};
-\node[pipebox] (apply)   at (7.6, -1.5) {kubectl apply\\{\tiny -n zalord-dev}};
-\node[pipebox] (status)  at (11.4,-1.5) {rollout status\\{\tiny 180s timeout $\rightarrow$ fail fast}};
+\node[step] (decrypt) at (0, -1.5)   {Decrypt Secrets\\{\tiny SOPS + Age key}\\{\tiny (GitHub Actions Secret)}};
+\node[step] (ssh)     at (3.8, -1.5) {SSH to VPS\\{\tiny pre-pull images to containerd}};
+\node[step] (apply)   at (7.6, -1.5) {kubectl apply\\{\tiny -n zalord-dev}};
+\node[step] (status)  at (11.4,-1.5) {rollout status\\{\tiny 180s timeout → fail fast}};
 
-\node[pipebox, fill=green!15] (promote) at (5.7, -3) {Promote :latest tag\\+ Prune old images from VPS};
+\node[step, fill=green!15] (promote) at (5.7, -3) {Promote :latest tag\\+ Prune old images from VPS};
 
 \draw[arr] (trigger)  -- (detect);
 \draw[arr] (detect)   -- (build);
@@ -1119,7 +1144,7 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \end{center}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
 \centering
-\textit{GitHub Actions $\rightarrow$ tab Actions của repo $\rightarrow$ chọn workflow run thành công $\rightarrow$ chụp màn hình các steps xanh}
+\textit{GitHub Actions → tab Actions của repo → chọn workflow run thành công → chụp màn hình các steps xanh}
 \end{alertblock}
 \end{frame}
 
@@ -1135,15 +1160,15 @@ OpenTelemetry distributed tracing sẽ cho phép:
       \item \small ...
     \end{itemize}
   \item Sau khi deploy thành công: promote \texttt{:latest} tag
-  \item \textbf{Selective build}: chỉ rebuild service có file thay đổi $\rightarrow$ tiết kiệm thời gian CI
+  \item \textbf{Selective build}: chỉ rebuild service có file thay đổi → tiết kiệm thời gian CI
   \item Không có image nào bị overwrite --- SHA tag immutable
 \end{itemize}
 \end{block}
 \begin{block}{Rollback}
 \begin{itemize}
   \item K8s giữ revision history của Deployment
-  \item \texttt{kubectl rollout undo deployment/auth-service -n zalord-dev} $\rightarrow$ về image SHA của commit trước
-  \item \texttt{kubectl rollout status} trong pipeline $\rightarrow$ fail fast (180s) nếu pods không healthy
+  \item \texttt{kubectl rollout undo deployment/auth-service -n zalord-dev} → về image SHA của commit trước
+  \item \texttt{kubectl rollout status} trong pipeline → fail fast (180s) nếu pods không healthy
 \end{itemize}
 \end{block}
 
@@ -1177,7 +1202,7 @@ Nên bổ sung:
 \begin{frame}{Scenario 1: Circuit Breaker Activation (Req 16)}
 \begin{columns}[T]
 \column{0.5\textwidth}
-\begin{block}{Scenario: media-service xuống $\rightarrow$ CB open}
+\begin{block}{Scenario: media-service xuống → CB open}
 \begin{enumerate}
   \item Kill media-service pod:\\
     \texttt{kubectl delete pod media-service-xxx}
@@ -1185,7 +1210,7 @@ Nên bổ sung:
   \item Observe: \textbf{circuit breaker OPEN} sau $>$50\% failures trong 10 calls (Resilience4j)
   \item Response: fallback method trả về error (không hang)
   \item Restart media-service pod (K8s tự restart)
-  \item Observe: CB $\rightarrow$ HALF-OPEN $\rightarrow$ 3 probe requests $\rightarrow$ CLOSED
+  \item Observe: CB → HALF-OPEN → 3 probe requests → CLOSED
 \end{enumerate}
 \end{block}
 
@@ -1193,10 +1218,10 @@ Nên bổ sung:
 \begin{alertblock}{[PLACEHOLDER --- chụp hình/log]}
 \centering
 \textit{Logs của message-service:}\\
-\textit{--- CB state: CLOSED $\rightarrow$ OPEN}\\
+\textit{--- CB state: CLOSED → OPEN}\\
 \textit{--- Fallback called}\\
-\textit{--- CB state: OPEN $\rightarrow$ HALF-OPEN}\\
-\textit{--- CB state: HALF-OPEN $\rightarrow$ CLOSED}\\[0.3cm]
+\textit{--- CB state: OPEN → HALF-OPEN}\\
+\textit{--- CB state: HALF-OPEN → CLOSED}\\[0.3cm]
 \textit{Hoặc Grafana metric panel cho}\\
 \textit{Resilience4j state transitions}
 \end{alertblock}
@@ -1217,17 +1242,17 @@ Nên bổ sung:
 \begin{enumerate}
   \item Client A và B đang chat real-time
   \item \texttt{kubectl delete pod chat-service-xxx -n zalord-dev}
-  \item K8s phát hiện pod gone $\rightarrow$ tạo pod mới (Deployment replicas=1)
+  \item K8s phát hiện pod gone → tạo pod mới (Deployment replicas=1)
   \item Frontend WebSocket: \textbf{exponential backoff reconnect} (cap 15s, logic trong \texttt{websocket.ts})
-  \item Pod mới Ready $\rightarrow$ clients reconnect thành công
+  \item Pod mới Ready → clients reconnect thành công
 \end{enumerate}
 \end{block}
 \begin{block}{Scenario 3: Outbox resiliency}
 \begin{enumerate}
   \item Tắt RabbitMQ tạm thời
-  \item Gửi messages $\rightarrow$ lưu vào \texttt{outbox\_events} table (atomic với message)
+  \item Gửi messages → lưu vào \texttt{outbox\_events} table (atomic với message)
   \item Bật lại RabbitMQ
-  \item \textbf{OutboxScheduler} (poll 3s) phát hiện unpublished events $\rightarrow$ publish
+  \item \textbf{OutboxScheduler} (poll 3s) phát hiện unpublished events → publish
   \item Không mất message nào
 \end{enumerate}
 \end{block}
@@ -1272,7 +1297,7 @@ Nên bổ sung:
   \item[\checkmark] ConfigMap + SOPS-encrypted Secrets
   \item[\checkmark] Multi-stage Dockerfile, Docker Compose
   \item[\checkmark] Kubernetes (k3s, Kustomize)
-  \item[\checkmark] CI/CD GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ VPS
+  \item[\checkmark] CI/CD GitHub Actions → Docker Hub → VPS
   \item[\checkmark] Prometheus + Grafana monitoring
   \item[\checkmark] Swagger/OpenAPI aggregation
 \end{itemize}
