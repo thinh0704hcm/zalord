@@ -710,56 +710,50 @@ CMD ["./server"]
 \end{columns}
 \end{frame}
 
-\begin{frame}{Service Discovery \& Load Balancing (Req 9)}
-\begin{columns}[T]
-\column{0.5\textwidth}
+\begin{frame}{Service Discovery (Req 9)}
 \begin{block}{Service Discovery --- K8s DNS}
 \begin{itemize}
   \item K8s tự tạo DNS entry cho mỗi ClusterIP Service
   \item \texttt{auth-service.zalord-dev.svc.cluster.local}
-  \item Các service gọi nhau qua tên service (e.g. \texttt{http://user-service:8082})
+  \item Các service gọi nhau qua tên service nội bộ (e.g. \texttt{http://user-service:8082})
   \item \textbf{KHÔNG cần Eureka hay Consul} --- K8s DNS thay thế hoàn toàn
 \end{itemize}
 \end{block}
+
 \begin{block}{Cấu hình gRPC target}
 \begin{itemize}
   \item \texttt{ZALORD\_USER\_SERVICE\_GRPC\_TARGET=user-service:9082}
   \item \texttt{ZALORD\_MEDIA\_SERVICE\_GRPC\_TARGET=media-service:9086}
-  \item DNS resolve $\rightarrow$ ClusterIP $\rightarrow$ Pod IP
+  \item Quá trình: DNS resolve $\rightarrow$ ClusterIP $\rightarrow$ Pod IP
 \end{itemize}
 \end{block}
+\end{frame}
 
-\column{0.5\textwidth}
+\begin{frame}{Load Balancing (Req 9)}
 \begin{block}{Load Balancing --- Server-side}
 \begin{center}
 \begin{tikzpicture}[
-  box/.style={rectangle, draw, rounded corners=2pt, font=\tiny,
-              align=center, minimum width=2.2cm, minimum height=0.6cm},
-  arr/.style={->, >=Stealth, thin},
-  scale=0.85
+  box/.style={rectangle, draw, rounded corners=2pt, font=\small,
+              align=center, minimum width=2.5cm, minimum height=0.7cm},
+  arr/.style={->, >=Stealth, thick},
+  scale=1.0
 ]
 \node[box, fill=teal!20] (kong) at (0, 3) {Kong (Pod)};
-\node[box, fill=gray!15] (kube) at (0, 2) {kube-proxy\\(iptables/IPVS)};
-\node[box, fill=blue!15] (p1)   at (-1.5, 0.8) {chat-pod-1};
-\node[box, fill=blue!15] (p2)   at (0.3,  0.8) {chat-pod-2};
-\node[box, fill=blue!15] (p3)   at (2.1,  0.8) {chat-pod-3};
+\node[box, fill=gray!15] (kube) at (0, 1.5) {kube-proxy\\(iptables/IPVS)};
+\node[box, fill=blue!15] (p1)   at (-3, -0.5) {chat-pod-1};
+\node[box, fill=blue!15] (p2)   at (0,  -0.5) {chat-pod-2};
+\node[box, fill=blue!15] (p3)   at (3,  -0.5) {chat-pod-3};
 
 \draw[arr] (kong) -- (kube);
-\draw[arr] (kube) -- (p1);
-\draw[arr] (kube) -- (p2);
-\draw[arr] (kube) -- (p3);
+\draw[arr] (kube.south) -- +(0,-0.5) -| (p1.north);
+\draw[arr] (kube.south) -- (p2.north);
+\draw[arr] (kube.south) -- +(0,-0.5) -| (p3.north);
 
-\node[font=\tiny, gray] at (0, 0.1) {Round-robin tới Pod IPs};
+\node[font=\small, gray] at (2.5, 0.8) {Round-robin tới Pod IPs};
 \end{tikzpicture}
 \end{center}
 \end{block}
-\begin{block}{Server-side vs Client-side LB}
-\begin{itemize}
-  \item \textbf{Server-side} (kube-proxy): LB xảy ra ở K8s layer, client không cần library (Ribbon). Works với mọi ngôn ngữ.
-  \item Client-side LB (Ribbon/gRPC native): phù hợp khi KHÔNG có K8s
-\end{itemize}
-\end{block}
-\end{columns}
+
 \end{frame}
 
 % ============================================================
