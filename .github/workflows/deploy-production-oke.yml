@@ -103,7 +103,7 @@ jobs:
           curl -sL https://github.com/getsops/sops/releases/download/v3.13.1/sops-v3.13.1.linux.amd64 -o /usr/local/bin/sops
           chmod 755 /usr/local/bin/sops
           # OCI CLI needed for OKE kubeconfig exec-plugin auth
-          pip install --quiet oci
+          pip install --quiet oci && echo "/home/runner/.local/bin" >> $GITHUB_PATH
 
       - name: Configure SOPS age key
         env:
