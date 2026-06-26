@@ -163,7 +163,7 @@ jobs:
             "bash -lc '
               set -euo pipefail
               export KUBECONFIG=${{ env.REMOTE_KUBECONFIG }}
-              kubectl get namespace ${{ env.K8S_NAMESPACE }} >/dev/null
+              kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
               kubectl delete job -n ${{ env.K8S_NAMESPACE }} kafka-init minio-init --ignore-not-found=true --wait=true
               kubectl apply -n ${{ env.K8S_NAMESPACE }} -f -
             '" < /tmp/zalord-k8s-staging.yaml
