@@ -8,11 +8,14 @@ import java.util.UUID;
 
 @Builder
 public record GroupResponse(
-        UUID id,                       // also the conversationId in message-service
-        String name,
-        String avatarUrl,
-        UUID createdBy,
-        Instant createdAt,
-        List<GroupMemberResponse> members
-) {
+		UUID id,                       // also the conversationId in message-service
+		String name,
+		String avatarUrl,
+		UUID createdBy,
+		Instant createdAt,
+		List<GroupMemberResponse> members
+	) {
+		public String getName() { return name(); }
+		public List<GroupMemberResponse> getMembers() { return members(); }
+	
 }
