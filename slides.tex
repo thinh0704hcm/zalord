@@ -1154,9 +1154,9 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \end{alertblock}
 \end{frame}
 
-\begin{frame}{Versioning \& Rollback Strategy (Req 15)}
+\begin{frame}{Versioning \& Rollback Strategy (Req 15) --- Part 1}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Image Versioning}
 \begin{itemize}
   \item Mỗi image tagged với \textbf{Git SHA}:
@@ -1170,15 +1170,8 @@ OpenTelemetry distributed tracing sẽ cho phép:
   \item Không có image nào bị overwrite --- SHA tag immutable
 \end{itemize}
 \end{block}
-\begin{block}{Rollback}
-\begin{itemize}
-  \item K8s giữ revision history của Deployment
-  \item \texttt{kubectl rollout undo deployment/auth-service -n zalord-dev} $\rightarrow$ về image SHA của commit trước
-  \item \texttt{kubectl rollout status} trong pipeline $\rightarrow$ fail fast (180s) nếu pods không healthy
-\end{itemize}
-\end{block}
 
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{alertblock}{Testing trong CI --- Chưa có}
 \textbf{[PLACEHOLDER]}\\[0.2cm]
 CI/CD pipeline hiện tại: build + deploy. Chưa có bước automated testing.\\[0.2cm]
@@ -1189,7 +1182,21 @@ Nên bổ sung:
   \item \small Contract tests giữa services
 \end{itemize}
 \end{alertblock}
-\vspace{0.2cm}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Versioning \& Rollback Strategy (Req 15) --- Part 2}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{Rollback}
+\begin{itemize}
+  \item K8s giữ revision history của Deployment
+  \item \texttt{kubectl rollout undo deployment/auth-service -n zalord-dev} $\rightarrow$ về image SHA của commit trước
+  \item \texttt{kubectl rollout status} trong pipeline $\rightarrow$ fail fast (180s) nếu pods không healthy
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
 \centering
 \textit{Docker Hub repository}\\
@@ -1205,9 +1212,9 @@ Nên bổ sung:
 \section{Resiliency Scenarios}
 % ============================================================
 
-\begin{frame}{Scenario 1: Circuit Breaker Activation (Req 16)}
+\begin{frame}{Scenario 1: Circuit Breaker Activation (Req 16) --- Scenario}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Scenario: media-service xuống $\rightarrow$ CB open}
 \begin{enumerate}
   \item Kill media-service pod:\\
@@ -1220,17 +1227,7 @@ Nên bổ sung:
 \end{enumerate}
 \end{block}
 
-\column{0.5\textwidth}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình/log]}
-\centering
-\textit{Logs của message-service:}\\
-\textit{--- CB state: CLOSED $\rightarrow$ OPEN}\\
-\textit{--- Fallback called}\\
-\textit{--- CB state: OPEN $\rightarrow$ HALF-OPEN}\\
-\textit{--- CB state: HALF-OPEN $\rightarrow$ CLOSED}\\[0.3cm]
-\textit{Hoặc Grafana metric panel cho}\\
-\textit{Resilience4j state transitions}
-\end{alertblock}
+\column{0.48\textwidth}
 \begin{block}{Kết quả kỳ vọng}
 \begin{itemize}
   \item Hệ thống không crash khi media-service lỗi
@@ -1241,9 +1238,22 @@ Nên bổ sung:
 \end{columns}
 \end{frame}
 
+\begin{frame}{Scenario 1: Circuit Breaker Activation (Req 16) --- Logs}
+\begin{alertblock}{[PLACEHOLDER --- chụp hình/log]}
+\centering
+\textit{Logs của message-service:}\\
+\textit{--- CB state: CLOSED $\rightarrow$ OPEN}\\
+\textit{--- Fallback called}\\
+\textit{--- CB state: OPEN $\rightarrow$ HALF-OPEN}\\
+\textit{--- CB state: HALF-OPEN $\rightarrow$ CLOSED}\\[0.3cm]
+\textit{Hoặc Grafana metric panel cho}\\
+\textit{Resilience4j state transitions}
+\end{alertblock}
+\end{frame}
+
 \begin{frame}{Scenario 2: Pod Crash \& Self-Healing (Req 16)}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Scenario: chat-service pod crash}
 \begin{enumerate}
   \item Client A và B đang chat real-time
@@ -1254,7 +1264,7 @@ Nên bổ sung:
 \end{enumerate}
 \end{block}
 
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
 \centering
 \texttt{kubectl get pods -n zalord-dev}\\[0.2cm]
@@ -1271,7 +1281,7 @@ Nên bổ sung:
 
 \begin{frame}{Scenario 3: Outbox resiliency (Req 16)}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Scenario 3: Outbox resiliency}
 \begin{enumerate}
   \item Tắt RabbitMQ tạm thời
@@ -1282,7 +1292,7 @@ Nên bổ sung:
 \end{enumerate}
 \end{block}
 
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{alertblock}{[PLACEHOLDER]}
 \centering
 \textit{Grafana: HTTP request rate}\\
@@ -1296,40 +1306,51 @@ Nên bổ sung:
 \section{Kết luận}
 % ============================================================
 
-\begin{frame}{Tổng kết}
+\begin{frame}{Tổng kết (1/2) --- Đã triển khai}
 \begin{columns}[T]
-\column{0.5\textwidth}
-\begin{block}{Đã triển khai}
+\column{0.48\textwidth}
+\begin{block}{Kiến trúc \& Backend}
 \begin{itemize}
   \item[\checkmark] DB-per-service (6 PostgreSQL + Redis + MinIO)
   \item[\checkmark] Transactional Outbox (auth, message services)
   \item[\checkmark] CQRS (message-service InboxProjector)
   \item[\checkmark] Event-driven (RabbitMQ/Kafka switchable)
   \item[\checkmark] gRPC sync + Circuit Breaker (Resilience4j)
-  \item[\checkmark] Kong API Gateway (JWT, rate-limit, CORS, Lua)
   \item[\checkmark] JWT HS256 auth (không cần OAuth2/Keycloak)
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{block}{Hạ tầng \& Vận hành}
+\begin{itemize}
+  \item[\checkmark] Kong API Gateway (JWT, rate-limit, CORS, Lua)
   \item[\checkmark] ConfigMap + SOPS-encrypted Secrets
   \item[\checkmark] Multi-stage Dockerfile, Docker Compose
   \item[\checkmark] Kubernetes (k3s, Kustomize)
-  \item[\checkmark] CI/CD GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ GKE (prod) / k3s (dev)
+  \item[\checkmark] CI/CD GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ GKE / k3s
   \item[\checkmark] Prometheus + Grafana monitoring
   \item[\checkmark] Swagger/OpenAPI aggregation
 \end{itemize}
 \end{block}
+\end{columns}
+\end{frame}
 
-\column{0.5\textwidth}
+\begin{frame}{Tổng kết (2/2) --- Hạn chế \& Tương lai}
+\begin{columns}[T]
+\column{0.48\textwidth}
 \begin{alertblock}{Chưa triển khai / Không phù hợp}
 \begin{itemize}
   \item \textcolor{orange}{OpenTelemetry} distributed tracing (chưa implement)
   \item \textcolor{orange}{Automated testing} trong CI (chưa implement)
-  \item \textcolor{gray}{ELK Stack} --- resource constraint; stdout logging đủ cho scope này
-  \item \textcolor{gray}{Saga Pattern} --- không có distributed transaction đủ phức tạp
-  \item \textcolor{gray}{OAuth2/Keycloak} --- không phù hợp: closed first-party system
-
+  \item \textcolor{gray}{ELK Stack} --- resource constraint; stdout logging đủ
+  \item \textcolor{gray}{Saga Pattern} --- không có distributed transaction phức tạp
+  \item \textcolor{gray}{OAuth2/Keycloak} --- không phù hợp: closed system
 \end{itemize}
 \end{alertblock}
+
+\column{0.48\textwidth}
 \begin{block}{Xem chi tiết}
-\texttt{EXPLANATION.md} --- giải thích kỹ lý do các requirement không áp dụng
+\texttt{EXPLANATION.md} --- giải thích kỹ lý do các requirement không áp dụng hoặc có thay đổi so với yêu cầu ban đầu.
 \end{block}
 \end{columns}
 \end{frame}
