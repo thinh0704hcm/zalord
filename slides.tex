@@ -362,25 +362,27 @@ Không có cross-service synchronous chain dài hơn 2 hops
 
 \begin{frame}{Sync vs Async --- Khi nào dùng gì? (Req 4)}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Synchronous --- gRPC (2 trường hợp)}
+\footnotesize
 \begin{itemize}
   \item \textbf{auth $\rightarrow$ user-service} (\texttt{CreateProfile}):
     \begin{itemize}
-      \item \small Cần response ngay để rollback nếu profile creation fail
-      \item \small Deadline 5 giây, circuit breaker Resilience4j
+      \item Cần response ngay để rollback nếu profile creation fail
+      \item Deadline 5 giây, circuit breaker Resilience4j
     \end{itemize}
   \item \textbf{message $\rightarrow$ media-service} (\texttt{ValidateAttachments}):
     \begin{itemize}
-      \item \small Validate media IDs trước khi persist message
-      \item \small Deadline 3 giây (hot path user-facing)
+      \item Validate media IDs trước khi persist message
+      \item Deadline 3 giây (hot path user-facing)
     \end{itemize}
   \item Dùng gRPC vì: type-safe contract (Protobuf), binary encoding nhanh hơn REST, không qua Kong (internal network)
 \end{itemize}
 \end{block}
 
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Asynchronous --- Event Bus (Kafka / RabbitMQ)}
+\footnotesize
 \begin{itemize}
   \item \textbf{message.created} $\rightarrow$ chat-service (WebSocket fan-out), notification-service, InboxProjector
   \item \textbf{group.*} (created/member-added/removed/updated) $\rightarrow$ message-service (project Conversation)
