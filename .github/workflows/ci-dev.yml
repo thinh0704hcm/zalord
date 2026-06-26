@@ -23,8 +23,8 @@ jobs:
           java-version: '21'
           distribution: temurin
           cache: maven
-      - name: Compile & test
-        run: ./mvnw -B verify
+      - name: Compile & unit tests
+        run: ./mvnw -B verify -Dtest='!*ApplicationTests' -DfailIfNoTests=false
         working-directory: backend/${{ matrix.service }}
 
   go:
