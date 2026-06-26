@@ -575,20 +575,20 @@ Message persist là local transaction (ghi vào 1 DB của message-service). Dis
   arr/.style={->, >=Stealth, thin},
   scale=0.85
 ]
-\node[box, fill=blue!20] (cmd)   at (-1.5, 2.5) {Command\\POST /messages};
-\node[box, fill=blue!20] (qry)   at (2,    2.5) {Query\\GET /inbox};
+\node[box, fill=blue!20] (cmd)   at (-2, 3.5) {Command\\POST /messages};
+\node[box, fill=blue!20] (qry)   at (2.5, 3.5) {Query\\GET /inbox};
 
-\node[box, fill=orange!20] (write) at (-1.5, 1.5) {Write Model\\messages table\\conversations table};
-\node[box, fill=green!20]  (read)  at (2,    1.5) {Read Model\\conversation\_views\\(unread, last msg)};
+\node[box, fill=orange!20] (write) at (-2, 1.8) {Write Model\\messages table\\conversations table};
+\node[box, fill=green!20]  (read)  at (2.5, 1.8) {Read Model\\conversation\_views\\(unread, last msg)};
 
-\node[box, fill=yellow!25] (proj)  at (0.25, 0.4) {InboxProjector\\subscribes: message.created\\message.recalled};
+\node[box, fill=yellow!25] (proj)  at (0.25, -0.2) {InboxProjector\\subscribes: message.created\\message.recalled};
 
 \draw[arr] (cmd)   -- (write);
-\draw[arr] (write.south) -- +(0,-0.3) -| (proj.north);
-\draw[arr] (proj.north)  -- +(0,0.3)  -| (read.south);
+\draw[arr] (write.south) -- +(0,-0.4) -| ([xshift=-0.8cm]proj.north);
+\draw[arr] ([xshift=0.8cm]proj.north)  -- +(0,0.4)  -| (read.south);
 \draw[arr] (qry)   -- (read);
 
-\node[font=\tiny, gray] at (0.25, -0.3) {projection có độ trễ nhỏ (eventual consistency)};
+\node[font=\tiny, gray] at (0.25, -1.2) {projection có độ trễ nhỏ (eventual consistency)};
 \end{tikzpicture}
 \end{center}
 \end{block}
