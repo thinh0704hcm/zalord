@@ -1,0 +1,46 @@
+name: CI — Dev
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+concurrency:
+  group: ci-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth-service, message-service, group-service, media-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Compile & test
+        run: ./mvnw -B verify
+        working-directory: backend/${{ matrix.service }}
+
+  go:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [user-service, chat-service, notification-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: backend/${{ matrix.service }}/go.sum
+      - name: Build
+        run: go build ./...
+        working-directory: backend/${{ matrix.service }}
+      - name: Test
+        run: go test ./... -count=1 -timeout 60s
+        working-directory: backend/${{ matrix.service }}
