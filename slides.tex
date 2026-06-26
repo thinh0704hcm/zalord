@@ -132,7 +132,7 @@ message $\rightarrow$ media (ValidateAttachments :9086)
   async/.style={->, >=Stealth, thin, dashed, purple!60}
 ]
 % Client
-\node[cli] (client) at (-2.2, 2.3) {Browser\\Mobile};
+\node[cli] (client) at (-3.0, 2.3) {Client};
 % Kong
 \node[gw] (kong) at (-0.1, 2.3) {Kong\\API GW\\:8080};
 % Services (y: 4.5 down to 0.3, step 0.7)
@@ -163,19 +163,23 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \draw[arr] (grp)  -- (gdb); \draw[arr] (med)  -- (meddb);
 \draw[arr] (notif)-- (ndb);
 % gRPC
-\draw[grpc] (auth.west) -- +(-0.45,0) |- (user.west)
-  node[near end, left, font=\tiny] {gRPC};
-\draw[grpc] (msg.west)  -- +(-0.45,0) |- (med.west)
-  node[near end, left, font=\tiny] {gRPC};
+\draw[grpc] ([yshift=-0.1cm]auth.west) -- +(-0.5,0) |- ([yshift=0.1cm]user.west)
+  node[pos=0.25, left, font=\tiny] {gRPC};
+\draw[grpc] ([yshift=-0.1cm]msg.west)  -- +(-0.5,0) |- ([yshift=0.1cm]med.west)
+  node[pos=0.25, left, font=\tiny] {gRPC};
 % Async
-\draw[async] (msg.south)  -- +(0,-0.2) -| (mq.north);
-\draw[async] (grp.south)  -- +(0,-0.2) -| (mq.north);
-\draw[async] (mq.north) -| (chat.south);
-\draw[async] (mq.north) -| (notif.south);
+% Publisher msg
+\draw[async, rounded corners=2pt] (msg.south) -- (3.0, 2.75) -- (4.8, 2.75) -- (4.8, -0.14);
+% Publisher grp
+\draw[async, rounded corners=2pt] (grp.south) -- (3.0, 1.35) -- (4.6, 1.35) -- (4.6, -0.14);
+% Subscriber chat
+\draw[async, rounded corners=2pt] (4.4, -0.14) -- (4.4, 2.05) -- (3.0, 2.05) -- (chat.south);
+% Subscriber notif
+\draw[async, rounded corners=2pt] (4.2, -0.14) -- (4.2, -0.05) -- (3.0, -0.05) -- (notif.south);
 % Legend
-\draw[arr]   (1.5,-0.8) -- +(0.5,0) node[right, font=\tiny] {REST/WS};
-\draw[grpc]  (2.9,-0.8) -- +(0.5,0) node[right, font=\tiny] {gRPC};
-\draw[async] (4.2,-0.8) -- +(0.5,0) node[right, font=\tiny] {async};
+\draw[arr]   (0.5,-0.8) -- +(0.5,0) node[right, font=\tiny] {REST/WS};
+\draw[grpc]  (2.5,-0.8) -- +(0.5,0) node[right, font=\tiny] {gRPC};
+\draw[async] (4.5,-0.8) -- +(0.5,0) node[right, font=\tiny] {async};
 \end{tikzpicture}
 \end{center}
 \end{frame}
@@ -186,7 +190,7 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 
 \begin{frame}{Tại sao không dùng Modulithic? (Req 1)}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Lý do chọn Microservices}
 \begin{itemize}
   \item \textbf{Polyglot language}: chat-service dùng Go (goroutines) cho WebSocket fan-out hiệu năng cao; business logic dùng Java Spring Boot
@@ -196,7 +200,7 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \end{itemize}
 \end{block}
 
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Nếu là Modulithic\ldots}
 \begin{itemize}
   \item Không thể mix Go + Java trong 1 process
@@ -205,9 +209,7 @@ message $\rightarrow$ media (ValidateAttachments :9086)
   \item 1 memory leak / goroutine leak làm sập tất cả
 \end{itemize}
 \end{block}
-\begin{alertblock}{Lưu ý trung thực}
-Ở quy mô student project, modulithic vẫn hoạt động tốt. Microservices là lựa chọn \textbf{học thuật + kỹ năng}, phù hợp với mục tiêu môn học.
-\end{alertblock}
+
 \end{columns}
 \end{frame}
 
@@ -327,8 +329,6 @@ notification-service & Notification & Notification \\
 % ============================================================
 
 \begin{frame}{Single Responsibility Principle (Req 3)}
-\begin{columns}[T]
-\column{0.5\textwidth}
 \begin{block}{SRP --- Mỗi service 1 trách nhiệm rõ ràng}
 \begin{itemize}
   \item \textbf{chat-service}: CHỈ quản lý WebSocket connections + fan-out messages $\rightarrow$ không write business DB, không có business logic
@@ -340,8 +340,9 @@ notification-service & Notification & Notification \\
 \begin{alertblock}{Điểm tranh luận}
 message-service đảm nhận 2 vai trò: (1) write model cho messages, (2) project inbox read-model (CQRS). Có thể tách thành inbox-service nếu scale lên.
 \end{alertblock}
+\end{frame}
 
-\column{0.5\textwidth}
+\begin{frame}{High Cohesion \& Low Coupling (Req 3)}
 \begin{block}{High Cohesion --- Low Coupling}
 \begin{itemize}
   \item \textbf{High Cohesion}: dữ liệu và logic cùng domain nằm trong 1 service, không scatter
@@ -358,7 +359,6 @@ message-service đảm nhận 2 vai trò: (1) write model cho messages, (2) proj
 Request $\rightarrow$ Kong (validate) $\rightarrow$ Service $\rightarrow$ DB / Event Bus\\
 Không có cross-service synchronous chain dài hơn 2 hops
 \end{block}
-\end{columns}
 \end{frame}
 
 % ============================================================
@@ -437,8 +437,6 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{frame}
 
 \begin{frame}{Thiết kế Endpoint \& Swagger (Req 5)}
-\begin{columns}[T]
-\column{0.5\textwidth}
 \begin{block}{REST API --- Naming Convention}
 \begin{itemize}
   \item Base path: \texttt{/api/v1/\{resource\}} (plural noun)
@@ -457,8 +455,9 @@ Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
 \texttt{\{"type":..., "status":400,}\\
 \texttt{ "detail":"...", "title":"..."\}}
 \end{block}
+\end{frame}
 
-\column{0.5\textwidth}
+\begin{frame}{Swagger / OpenAPI Aggregation (Req 5)}
 \begin{block}{Swagger / OpenAPI Aggregation}
 \begin{itemize}
   \item Java services: \textbf{springdoc-openapi} $\rightarrow$ \texttt{/v3/api-docs}
@@ -473,16 +472,13 @@ Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
 \textit{http://localhost:8080/docs}\\
 \textit{hiển thị API docs từ tất cả 7 services}
 \end{alertblock}
-\end{columns}
 \end{frame}
 
 % ============================================================
 \section{Thiết kế \& Quản lý cơ sở dữ liệu}
 % ============================================================
 
-\begin{frame}{DB per Service --- Consistency \& CAP (Req 6)}
-\begin{columns}[T]
-\column{0.5\textwidth}
+\begin{frame}{DB per Service \& Consistency (Req 6)}
 \begin{block}{DB per Service}
 \begin{itemize}
   \item 6 PostgreSQL instances độc lập + Redis + MinIO
@@ -495,15 +491,6 @@ Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
     \end{itemize}
 \end{itemize}
 \end{block}
-\begin{block}{CAP Theorem}
-\begin{itemize}
-  \item PostgreSQL: \textbf{CP} (Consistency + Partition Tolerance)
-  \item Chấp nhận availability giảm khi partition
-  \item Redis: \textbf{AP} --- eventual consistency cho presence data
-\end{itemize}
-\end{block}
-
-\column{0.5\textwidth}
 \begin{block}{Consistency cần thiết ở đâu?}
 \begin{itemize}
   \item \textbf{Strong}: auth (login/register), message persist (không mất tin nhắn)
@@ -511,10 +498,19 @@ Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
   \item \textbf{Saga}: \textcolor{red}{KHÔNG áp dụng} --- chỉ có 2-step registration (gRPC + circuit breaker đủ)
 \end{itemize}
 \end{block}
+\end{frame}
+
+\begin{frame}{CAP Theorem \& Saga Pattern (Req 6)}
+\begin{block}{CAP Theorem}
+\begin{itemize}
+  \item PostgreSQL: \textbf{CP} (Consistency + Partition Tolerance)
+  \item Chấp nhận availability giảm khi partition
+  \item Redis: \textbf{AP} --- eventual consistency cho presence data
+\end{itemize}
+\end{block}
 \begin{alertblock}{Không có Saga Pattern}
 Lý do: không tồn tại distributed transaction nào đủ phức tạp. Flow dài nhất là 2 bước (auth $\rightarrow$ user). Xem \texttt{EXPLANATION.md}.
 \end{alertblock}
-\end{columns}
 \end{frame}
 
 \begin{frame}{Transactional Outbox Pattern (Req 7)}
@@ -565,9 +561,7 @@ Lý do: không tồn tại distributed transaction nào đủ phức tạp. Flow
 \end{center}
 \end{frame}
 
-\begin{frame}{CQRS \& Polyglot Persistence (Req 7)}
-\begin{columns}[T]
-\column{0.55\textwidth}
+\begin{frame}{CQRS trong message-service (Req 7)}
 \begin{block}{CQRS trong message-service}
 \begin{center}
 \begin{tikzpicture}[
@@ -593,10 +587,11 @@ Lý do: không tồn tại distributed transaction nào đủ phức tạp. Flow
 \end{tikzpicture}
 \end{center}
 \end{block}
+\end{frame}
 
-\column{0.43\textwidth}
+\begin{frame}{Polyglot Persistence (Req 7)}
 \begin{block}{Polyglot Persistence}
-{\tiny
+{\small
 \begin{tabular}{|l|l|}
 \hline
 \textbf{Store} & \textbf{Dùng cho} \\
@@ -614,7 +609,6 @@ ScyllaDB & Schema có, chưa wire \\
 \textit{Redis + MinIO đang chạy}\\
 \textit{trong Docker Compose}
 \end{alertblock}
-\end{columns}
 \end{frame}
 
 % ============================================================
@@ -666,6 +660,10 @@ EXPOSE 8084
 CMD ["./server"]
 \end{lstlisting}
 \end{block}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Docker Compose (Req 8)}
 \begin{block}{Docker Compose}
 \begin{itemize}
   \item 20+ containers, 1 network \texttt{zalord-net}
@@ -673,7 +671,6 @@ CMD ["./server"]
   \item Env vars từ \texttt{.env} file, không hardcode
 \end{itemize}
 \end{block}
-\end{columns}
 \end{frame}
 
 \begin{frame}{Kubernetes / k3s (Req 8)}
@@ -917,9 +914,7 @@ Kong KHÔNG dùng \texttt{networking.k8s.io/v1 Ingress} resource.
 \end{center}
 \end{frame}
 
-\begin{frame}{ConfigMap \& Secret trong Kubernetes (Req 12)}
-\begin{columns}[T]
-\column{0.5\textwidth}
+\begin{frame}{ConfigMap --- Non-sensitive config (Req 12)}
 \begin{block}{ConfigMap --- Non-sensitive config}
 \begin{itemize}
   \item \textbf{Shared}: \texttt{shared-config.yaml}
@@ -940,8 +935,9 @@ Kong KHÔNG dùng \texttt{networking.k8s.io/v1 Ingress} resource.
   \item Khác nhau giữa environments (dev/staging/prod) qua Kustomize overlays
 \end{itemize}
 \end{block}
+\end{frame}
 
-\column{0.5\textwidth}
+\begin{frame}{Secret --- Sensitive data (Req 12)}
 \begin{block}{Secret --- Sensitive data (SOPS encrypted)}
 \begin{itemize}
   \item \textbf{Shared}: DB passwords, JWT\_SECRET, MQ credentials
@@ -955,7 +951,6 @@ Kong KHÔNG dùng \texttt{networking.k8s.io/v1 Ingress} resource.
 \begin{block}{Kong JWT Secret}
 \texttt{kong.yml} chứa \texttt{\_\_JWT\_SECRET\_\_} placeholder. Container entrypoint dùng \texttt{sed} substitute từ K8s Secret env var. Secret không bao giờ nằm trong file config.
 \end{block}
-\end{columns}
 \end{frame}
 
 % ============================================================
@@ -1015,23 +1010,7 @@ Pre-provisioned: \texttt{zalord-overview.json} --- Datasource: Prometheus, anony
 \end{columns}
 \end{frame}
 
-\begin{frame}{ELK \& OpenTelemetry --- Chưa triển khai (Req 13)}
-\begin{columns}[T]
-\column{0.5\textwidth}
-\begin{alertblock}{ELK Stack --- Không triển khai}
-\begin{itemize}
-  \item ELK (Elasticsearch + Logstash + Kibana) cần $\sim$3--5 GB RAM riêng --- không khả thi trên VPS hiện tại
-  \item \textbf{Hiện tại}: structured logging ra stdout
-    \begin{itemize}
-      \item \small Go: \texttt{go.uber.org/zap} (JSON format)
-      \item \small Java: SLF4J + Logback (JSON appender)
-    \end{itemize}
-  \item \textbf{12-factor principle}: log là event stream, không phải file
-  \item \textbf{Nếu scale lên}: Grafana Loki ($\sim$200 MB) là alternative nhẹ hơn, tích hợp native với Grafana
-\end{itemize}
-\end{alertblock}
-
-\column{0.5\textwidth}
+\begin{frame}{OpenTelemetry \& Monitoring --- Chưa triển khai (Req 13)}
 \begin{alertblock}{OpenTelemetry --- Chưa triển khai}
 \textbf{[PLACEHOLDER]}\\[0.2cm]
 OpenTelemetry distributed tracing sẽ cho phép:
@@ -1049,12 +1028,9 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \end{itemize}
 {\centering\tiny\textit{[PLACEHOLDER: chụp Lens/k9s với zalord-dev namespace]}\\}
 \end{block}
-\end{columns}
 \end{frame}
 
-\begin{frame}{Timeout, Circuit Breaker \& Recovery (Req 14)}
-\begin{columns}[T]
-\column{0.5\textwidth}
+\begin{frame}{Circuit Breaker Diagram (Req 14)}
 \begin{center}
 \begin{tikzpicture}[
   state/.style={rectangle, draw, rounded corners=4pt, font=\small\bfseries,
@@ -1078,8 +1054,9 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \node[font=\tiny, gray] at (0, -0.8) {Resilience4j 2.2.0};
 \end{tikzpicture}
 \end{center}
+\end{frame}
 
-\column{0.5\textwidth}
+\begin{frame}{Timeout, Circuit Breaker \& Recovery (Req 14)}
 \begin{block}{Implementation}
 \begin{itemize}
   \item \textbf{auth-service} $\rightarrow$ user-service gRPC:
@@ -1103,7 +1080,6 @@ OpenTelemetry distributed tracing sẽ cho phép:
   \item Frontend WebSocket: exponential backoff reconnect (cap 15s)
 \end{itemize}
 \end{block}
-\end{columns}
 \end{frame}
 
 % ============================================================
@@ -1279,15 +1255,6 @@ Nên bổ sung:
   \item Pod mới Ready $\rightarrow$ clients reconnect thành công
 \end{enumerate}
 \end{block}
-\begin{block}{Scenario 3: Outbox resiliency}
-\begin{enumerate}
-  \item Tắt RabbitMQ tạm thời
-  \item Gửi messages $\rightarrow$ lưu vào \texttt{outbox\_events} table (atomic với message)
-  \item Bật lại RabbitMQ
-  \item \textbf{OutboxScheduler} (poll 3s) phát hiện unpublished events $\rightarrow$ publish
-  \item Không mất message nào
-\end{enumerate}
-\end{block}
 
 \column{0.5\textwidth}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
@@ -1301,6 +1268,23 @@ Nên bổ sung:
 \textit{--- Reconnecting in 2s...}\\
 \textit{--- WS connected}
 \end{alertblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Scenario 3: Outbox resiliency (Req 16)}
+\begin{columns}[T]
+\column{0.5\textwidth}
+\begin{block}{Scenario 3: Outbox resiliency}
+\begin{enumerate}
+  \item Tắt RabbitMQ tạm thời
+  \item Gửi messages $\rightarrow$ lưu vào \texttt{outbox\_events} table (atomic với message)
+  \item Bật lại RabbitMQ
+  \item \textbf{OutboxScheduler} (poll 3s) phát hiện unpublished events $\rightarrow$ publish
+  \item Không mất message nào
+\end{enumerate}
+\end{block}
+
+\column{0.5\textwidth}
 \begin{alertblock}{[PLACEHOLDER]}
 \centering
 \textit{Grafana: HTTP request rate}\\
