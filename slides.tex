@@ -438,6 +438,8 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{frame}
 
 \begin{frame}{Thiết kế Endpoint \& Swagger (Req 5)}
+\begin{columns}[T]
+\column{0.65\textwidth}
 \begin{block}{REST API --- Naming Convention}
 \begin{itemize}
   \item Base path: \texttt{/api/v1/\{resource\}} (plural noun)
@@ -451,11 +453,14 @@ Không có cross-service synchronous chain dài hơn 2 hops
   \item WebSocket: \texttt{/ws/chat?token=\{jwt\}}
 \end{itemize}
 \end{block}
+
+\column{0.32\textwidth}
 \begin{block}{Error Response}
-Spring Boot 3 RFC 7807 \textbf{ProblemDetail}:\\
+Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \texttt{\{"type":..., "status":400,}\\
 \texttt{ "detail":"...", "title":"..."\}}
 \end{block}
+\end{columns}
 \end{frame}
 
 \begin{frame}{Swagger / OpenAPI Aggregation (Req 5)}
