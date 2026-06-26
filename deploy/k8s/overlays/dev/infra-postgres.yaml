@@ -34,6 +34,8 @@ spec:
           env:
             - name: POSTGRES_DB
               value: auth-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -118,6 +120,8 @@ spec:
           env:
             - name: POSTGRES_DB
               value: user-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -202,6 +206,8 @@ spec:
           env:
             - name: POSTGRES_DB
               value: message-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -286,6 +292,8 @@ spec:
           env:
             - name: POSTGRES_DB
               value: group-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -370,6 +378,8 @@ spec:
           env:
             - name: POSTGRES_DB
               value: media-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -454,6 +464,8 @@ spec:
           env:
             - name: POSTGRES_DB
               value: notification-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
