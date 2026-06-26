@@ -65,6 +65,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
               || [ "$before" = "0000000000000000000000000000000000000000" ]; then
             echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
+            echo "restart_all=false" >> "$GITHUB_OUTPUT"
           else
             services=""
             for svc in $SERVICE_IMAGES; do
@@ -74,6 +75,12 @@ jobs:
             done
             # Trim; leave empty if no service code changed (config-only push).
             echo "services=$(echo "$services" | xargs)" >> "$GITHUB_OUTPUT"
+            if git diff --name-only "$before" "${{ github.sha }}" \
+                | grep -q "^deploy/k8s/overlays/dev/.*\\(config\\|secret\\)"; then
+              echo "restart_all=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "restart_all=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       # ── Image build (skipped for config-only pushes) ────────────────────────
@@ -141,7 +148,8 @@ jobs:
           done
 
           if [ -n "${{ steps.filter.outputs.services }}" ]; then
-            for f in deploy/k8s/overlays/dev/*-workload.yaml; do
+            for svc in ${{ steps.filter.outputs.services }}; do
+              f="deploy/k8s/overlays/dev/$svc-workload.yaml"
               envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' \
                 < "$f" > "/tmp/zalord-k8s-dev/$(basename "$f")"
             done
@@ -178,7 +186,7 @@ jobs:
             < /tmp/zalord-k8s-dev.yaml
 
           services="${{ steps.filter.outputs.services }}"
-          if [ -z "$services" ]; then
+          if [ -z "$services" ] && [ "${{ steps.filter.outputs.restart_all }}" = "true" ]; then
             ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
               "bash -lc '
                 export KUBECONFIG=~/.kube/zalord-dev-deployer.config
@@ -193,7 +201,13 @@ jobs:
           ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
             set -euo pipefail
             export KUBECONFIG=~/.kube/zalord-dev-deployer.config
-            if kubectl get deploy -n zalord-dev -o name | grep -q .; then
+            services="${{ steps.filter.outputs.services }}"
+            if [ -n "$services" ]; then
+              for service in \$services; do
+                kubectl rollout status -n zalord-dev \"deployment/\$service\" --timeout=180s
+              done
+            elif [ "${{ steps.filter.outputs.restart_all }}" = "true" ] \
+                && kubectl get deploy -n zalord-dev -o name | grep -q .; then
               for deploy in \$(kubectl get deploy -n zalord-dev -o name); do
                 kubectl rollout status -n zalord-dev \"\$deploy\" --timeout=180s
               done
