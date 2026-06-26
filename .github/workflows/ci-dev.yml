@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           cache: maven
       - name: Compile & unit tests
-        run: ./mvnw -B verify -Dtest='!*ApplicationTests' -DfailIfNoTests=false
+        run: ./mvnw -B verify -Dtest='!*ApplicationTests' -Dsurefire.failIfNoSpecifiedTests=false
         working-directory: backend/${{ matrix.service }}
 
   go:
