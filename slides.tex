@@ -1,0 +1,281 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{listings}
+\usetikzlibrary{arrows.meta, positioning}
+
+\usetheme{Madrid}
+\usecolortheme{whale}
+
+\lstset{
+  basicstyle=\ttfamily\tiny,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!10}
+}
+
+\title{Báo cáo quá trình làm việc nhóm}
+\subtitle{Kỹ năng nghề nghiệp -- SS004.Q27}
+\author{Nhóm 18}
+\institute{Trường Đại học Công nghệ Thông tin -- ĐHQG TP.HCM\\GVHD: Nguyễn Văn Toàn}
+\date{Tháng 5, 2026}
+
+\begin{document}
+
+% ===== TRANG BÌA =====
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{Nội dung trình bày}
+\tableofcontents
+\end{frame}
+
+% ===== PHẦN 1: THÀNH VIÊN =====
+\section{Thành viên nhóm}
+
+\begin{frame}{Thành viên nhóm}
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|l|l|}
+\hline
+\textbf{STT} & \textbf{MSSV} & \textbf{Họ tên} & \textbf{Vai trò} \\
+\hline
+1 & 23521515 & Trần Xuân Thịnh & Trưởng nhóm \\
+\hline
+2 & 25521091 & Đỗ Tuấn Minh & Thư ký \\
+\hline
+3 & 24521531 & Nguyễn Thái Sơn & Timekeeper \\
+\hline
+4 & 23520274 & Trần Thiện Đạt & Thành viên \\
+\hline
+\end{tabular}
+\end{table}
+\end{frame}
+
+% ===== PHẦN 2: PHÂN CÔNG =====
+\section{Phân công công việc}
+
+\begin{frame}{Phân công theo module}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Thành viên} & \textbf{Phụ trách} \\
+\hline
+Trần Xuân Thịnh & Quản lý repo, setup dự án, timer/score, leaderboard persistence \\
+\hline
+Đỗ Tuấn Minh & Game logic, UI/graphics, audio, menu, 2-player mode \\
+\hline
+Nguyễn Thái Sơn & Difficulty scaling (tăng tốc độ rơi khi xóa hàng) \\
+\hline
+Trần Thiện Đạt & Fix bug collision logic, review \& merge Pull Requests \\
+\hline
+\end{tabular}
+\end{table}
+\end{frame}
+
+\begin{frame}{Minh chứng phân công}
+\begin{columns}[T]
+\column{0.5\textwidth}
+\begin{figure}
+\includegraphics[width=\textwidth]{task_delegation_1.png}
+\caption{Phân công công việc (1)}
+\end{figure}
+
+\column{0.5\textwidth}
+\begin{figure}
+\includegraphics[width=\textwidth]{task_delegation_2.png}
+\caption{Phân công công việc (2)}
+\end{figure}
+\end{columns}
+\end{frame}
+
+% ===== PHẦN 3: QUÁ TRÌNH LÀM VIỆC TRÊN GIT =====
+\section{Quá trình làm việc trên Git}
+
+\begin{frame}{Tổng quan Git}
+\begin{columns}[T]
+\column{0.5\textwidth}
+\begin{block}{Số liệu}
+\begin{itemize}
+\item Tổng commits: \textbf{90}
+\item Branches: \textbf{6}
+\item Pull Requests: \textbf{4}
+\item Merge commits: \textbf{19}
+\item Thời gian: 02/05 -- 14/05/2026
+\end{itemize}
+\end{block}
+
+\column{0.5\textwidth}
+\begin{block}{Branching Strategy}
+Mỗi tính năng được phát triển trên branch riêng, sau đó tạo Pull Request để review trước khi merge vào \texttt{main}.
+\end{block}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Đóng góp của từng thành viên}
+\begin{block}{Trần Xuân Thịnh -- Trưởng nhóm}
+\begin{itemize}
+\item Khởi tạo repository, thiết lập codebase ban đầu
+\item Implement timer, score display, next block preview
+\item Persist leaderboard scores ra file
+\item Review \& merge Pull Request \#2 (feature-ui-graphics)
+\end{itemize}
+\end{block}
+
+\begin{block}{Đỗ Tuấn Minh -- Thư ký}
+\begin{itemize}
+\item Phát triển core game: board, collision, rotation, Raylib integration
+\item Toàn bộ UI/graphics: menu, particles, colors, effects
+\item Audio system: nhạc nền, milestone sounds
+\item 2-player mode hoàn chỉnh
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{Đóng góp của từng thành viên (tiếp)}
+\begin{block}{Nguyễn Thái Sơn -- Timekeeper}
+\begin{itemize}
+\item Implement difficulty scaling: tốc độ rơi tăng dần mỗi lần xóa hàng
+\item Đảm bảo tiến độ dự án, theo dõi deadline
+\item Hỗ trợ test gameplay và feedback
+\end{itemize}
+\end{block}
+
+\begin{block}{Trần Thiện Đạt -- Thành viên}
+\begin{itemize}
+\item Fix bug logic: biến width và hàm canMove
+\item Review code \& merge Pull Request \#1 (feature-game-logic)
+\item Merge Pull Request \#4 (fix-logic-and-set2player)
+\item Kiểm thử và phát hiện lỗi collision
+\end{itemize}
+\end{block}
+\end{frame}
+
+% ===== PHẦN 4: MINH CHỨNG COMMITS =====
+\section{Minh chứng commits trên Git}
+
+\begin{frame}[fragile]{Commits -- Trần Xuân Thịnh}
+\begin{lstlisting}
+487e6f7  02/05  first commit
+a8c9ba6  02/05  Initial codebase
+535acc8  12/05  feat: added timer, score and next block to the game.
+9d87f6d  12/05  Merge pull request #2 from feature-ui-graphics
+0191120  13/05  Persist leaderboard scores
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Commits -- Đỗ Tuấn Minh}
+\begin{lstlisting}
+f6dcc07  11/05  Initialize game logic: board array and collision detection
+eb8571d  12/05  Switch to Raylib: support macOS, Linux and Windows
+5e1f0df  12/05  Add fancy line-clearing effects: particles, rainbow glow
+9496728  13/05  Add main menu with Single Player, 2-Players, Leaderboard
+1827e2e  13/05  Add 5-category leaderboard, volume slider, difficulty selector
+7a85b5c  14/05  Add 2-player mode with independent controls
+ce6a6d8  14/05  2-player winner text bigger (70pt) and centered
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Commits -- Nguyễn Thái Sơn \& Trần Thiện Đạt}
+\textbf{Nguyễn Thái Sơn:}
+\begin{lstlisting}
+f623908  14/05  code moi lan removeLine thi toc do roi nhanh hon
+\end{lstlisting}
+
+\vspace{0.5cm}
+\textbf{Trần Thiện Đạt:}
+\begin{lstlisting}
+a8a0e0d  14/05  fix the logic of width variable and fix bool canMove
+f7923dd  14/05  Merge pull request #4 from fix-logic-and-set2player
+38e734e  11/05  Merge pull request #1 from feature-game-logic
+\end{lstlisting}
+\end{frame}
+
+% ===== PHẦN 5: PULL REQUESTS & CONFLICTS =====
+\section{Pull Requests \& Conflicts}
+
+\begin{frame}{Pull Requests -- Code Review}
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|l|l|l|}
+\hline
+\textbf{PR} & \textbf{Nội dung} & \textbf{Tạo bởi} & \textbf{Review/Merge} \\
+\hline
+\#1 & Game logic cơ bản & Đỗ Tuấn Minh & Trần Thiện Đạt \\
+\hline
+\#2 & UI \& Graphics & Đỗ Tuấn Minh & Trần Xuân Thịnh \\
+\hline
+\#4 & Fix logic \& 2-player & Trần Thiện Đạt & Trần Thiện Đạt \\
+\hline
+\end{tabular}
+\end{table}
+
+\vspace{0.3cm}
+$\rightarrow$ Mỗi PR đều được thành viên khác review trước khi merge, đảm bảo chất lượng code.
+\end{frame}
+
+\begin{frame}{Merge Conflicts}
+\begin{block}{Conflict xảy ra}
+Commit \texttt{c043f7a}: \textit{``Merge remote-tracking branch 'origin/feature-ui-graphics' into feature-ui-graphics''}
+
+\vspace{0.2cm}
+\textbf{Nguyên nhân:} Nhiều thành viên cùng push thay đổi lên branch \texttt{feature-ui-graphics}.
+
+\vspace{0.2cm}
+\textbf{Cách giải quyết:} Pull remote changes, resolve conflict thủ công, commit merge.
+\end{block}
+\end{frame}
+
+% ===== PHẦN 6: TIMELINE =====
+\section{Timeline}
+
+\begin{frame}{Timeline phát triển}
+\begin{center}
+\begin{tikzpicture}[
+  event/.style={rectangle, draw, rounded corners, fill=blue!10, text width=5cm, font=\small, align=left},
+  date/.style={font=\small\bfseries, text=blue!70!black}
+]
+  \draw[thick, ->, gray] (0,0) -- (0,-7.5);
+
+  \node[date] at (-1.2, 0) {02/05};
+  \node[event] at (3, 0) {Khởi tạo repo, codebase (Thịnh)};
+
+  \node[date] at (-1.2, -1.5) {11/05};
+  \node[event] at (3, -1.5) {Game logic, collision (Minh); Review PR\#1 (Đạt)};
+
+  \node[date] at (-1.2, -3) {12/05};
+  \node[event] at (3, -3) {Raylib, UI effects, timer/score (Minh, Thịnh)};
+
+  \node[date] at (-1.2, -4.5) {13/05};
+  \node[event] at (3, -4.5) {Menu, audio, leaderboard (Minh, Thịnh)};
+
+  \node[date] at (-1.2, -6) {14/05};
+  \node[event] at (3, -6) {Difficulty scaling (Sơn); Fix bug (Đạt); 2-player (Minh)};
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+% ===== KẾT THÚC =====
+\section{Kết luận}
+
+\begin{frame}{Bài học rút ra}
+\begin{itemize}
+\item \textbf{Git branching} giúp làm việc song song mà không xung đột
+\item \textbf{Pull Request} đảm bảo code được review trước khi merge
+\item \textbf{Phân công rõ ràng} giúp mỗi người tập trung vào phần việc của mình
+\item \textbf{Communication} qua task board giúp theo dõi tiến độ
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\centering
+\Huge\textbf{Cảm ơn thầy và các bạn\\đã lắng nghe!}
+\end{frame}
+
+\end{document}
