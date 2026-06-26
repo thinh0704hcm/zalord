@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: message-service
-          image: ${DOCKER_NAMESPACE}/zalord-message-service:${IMAGE_TAG}
+          image: docker.io/${DOCKER_NAMESPACE}/zalord-message-service:${IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

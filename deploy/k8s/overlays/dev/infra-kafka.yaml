@@ -94,7 +94,7 @@ spec:
     spec:
       containers:
         - name: kafka
-          image: apache/kafka:3.9.0
+          image: docker.io/apache/kafka:3.9.0
           envFrom:
             - configMapRef:
                 name: kafka-config
@@ -143,7 +143,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: kafka-init
-          image: apache/kafka:3.9.0
+          image: docker.io/apache/kafka:3.9.0
           command: ["/bin/bash", "/scripts/create-topics.sh"]
           env:
             - name: KAFKA_BOOTSTRAP

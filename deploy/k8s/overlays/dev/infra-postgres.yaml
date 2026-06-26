@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
@@ -113,7 +113,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
@@ -197,7 +197,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
@@ -281,7 +281,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
@@ -365,7 +365,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
@@ -449,7 +449,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
