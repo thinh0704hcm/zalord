@@ -764,19 +764,21 @@ CMD ["./server"]
 \begin{columns}[T]
 \column{0.45\textwidth}
 \begin{center}
+\vspace{-0.5cm}
 \begin{tikzpicture}[
   plug/.style={rectangle, draw, rounded corners=3pt, font=\small,
-               align=center, minimum width=3.8cm, minimum height=0.65cm},
+               align=center, minimum width=3.8cm, minimum height=0.6cm},
   arr/.style={->, >=Stealth, thick},
-  scale=0.88
+  node distance=0.7cm,
+  scale=0.65, transform shape
 ]
-\node[draw, ellipse, fill=gray!15, font=\small] (cli) at (0, 7.2) {Client Request};
+\node[draw, ellipse, fill=gray!15, font=\small] (cli) {Client Request};
 
-\node[plug, fill=orange!20] (rl)   at (0, 6.2) {rate-limiting plugin\\{\tiny 600/min global, 10/min auth}};
-\node[plug, fill=yellow!20] (cors) at (0, 5.3) {cors plugin\\{\tiny origins: *, credentials: true}};
-\node[plug, fill=red!15]    (jwt)  at (0, 4.4) {jwt plugin\\{\tiny HS256, verify exp, per-route}};
-\node[plug, fill=teal!20]   (lua)  at (0, 3.5) {pre-function (Lua)\\{\tiny strip X-User-Id/Roles (forgery)}\\{\tiny inject from JWT sub/roles claims}};
-\node[plug, fill=blue!15]   (up)   at (0, 2.4) {Upstream Service\\{\tiny nhận X-User-Id, X-User-Roles}};
+\node[plug, fill=orange!20, below=of cli] (rl) {rate-limiting plugin\\{\tiny 600/min global, 10/min auth}};
+\node[plug, fill=yellow!20, below=of rl] (cors) {cors plugin\\{\tiny origins: *, credentials: true}};
+\node[plug, fill=red!15, below=of cors] (jwt) {jwt plugin\\{\tiny HS256, verify exp, per-route}};
+\node[plug, fill=teal!20, below=of jwt] (lua) {pre-function (Lua)\\{\tiny strip X-User-Id/Roles (forgery)}\\{\tiny inject from JWT sub/roles claims}};
+\node[plug, fill=blue!15, below=of lua] (up) {Upstream Service\\{\tiny nhận X-User-Id, X-User-Roles}};
 
 \draw[arr] (cli)  -- (rl);
 \draw[arr] (rl)   -- (cors);
@@ -784,7 +786,7 @@ CMD ["./server"]
 \draw[arr] (jwt)  -- (lua);
 \draw[arr] (lua)  -- (up);
 
-\node[font=\tiny, gray, align=left] at (3, 4.4)
+\node[font=\tiny, gray, align=left, right=0.2cm of jwt]
   {public routes\\bypass jwt};
 
 \end{tikzpicture}
