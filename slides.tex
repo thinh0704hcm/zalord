@@ -24,7 +24,7 @@
 
 \title{Zalord --- Hệ thống Chat Microservices}
 \subtitle{Kiến trúc \& Triển khai}
-\author[]{Nhóm 18}
+\author[]{Nhóm 17}
 \institute[]{Trường Đại học Công nghệ Thông tin --- ĐHQG TP.HCM\\GVHD: TS. Nguyễn Duy Khánh}
 \date[]{Tháng 6, 2026}
 
@@ -679,35 +679,34 @@ CMD ["./server"]
 
 \begin{frame}{Kubernetes / k3s (Req 8)}
 \begin{columns}[T]
-\column{0.52\textwidth}
+\column{0.5\textwidth}
 \begin{block}{Kustomize Overlays}
+\footnotesize
 \begin{itemize}
   \item Path: \texttt{deploy/k8s/overlays/dev/}
   \item Namespace: \texttt{zalord-dev}
-  \item \textbf{Workloads}: 7 Deployments (services) + StatefulSets (Kafka, RabbitMQ, Redis, PostgreSQL$\times$6, MinIO)
-  \item \textbf{Resources}: requests/limits per container (e.g. auth: 100m/384Mi req, 500m/768Mi limit)
-  \item \textbf{Probes}: TCP liveness, HTTP readiness (\texttt{/health})
-  \item \textbf{Secrets}: SOPS + Age encryption (\texttt{*.secret.enc.yaml}) --- decrypted by CI/CD
+  \item \textbf{Workloads}: 7 Deployments (services)
+  \item \textbf{StatefulSets}: Kafka, RabbitMQ, Redis, PgSQL$\times$6, MinIO (kèm Persistent Volumes 1--5Gi)
+  \item \textbf{Resources}: req/limit (e.g. auth: 100m/384Mi req)
+  \item \textbf{Probes}: TCP liveness, HTTP \texttt{/health}
+  \item \textbf{Secrets}: SOPS + Age encryption
 \end{itemize}
 \end{block}
 
-\column{0.46\textwidth}
+\column{0.48\textwidth}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
-\texttt{kubectl get pods -n zalord-dev}\\[0.2cm]
+\centering\footnotesize
+\texttt{kubectl get pods -n zalord-dev}\\[0.1cm]
 \textit{Chụp màn hình tất cả pods}\\
 \textit{ở trạng thái Running}
 \end{alertblock}
 \vspace{0.2cm}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
+\centering\footnotesize
 \textit{Lens / K9s IDE hoặc}\\
 \texttt{kubectl get all -n zalord-dev}\\
 \textit{hiển thị cluster overview}
 \end{alertblock}
-\begin{block}{Infra StatefulSets}
-Kafka 3.9, RabbitMQ 3.13, Redis 7, PostgreSQL 16, MinIO --- persistent volumes 1–5 Gi mỗi cái
-\end{block}
 \end{columns}
 \end{frame}
 
