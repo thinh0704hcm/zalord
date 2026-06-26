@@ -1,0 +1,189 @@
+name: Deploy Production OKE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-production-oke.yml"
+      - ".sops.yaml"
+      - "backend/**"
+      - "deploy/k8s/overlays/dev/**"
+
+concurrency:
+  group: deploy-production-oke
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
+      K8S_NAMESPACE: zalord-dev
+      KUBECONFIG: /home/runner/.kube/oke.config
+      SERVICE_IMAGES: >-
+        auth-service
+        user-service
+        message-service
+        chat-service
+        group-service
+        media-service
+        notification-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate required secrets
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          OKE_KUBECONFIG_B64: ${{ secrets.OKE_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$DOCKER_NAMESPACE"
+          test -n "$DOCKER_PASSWORD"
+          test -n "$SOPS_AGE_KEY"
+          test -n "$OKE_KUBECONFIG_B64"
+
+      - name: Detect changed services
+        id: filter
+        run: |
+          set -euo pipefail
+          before="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
+              || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
+            echo "restart_all=false" >> "$GITHUB_OUTPUT"
+          else
+            services=""
+            for svc in $SERVICE_IMAGES; do
+              if git diff --name-only "$before" "${{ github.sha }}" | grep -q "^backend/$svc/"; then
+                services="$services $svc"
+              fi
+            done
+            echo "services=$(echo "$services" | xargs)" >> "$GITHUB_OUTPUT"
+            if git diff --name-only "$before" "${{ github.sha }}" \
+                | grep -q "^deploy/k8s/overlays/dev/.*\\(config\\|secret\\)"; then
+              echo "restart_all=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "restart_all=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.filter.outputs.services != ''
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: steps.filter.outputs.services != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push immutable images
+        if: steps.filter.outputs.services != ''
+        run: |
+          set -euo pipefail
+          for service in ${{ steps.filter.outputs.services }}; do
+            docker buildx build \
+              --platform linux/amd64 \
+              --push \
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG" \
+              "backend/$service"
+          done
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install deploy tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
+          curl -sL https://github.com/getsops/sops/releases/download/v3.13.1/sops-v3.13.1.linux.amd64 -o /usr/local/bin/sops
+          chmod 755 /usr/local/bin/sops
+
+      - name: Configure SOPS age key
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          mkdir -p ~/.config/sops/age
+          printf '%s\n' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+
+      - name: Configure OKE kubeconfig
+        env:
+          OKE_KUBECONFIG_B64: ${{ secrets.OKE_KUBECONFIG_B64 }}
+        run: |
+          mkdir -p ~/.kube
+          printf '%s' "$OKE_KUBECONFIG_B64" | base64 -d > "$KUBECONFIG"
+          chmod 600 "$KUBECONFIG"
+          kubectl config get-contexts
+          kubectl get namespace "$K8S_NAMESPACE" >/dev/null
+
+      - name: Build deploy bundle
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/zalord-k8s-prod
+
+          cp deploy/k8s/overlays/dev/*-config.yaml /tmp/zalord-k8s-prod/
+          cp deploy/k8s/overlays/dev/infra-*.yaml /tmp/zalord-k8s-prod/
+
+          for secret in deploy/k8s/overlays/dev/*-secret.enc.yaml; do
+            target="/tmp/zalord-k8s-prod/$(basename "${secret%.enc.yaml}.yaml")"
+            sops -d "$secret" > "$target"
+          done
+
+          if [ -n "${{ steps.filter.outputs.services }}" ]; then
+            for svc in ${{ steps.filter.outputs.services }}; do
+              f="deploy/k8s/overlays/dev/$svc-workload.yaml"
+              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' \
+                < "$f" > "/tmp/zalord-k8s-prod/$(basename "$f")"
+            done
+          fi
+
+          for manifest in /tmp/zalord-k8s-prod/*.yaml; do
+            printf '\n---\n'
+            cat "$manifest"
+          done > /tmp/zalord-k8s-prod.yaml
+
+      - name: Apply manifests
+        run: |
+          set -euo pipefail
+          kubectl delete job -n "$K8S_NAMESPACE" kafka-init minio-init --ignore-not-found=true --wait=true
+          kubectl apply -n "$K8S_NAMESPACE" -f /tmp/zalord-k8s-prod.yaml
+
+          services="${{ steps.filter.outputs.services }}"
+          if [ -z "$services" ] && [ "${{ steps.filter.outputs.restart_all }}" = "true" ]; then
+            if kubectl get deploy -n "$K8S_NAMESPACE" -o name | grep -q .; then
+              kubectl rollout restart deployment -n "$K8S_NAMESPACE"
+            fi
+          fi
+
+      - name: Wait for rollout
+        run: |
+          set -euo pipefail
+          services="${{ steps.filter.outputs.services }}"
+          if [ -n "$services" ]; then
+            for service in $services; do
+              kubectl rollout status -n "$K8S_NAMESPACE" "deployment/$service" --timeout=180s
+            done
+          elif [ "${{ steps.filter.outputs.restart_all }}" = "true" ] \
+              && kubectl get deploy -n "$K8S_NAMESPACE" -o name | grep -q .; then
+            for deploy in $(kubectl get deploy -n "$K8S_NAMESPACE" -o name); do
+              kubectl rollout status -n "$K8S_NAMESPACE" "$deploy" --timeout=180s
+            done
+          fi
+          kubectl get pods,svc -n "$K8S_NAMESPACE"
+
+      - name: Cleanup runner artifacts
+        if: always()
+        run: |
+          rm -rf /tmp/zalord-k8s-prod /tmp/zalord-k8s-prod.yaml
+          rm -f ~/.config/sops/age/keys.txt "$KUBECONFIG"

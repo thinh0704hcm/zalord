@@ -1,18 +1,18 @@
-name: Deploy K8s Dev
+name: Deploy Staging VPS
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - staging
     paths:
-      - ".github/workflows/deploy-k8s-dev.yml"
+      - ".github/workflows/deploy-staging-vps.yml"
       - ".sops.yaml"
       - "backend/**"
       - "deploy/k8s/overlays/dev/**"
 
 concurrency:
-  group: deploy-k8s-dev
+  group: deploy-staging-vps
   cancel-in-progress: false
 
 jobs:
@@ -21,6 +21,8 @@ jobs:
     env:
       IMAGE_TAG: ${{ github.sha }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
+      K8S_NAMESPACE: zalord-dev
+      REMOTE_KUBECONFIG: ~/.kube/zalord-dev-deployer.config
       SERVICE_IMAGES: >-
         auth-service
         user-service
@@ -34,7 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Validate required secrets
         env:
@@ -54,9 +56,6 @@ jobs:
           test -n "$VPS_PORT"
           test -n "$VPS_SSH_KEY"
 
-      # Outputs:
-      #   services — space-separated list of changed services, or empty if only
-      #              overlay configs changed (no service code changed).
       - name: Detect changed services
         id: filter
         run: |
@@ -73,7 +72,6 @@ jobs:
                 services="$services $svc"
               fi
             done
-            # Trim; leave empty if no service code changed (config-only push).
             echo "services=$(echo "$services" | xargs)" >> "$GITHUB_OUTPUT"
             if git diff --name-only "$before" "${{ github.sha }}" \
                 | grep -q "^deploy/k8s/overlays/dev/.*\\(config\\|secret\\)"; then
@@ -83,7 +81,6 @@ jobs:
             fi
           fi
 
-      # ── Image build (skipped for config-only pushes) ────────────────────────
       - name: Set up Docker Buildx
         if: steps.filter.outputs.services != ''
         uses: docker/setup-buildx-action@v3
@@ -103,13 +100,15 @@ jobs:
             docker buildx build \
               --platform linux/amd64 \
               --push \
-              -t "$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG" \
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG" \
               "backend/$service"
           done
 
-      # ── Config / secrets prep ───────────────────────────────────────────────
-      - name: Install SOPS
+      - name: Install deploy tools
         run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
           curl -sL https://github.com/getsops/sops/releases/download/v3.13.1/sops-v3.13.1.linux.amd64 -o /usr/local/bin/sops
           chmod 755 /usr/local/bin/sops
 
@@ -130,20 +129,16 @@ jobs:
           chmod 600 ~/.ssh/vietnam-vps
           ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
-      # Builds the flat bundle of YAML to apply:
-      #   - namespace, ConfigMaps, decrypted Secrets — always
-      #   - Deployment + Service workloads with IMAGE_TAG substituted — only
-      #     when services changed, so we never reference an unbuilt image tag
       - name: Build deploy bundle
         run: |
           set -euo pipefail
-          mkdir -p /tmp/zalord-k8s-dev
+          mkdir -p /tmp/zalord-k8s-staging
 
-          cp deploy/k8s/overlays/dev/*-config.yaml    /tmp/zalord-k8s-dev/
-          cp deploy/k8s/overlays/dev/infra-*.yaml     /tmp/zalord-k8s-dev/
+          cp deploy/k8s/overlays/dev/*-config.yaml /tmp/zalord-k8s-staging/
+          cp deploy/k8s/overlays/dev/infra-*.yaml /tmp/zalord-k8s-staging/
 
           for secret in deploy/k8s/overlays/dev/*-secret.enc.yaml; do
-            target="/tmp/zalord-k8s-dev/$(basename "${secret%.enc.yaml}.yaml")"
+            target="/tmp/zalord-k8s-staging/$(basename "${secret%.enc.yaml}.yaml")"
             sops -d "$secret" > "$target"
           done
 
@@ -151,47 +146,35 @@ jobs:
             for svc in ${{ steps.filter.outputs.services }}; do
               f="deploy/k8s/overlays/dev/$svc-workload.yaml"
               envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' \
-                < "$f" > "/tmp/zalord-k8s-dev/$(basename "$f")"
+                < "$f" > "/tmp/zalord-k8s-staging/$(basename "$f")"
             done
           fi
 
-      # Pull images to the VPS containerd cache BEFORE applying Deployments so
-      # pods start immediately with imagePullPolicy: IfNotPresent.
-      - name: Pull proven immutable images
-        if: steps.filter.outputs.services != ''
-        run: |
-          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
-            set -euo pipefail
-            pids=()
-            for service in ${{ steps.filter.outputs.services }}; do
-              sudo -n /usr/local/bin/zalord-k3s-image pull \
-                docker.io/${{ env.DOCKER_NAMESPACE }}/zalord-\$service:${{ env.IMAGE_TAG }} &
-              pids+=(\$!)
-            done
-            for pid in \"\${pids[@]}\"; do wait \"\$pid\"; done
-          '"
+          for manifest in /tmp/zalord-k8s-staging/*.yaml; do
+            printf '\n---\n'
+            cat "$manifest"
+          done > /tmp/zalord-k8s-staging.yaml
 
-      # When services changed: Deployment image tag update triggers rolling update.
-      # When config-only:      no Deployment change, so rollout restart picks up new env.
       - name: Apply manifests
         run: |
           set -euo pipefail
-          for manifest in /tmp/zalord-k8s-dev/*.yaml; do
-            printf '\n---\n'
-            cat "$manifest"
-          done > /tmp/zalord-k8s-dev.yaml
-
           ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "bash -lc 'KUBECONFIG=~/.kube/zalord-dev-deployer.config kubectl apply -n zalord-dev -f -'" \
-            < /tmp/zalord-k8s-dev.yaml
+            "bash -lc '
+              set -euo pipefail
+              export KUBECONFIG=${{ env.REMOTE_KUBECONFIG }}
+              kubectl get namespace ${{ env.K8S_NAMESPACE }} >/dev/null
+              kubectl delete job -n ${{ env.K8S_NAMESPACE }} kafka-init minio-init --ignore-not-found=true --wait=true
+              kubectl apply -n ${{ env.K8S_NAMESPACE }} -f -
+            '" < /tmp/zalord-k8s-staging.yaml
 
           services="${{ steps.filter.outputs.services }}"
           if [ -z "$services" ] && [ "${{ steps.filter.outputs.restart_all }}" = "true" ]; then
             ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
               "bash -lc '
-                export KUBECONFIG=~/.kube/zalord-dev-deployer.config
-                if kubectl get deploy -n zalord-dev -o name | grep -q .; then
-                  kubectl rollout restart deployment -n zalord-dev
+                set -euo pipefail
+                export KUBECONFIG=${{ env.REMOTE_KUBECONFIG }}
+                if kubectl get deploy -n ${{ env.K8S_NAMESPACE }} -o name | grep -q .; then
+                  kubectl rollout restart deployment -n ${{ env.K8S_NAMESPACE }}
                 fi
               '"
           fi
@@ -200,40 +183,23 @@ jobs:
         run: |
           ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
             set -euo pipefail
-            export KUBECONFIG=~/.kube/zalord-dev-deployer.config
+            export KUBECONFIG=${{ env.REMOTE_KUBECONFIG }}
             services="${{ steps.filter.outputs.services }}"
             if [ -n "$services" ]; then
               for service in \$services; do
-                kubectl rollout status -n zalord-dev \"deployment/\$service\" --timeout=180s
+                kubectl rollout status -n ${{ env.K8S_NAMESPACE }} deployment/\$service --timeout=180s
               done
             elif [ "${{ steps.filter.outputs.restart_all }}" = "true" ] \
-                && kubectl get deploy -n zalord-dev -o name | grep -q .; then
-              for deploy in \$(kubectl get deploy -n zalord-dev -o name); do
-                kubectl rollout status -n zalord-dev \"\$deploy\" --timeout=180s
+                && kubectl get deploy -n ${{ env.K8S_NAMESPACE }} -o name | grep -q .; then
+              for deploy in \$(kubectl get deploy -n ${{ env.K8S_NAMESPACE }} -o name); do
+                kubectl rollout status -n ${{ env.K8S_NAMESPACE }} \$deploy --timeout=180s
               done
             fi
-            kubectl get configmaps,secrets -n zalord-dev
+            kubectl get pods,svc -n ${{ env.K8S_NAMESPACE }}
           '"
-
-      # ── Post-deploy image housekeeping (skipped for config-only pushes) ─────
-      - name: Promote latest tags
-        if: steps.filter.outputs.services != ''
-        run: |
-          set -euo pipefail
-          for service in ${{ steps.filter.outputs.services }}; do
-            docker buildx imagetools create \
-              -t "$DOCKER_NAMESPACE/zalord-$service:latest" \
-              "$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG"
-          done
-
-      - name: Prune replaced images
-        if: steps.filter.outputs.services != ''
-        run: |
-          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "bash -lc 'sudo -n /usr/local/bin/zalord-k3s-image prune'"
 
       - name: Cleanup runner artifacts
         if: always()
         run: |
-          rm -rf /tmp/zalord-k8s-dev /tmp/zalord-k8s-dev.yaml
+          rm -rf /tmp/zalord-k8s-staging /tmp/zalord-k8s-staging.yaml
           rm -f ~/.ssh/vietnam-vps ~/.config/sops/age/keys.txt
