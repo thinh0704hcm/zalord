@@ -7,6 +7,15 @@ import type { UserProfile } from '../../services/user';
 import { Avatar } from './Avatar';
 import { MoreHorizontal } from 'lucide-react';
 
+const getStoredUser = () => {
+  try {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : {};
+  } catch {
+    return {};
+  }
+};
+
 interface GroupSidebarProps {
   groupId: string;
 }
@@ -80,7 +89,7 @@ export default function GroupSidebar({ groupId }: GroupSidebarProps) {
           ) : (
              <div className="flex flex-col py-2">
                 {members.map(member => (
-                   <MemberItem key={member.userId} member={member} onRemove={() => handleRemoveMember(member.userId)} />
+                   <MemberItem key={member.userId} member={member} onRemove={() => handleRemoveMember(member.userId)} currentUserRole={members.find(m => m.userId === getStoredUser().id || m.userId === getStoredUser().userId)?.role || 'MEMBER'} />
                 ))}
              </div>
           )}
@@ -89,8 +98,9 @@ export default function GroupSidebar({ groupId }: GroupSidebarProps) {
   );
 }
 
-function MemberItem({ member, onRemove }: { member: MemberWithProfile, onRemove: () => void }) {
+function MemberItem({ member, onRemove, currentUserRole }: { member: MemberWithProfile, onRemove: () => void, currentUserRole: string }) {
    const [showMenu, setShowMenu] = useState(false);
+   const canRemove = (currentUserRole === 'OWNER' || currentUserRole === 'ADMIN') && member.role !== 'OWNER';
 
    return (
       <div className="flex items-center px-4 py-2 hover:bg-gray-50 relative group">
@@ -99,12 +109,12 @@ function MemberItem({ member, onRemove }: { member: MemberWithProfile, onRemove:
             <div className="text-[14px] font-medium text-gray-900 truncate">{member.profile?.displayName || 'Unknown'}</div>
             <div className="text-[12px] text-gray-500">{member.role === 'OWNER' ? 'Trưởng nhóm' : member.role === 'ADMIN' ? 'Phó nhóm' : 'Thành viên'}</div>
          </div>
-         {member.role !== 'OWNER' && (
+         {canRemove && (
             <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
                <MoreHorizontal size={18} />
             </button>
          )}
-         {showMenu && member.role !== 'OWNER' && (
+         {showMenu && canRemove && (
             <>
                <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
                <div className="absolute right-4 top-10 w-40 bg-white rounded-md shadow-[0_2px_10px_rgba(0,0,0,0.1)] border border-gray-100 py-1 z-20">

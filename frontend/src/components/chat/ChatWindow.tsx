@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { UserPlus, Users, ThumbsUp, Quote, X, RotateCcw, Folder, Download } from 'lucide-react';
+import { UserPlus, Users, X, RotateCcw, Folder, Download, Reply } from 'lucide-react';
 import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
 import GroupSidebar from './GroupSidebar';
@@ -164,6 +164,15 @@ function AttachmentItem({ id }: { id: string }) {
           alt={media.fileName || 'Image'} 
           className="max-w-full h-auto object-cover max-h-64" 
           onClick={() => setIsPreviewOpen(true)}
+          onLoad={() => {
+            const container = document.getElementById('chat-scroll-container');
+            if (container) {
+              const { scrollTop, scrollHeight, clientHeight } = container;
+              if (scrollHeight - scrollTop - clientHeight < 1000) {
+                container.scrollTo({ top: scrollHeight, behavior: 'auto' });
+              }
+            }
+          }}
         />
         <button 
           onClick={(e) => {
@@ -225,6 +234,7 @@ function PendingAttachmentItem({ file, onRemove }: { file: File, onRemove: () =>
   useEffect(() => {
     if (isImage) {
       const url = URL.createObjectURL(file);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(url);
       return () => URL.revokeObjectURL(url);
     }
@@ -265,6 +275,7 @@ function MediaSidebar({ conversationId, onClose }: { conversationId: string, onC
 
   useEffect(() => {
     let mounted = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     mediaService.listByConversation(conversationId)
       .then(res => {
@@ -378,13 +389,27 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const userMessagesRef = useRef<UserMessage[]>([]);
   const preservedMessagesRef = useRef<UserMessage[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const oldestMessageCursorRef = useRef<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const previousChatRef = useRef<Chat | undefined>(undefined);
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const isAutoScrollingRef = useRef(false);
+  const lastScrollHeightRef = useRef(0);
+
+  const scrollToBottom = useCallback((smooth = false) => {
+    if (scrollContainerRef.current) {
+      isAutoScrollingRef.current = true;
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+      setTimeout(() => {
+        isAutoScrollingRef.current = false;
+      }, 500);
+    }
+  }, []);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const senderNameCacheRef = useRef<Record<string, string>>({});
@@ -537,7 +562,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           setGroupMemberCount(null);
         }
       });
-  }, [chat?.id, chat?.group, chat?.totalMembers]);
+  }, [chat]);
 
   useEffect(() => {
     if (!chat?.group || !chat.id) {
@@ -602,9 +627,9 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               senderId: m.senderId,
               senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
               isSender,
-              replyTo: m.replyTo,
+              replyTo: isRecalled ? null : m.replyTo,
               isRecalled,
-              attachmentIds: m.attachmentIds
+              attachmentIds: isRecalled ? undefined : m.attachmentIds
             };
           }))).reverse();
 
@@ -626,8 +651,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
           });
           preservedMessagesRef.current = [];
           setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          }, 100);
+            scrollToBottom();
+          }, 50);
         });
       } else {
         queueMicrotask(() => setLastMessageReaders([]));
@@ -665,9 +690,9 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             senderId: m.senderId,
             senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
             isSender,
-            replyTo: m.replyTo,
+            replyTo: isRecalled ? null : m.replyTo,
             isRecalled,
-            attachmentIds: m.attachmentIds
+            attachmentIds: isRecalled ? undefined : m.attachmentIds
           };
         }))).reverse();
 
@@ -704,8 +729,32 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
   useEffect(() => {
     previousChatRef.current = chat;
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chat, currentUserId]);
+    setTimeout(() => {
+      scrollToBottom();
+      if (scrollContainerRef.current) {
+        lastScrollHeightRef.current = scrollContainerRef.current.scrollHeight;
+      }
+    }, 10);
+  }, [chat, currentUserId, scrollToBottom]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(() => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (lastScrollHeightRef.current && (scrollTop + clientHeight >= lastScrollHeightRef.current - 150)) {
+        scrollToBottom();
+      }
+      lastScrollHeightRef.current = scrollHeight;
+    });
+
+    if (container.firstElementChild) {
+      observer.observe(container.firstElementChild);
+    }
+
+    return () => observer.disconnect();
+  }, [scrollToBottom]);
 
   useEffect(() => {
     const unsubscribe = wsService.onMessage(async (msg) => {
@@ -731,6 +780,9 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             attachmentIds: data.attachmentIds
           }];
         });
+        setTimeout(() => {
+          scrollToBottom(true);
+        }, 100);
         void markConversationRead(data.conversationId, data.messageId)
           .then(() => refreshLastMessageReaders(data.conversationId));
       }
@@ -742,7 +794,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       if (isMessageRecalledFrame(msg) && msg.data.conversationId === chat?.id) {
         setUserMessages(prev => prev.map(m => 
           m.id === msg.data.messageId 
-            ? { ...m, text: 'Tin nhắn đã được thu hồi', isRecalled: true, replyTo: null } 
+            ? { ...m, text: 'Tin nhắn đã được thu hồi', isRecalled: true, replyTo: null, attachmentIds: undefined } 
             : m
         ));
       }
@@ -789,7 +841,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
     try {
       await messageService.recall(messageId);
       setUserMessages(prev => prev.map(msg => 
-        msg.id === messageId ? { ...msg, text: 'Tin nhắn đã được thu hồi', isRecalled: true, replyTo: null } : msg
+        msg.id === messageId ? { ...msg, text: 'Tin nhắn đã được thu hồi', isRecalled: true, replyTo: null, attachmentIds: undefined } : msg
       ));
       setRecallingMessageId(null);
     } catch (error) {
@@ -848,6 +900,10 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         replyTo: currentReply ? { messageId: currentReply.id, senderId: currentReply.senderId, preview: currentReply.content } : null,
         attachmentIds: undefined 
       }]);
+      
+      setTimeout(() => {
+        scrollToBottom(true);
+      }, 50);
       
       setIsUploading(true);
       try {
@@ -995,10 +1051,12 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
       <div 
         ref={scrollContainerRef}
+        id="chat-scroll-container"
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-4 py-2 pb-3 flex flex-col gap-3"
       >
-        {isLoadingMore && (
+        <div className="flex flex-col gap-3 min-h-min">
+          {isLoadingMore && (
           <div className="text-center text-xs text-gray-400 py-2">
             Đang tải...
           </div>
@@ -1050,7 +1108,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                                <RotateCcw size={14} />
                              </button>
                              <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Bạn', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
-                               <Quote size={14} />
+                               <Reply size={14} />
                              </button>
                            </>
                          )}
@@ -1118,7 +1176,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                     {!msg.isRecalled && (
                       <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-1">
                          <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Ai đó', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
-                           <Quote size={14} />
+                           <Reply size={14} />
                          </button>
                       </div>
                     )}
@@ -1139,8 +1197,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
               </div>
             </div>
           )}
-          <div ref={messagesEndRef} />
-
+          
           {lastMessageReaders.length > 0 && (
             <div className="mt-1 ml-auto flex -space-x-2 pr-1">
               {lastMessageReaders.slice(0, 5).map(reader => (
@@ -1163,6 +1220,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
             </div>
           )}
         </div>
+      </div>
       </div>
 
       <AddMembersModal
@@ -1266,7 +1324,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       </div>
 
       {chat.group && isSidebarOpen && (
-        <GroupSidebar group={chat.group} onClose={() => setIsSidebarOpen(false)} />
+        <GroupSidebar groupId={String(chat.id)} />
       )}
       {isMediaSidebarOpen && (
         <MediaSidebar conversationId={String(chat.id)} onClose={() => setIsMediaSidebarOpen(false)} />
