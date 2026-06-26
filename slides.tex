@@ -262,7 +262,7 @@ notification-service & Notification & Notification \\
   \item Mỗi service có \textbf{1 bounded context} độc lập
   \item Không share entity/table giữa các service
   \item Giao tiếp qua \textbf{API / Event} (không gọi thẳng DB)
-  \item group.id được tái sử dụng làm conversation.id (shared key, không shared schema)
+  \item conversation.id được tái sử dụng làm group.id (shared key, không shared schema)
 \end{itemize}
 \end{block}
 \vspace{0.2cm}
@@ -306,18 +306,14 @@ notification-service & Notification & Notification \\
     (\x-1.15, 0.5) rectangle (\x+1.15, 2.3);
 }
 
-\node[font=\tiny, gray] at (6.9, -0.1)
+\node[font=\tiny, gray] at (6.9, 0.2)
   {Mỗi service chỉ truy cập database của chính mình --- không share schema};
 
 % Shared stores note
-\node[store, fill=blue!10, font=\tiny, minimum width=3cm] at (0, -0.6)
-  {Redis (shared): auth sessions,};
-\node[store, fill=blue!10, font=\tiny, minimum width=3cm] at (3.2, -0.6)
-  {chat presence/pub-sub,};
-\node[store, fill=blue!10, font=\tiny, minimum width=3cm] at (6.4, -0.6)
-  {message membership cache};
-\node[store, fill=purple!10, font=\tiny, minimum width=3cm] at (10, -0.6)
-  {MinIO: avatars, attachments};
+\node[store, fill=blue!10, font=\tiny, align=center, text width=7.5cm] at (3.8, -0.6)
+  {Redis (shared): auth sessions, chat presence/pub-sub,\\message membership cache};
+\node[store, fill=purple!10, font=\tiny, align=center, text width=3.5cm] at (11.5, -0.6)
+  {MinIO (shared): avatars,\\attachments};
 
 \end{tikzpicture}
 \end{center}
