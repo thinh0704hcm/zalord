@@ -37,19 +37,7 @@ Zalord không có flow nào đủ phức tạp để cần saga. Flow cross-serv
 
 ---
 
-## 3. GCP Deployment (Requirement 15)
-
-**Tại sao không áp dụng được:**
-
-Requirement đề cập triển khai lên **GCP (Google Cloud Platform)**. Zalord được triển khai lên **VPS riêng chạy k3s** vì:
-
-- **Chi phí**: GCP tính tiền theo giờ. Chạy 7 services + infra (Kafka, PostgreSQL×6, Redis, MinIO, Kong, Prometheus, Grafana, ...) trên GKE (Google Kubernetes Engine) sẽ tốn vài trăm USD/tháng — không khả thi với ngân sách sinh viên.
-- **Pattern tương đương**: CI/CD pipeline (GitHub Actions → build Docker image → push registry → `kubectl apply`) là **identical** bất kể target cloud là GCP, AWS, Azure, hay VPS k3s. Chỉ thay đổi `kubeconfig` target và tên registry.
-- **Kubernetes là portable**: k3s là Kubernetes-compliant distribution. Mọi manifest YAML trong `deploy/k8s/` đều portable sang GKE mà không cần thay đổi — chỉ cần thay `kubeconfig`.
-
----
-
-## 4. ELK Stack (Requirement 13 — một phần)
+## 3. ELK Stack (Requirement 13 — một phần)
 
 **Tại sao không phù hợp ở quy mô này:**
 
@@ -74,7 +62,7 @@ VPS đang chạy 7 business services + Kafka + PostgreSQL×6 + Redis + MinIO + k
 
 ---
 
-## 5. K8s Ingress Controller resource (Requirement 10 — khái niệm cần làm rõ)
+## 4. K8s Ingress Controller resource (Requirement 10 — khái niệm cần làm rõ)
 
 **Tại sao Kong không được deploy dưới dạng K8s Ingress resource:**
 
@@ -101,6 +89,5 @@ Có hai cách dùng Kong với Kubernetes:
 |---|---|---|
 | Saga Pattern | Không áp dụng | Không có distributed transaction đủ phức tạp; 2-step registration xử lý bằng gRPC + circuit breaker |
 | OAuth2 / Keycloak | Không phù hợp | Closed first-party system, không có third-party delegation use case |
-| GCP Deployment | Thay bằng VPS + k3s | Chi phí GCP không khả thi; pattern CI/CD tương đương |
 | ELK Stack | Không triển khai | Resource constraint trên VPS; stdout logging đúng 12-factor; Prometheus+Grafana đủ |
 | K8s Ingress resource | Kong standalone | DB-less Kong config portable hơn, dùng chung cho dev (Compose) và prod (K8s) |
