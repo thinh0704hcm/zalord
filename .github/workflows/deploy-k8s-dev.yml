@@ -132,7 +132,6 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/zalord-k8s-dev
 
-          cp deploy/k8s/overlays/dev/namespace.yaml    /tmp/zalord-k8s-dev/
           cp deploy/k8s/overlays/dev/*-config.yaml    /tmp/zalord-k8s-dev/
           cp deploy/k8s/overlays/dev/infra-*.yaml     /tmp/zalord-k8s-dev/
 
