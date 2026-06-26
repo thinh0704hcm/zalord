@@ -1,0 +1,132 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: auth-route
+  namespace: zalord-staging
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "auth.staging.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: auth-service
+          port: 8081
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: user-route
+  namespace: zalord-staging
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "user.staging.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: user-service
+          port: 8082
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: message-route
+  namespace: zalord-staging
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "message.staging.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: message-service
+          port: 8083
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: chat-route
+  namespace: zalord-staging
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "chat.staging.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: chat-service
+          port: 8084
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: group-route
+  namespace: zalord-staging
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "group.staging.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: group-service
+          port: 8085
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: media-route
+  namespace: zalord-staging
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "media.staging.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: media-service
+          port: 8086
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: notification-route
+  namespace: zalord-staging
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "notification.staging.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: notification-service
+          port: 8087
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-kong-to-staging
+  namespace: zalord-staging
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: kong
+  to:
+    - group: ""
+      kind: Service

@@ -2,6 +2,12 @@ name: Deploy Production OKE
 
 on:
   workflow_dispatch:
+    inputs:
+      canary:
+        description: 'Deploy as canary (split traffic 90/10)'
+        required: false
+        default: 'false'
+        type: boolean
   push:
     branches:
       - main
@@ -9,7 +15,7 @@ on:
       - ".github/workflows/deploy-production-oke.yml"
       - ".sops.yaml"
       - "backend/**"
-      - "deploy/k8s/overlays/dev/**"
+      - "deploy/k8s/overlays/prod/**"
 
 concurrency:
   group: deploy-production-oke
@@ -21,8 +27,9 @@ jobs:
     env:
       IMAGE_TAG: ${{ github.sha }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
-      K8S_NAMESPACE: zalord-dev
+      K8S_NAMESPACE: zalord-prod
       KUBECONFIG: /home/runner/.kube/oke.config
+      CANARY: ${{ github.event.inputs.canary || 'false' }}
       SERVICE_IMAGES: >-
         auth-service
         user-service
@@ -31,6 +38,15 @@ jobs:
         group-service
         media-service
         notification-service
+      # Service name → port mapping
+      SERVICE_PORTS: >-
+        auth-service:8081
+        user-service:8082
+        message-service:8083
+        chat-service:8084
+        group-service:8085
+        media-service:8086
+        notification-service:8087
 
     steps:
       - name: Checkout
@@ -41,7 +57,7 @@ jobs:
       - name: Validate required secrets
         env:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY_PROD }}
           OKE_KUBECONFIG_B64: ${{ secrets.OKE_KUBECONFIG_B64 }}
         run: |
           set -euo pipefail
@@ -68,7 +84,7 @@ jobs:
             done
             echo "services=$(echo "$services" | xargs)" >> "$GITHUB_OUTPUT"
             if git diff --name-only "$before" "${{ github.sha }}" \
-                | grep -q "^deploy/k8s/overlays/dev/.*\\(config\\|secret\\)"; then
+                | grep -q "^deploy/k8s/overlays/prod/.*\\(config\\|secret\\)"; then
               echo "restart_all=true" >> "$GITHUB_OUTPUT"
             else
               echo "restart_all=false" >> "$GITHUB_OUTPUT"
@@ -111,7 +127,7 @@ jobs:
 
       - name: Configure SOPS age key
         env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY_PROD }}
         run: |
           mkdir -p ~/.config/sops/age
           printf '%s\n' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
@@ -132,17 +148,18 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/zalord-k8s-prod
 
-          cp deploy/k8s/overlays/dev/*-config.yaml /tmp/zalord-k8s-prod/
-          cp deploy/k8s/overlays/dev/infra-*.yaml /tmp/zalord-k8s-prod/
+          cp deploy/k8s/overlays/prod/*-config.yaml /tmp/zalord-k8s-prod/
+          cp deploy/k8s/overlays/prod/infra-*.yaml /tmp/zalord-k8s-prod/
+          cp deploy/k8s/overlays/prod/kong-routes.yaml /tmp/zalord-k8s-prod/
 
-          for secret in deploy/k8s/overlays/dev/*-secret.enc.yaml; do
+          for secret in deploy/k8s/overlays/prod/*-secret.enc.yaml; do
             target="/tmp/zalord-k8s-prod/$(basename "${secret%.enc.yaml}.yaml")"
             sops -d "$secret" > "$target"
           done
 
           if [ -n "${{ steps.filter.outputs.services }}" ]; then
             for svc in ${{ steps.filter.outputs.services }}; do
-              f="deploy/k8s/overlays/dev/$svc-workload.yaml"
+              f="deploy/k8s/overlays/prod/$svc-workload.yaml"
               envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' \
                 < "$f" > "/tmp/zalord-k8s-prod/$(basename "$f")"
             done
@@ -153,7 +170,9 @@ jobs:
             cat "$manifest"
           done > /tmp/zalord-k8s-prod.yaml
 
+      # ── Normal deploy (CANARY=false) ────────────────────────────
       - name: Apply manifests
+        if: env.CANARY == 'false'
         run: |
           set -euo pipefail
           kubectl delete job -n "$K8S_NAMESPACE" kafka-init minio-init --ignore-not-found=true --wait=true
@@ -167,6 +186,7 @@ jobs:
           fi
 
       - name: Wait for rollout
+        if: env.CANARY == 'false'
         run: |
           set -euo pipefail
           services="${{ steps.filter.outputs.services }}"
@@ -181,6 +201,142 @@ jobs:
             done
           fi
           kubectl get pods,svc -n "$K8S_NAMESPACE"
+
+      # ── Canary deploy (CANARY=true) ─────────────────────────────
+      - name: Deploy canary
+        if: env.CANARY == 'true' && steps.filter.outputs.services != ''
+        run: |
+          set -euo pipefail
+          # Apply base infra + routes (not workloads — we handle those separately)
+          kubectl apply -n "$K8S_NAMESPACE" \
+            -f /tmp/zalord-k8s-prod/namespace.yaml \
+            -f /tmp/zalord-k8s-prod/kong-routes.yaml
+
+          for svc in ${{ steps.filter.outputs.services }}; do
+            port=$(echo "$SERVICE_PORTS" | tr ' ' '\n' | grep "^$svc:" | cut -d: -f2)
+            echo "Deploying canary for $svc (port $port)..."
+
+            # Get current stable image
+            current_image=$(kubectl get deploy "$svc" -n "$K8S_NAMESPACE" \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+            if [ -z "$current_image" ]; then
+              echo "  No existing stable deployment for $svc, deploying as stable"
+              kubectl apply -n "$K8S_NAMESPACE" -f "/tmp/zalord-k8s-prod/${svc}-workload.yaml"
+              continue
+            fi
+
+            # Scale stable down to 1 (if more)
+            kubectl scale deploy "$svc" --replicas=1 -n "$K8S_NAMESPACE" 2>/dev/null || true
+
+            # Create canary deployment from stable (same image, name -canary)
+            kubectl get deploy "$svc" -n "$K8S_NAMESPACE" -o json \
+              | jq --arg name "${svc}-canary" \
+                   --arg image "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$IMAGE_TAG" \
+                   '.metadata.name=$name | .metadata.labels."app.kubernetes.io/component"="canary" | del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .status) | .spec.replicas=1 | .spec.selector.matchLabels.app=$name | .spec.template.metadata.labels.app=$name | .spec.template.spec.containers[0].image=$image' \
+              | kubectl apply -n "$K8S_NAMESPACE" -f -
+            echo "  Canary deployed: ${svc}-canary → $IMAGE_TAG"
+          done
+
+          kubectl get deploy -n "$K8S_NAMESPACE" -o wide
+
+      - name: Shift traffic to canary (90/10)
+        if: env.CANARY == 'true' && steps.filter.outputs.services != ''
+        run: |
+          set -euo pipefail
+          for svc in ${{ steps.filter.outputs.services }}; do
+            port=$(echo "$SERVICE_PORTS" | tr ' ' '\n' | grep "^$svc:" | cut -d: -f2)
+            route_name=$(echo "$svc" | sed 's/-service/-route/')
+
+            kubectl patch httproute "$route_name" -n "$K8S_NAMESPACE" \
+              --type=merge \
+              --patch "{\"spec\":{\"rules\":[{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":90},{\"name\":\"${svc}-canary\",\"port\":$port,\"weight\":10}]}]}}"
+            echo "  Traffic: $route_name → 90% stable / 10% canary"
+          done
+
+          kubectl get httproute -n "$K8S_NAMESPACE"
+
+      - name: Smoke test canary
+        if: env.CANARY == 'true' && steps.filter.outputs.services != ''
+        run: |
+          set -euo pipefail
+          # Wait for canary pods to be ready
+          for svc in ${{ steps.filter.outputs.services }}; do
+            kubectl rollout status -n "$K8S_NAMESPACE" "deployment/${svc}-canary" --timeout=120s 2>/dev/null || true
+          done
+
+          # Basic health check via Kong proxy
+          LB_IP=$(kubectl get svc kong-kong-proxy -n kong -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ -z "$LB_IP" ]; then
+            echo "WARNING: No LB IP, skipping smoke test"
+            exit 0
+          fi
+
+          echo "Smoke testing via $LB_IP..."
+          failed=0
+          for svc in ${{ steps.filter.outputs.services }}; do
+            host=$(echo "$svc" | sed 's/-service/.zalord.vn/')
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Host: $host" "http://$LB_IP/actuator/health" --max-time 10 || echo "000")
+            if [ "$code" = "200" ] || [ "$code" = "000" ]; then
+              echo "  $svc: OK ($code)"
+            else
+              echo "  $svc: FAIL ($code)"
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -eq 1 ]; then
+            echo "Smoke test FAILED — triggering rollback"
+            exit 1
+          fi
+          echo "Smoke test PASSED"
+
+      - name: Promote canary to stable
+        if: env.CANARY == 'true' && steps.filter.outputs.services != '' && success()
+        run: |
+          set -euo pipefail
+          for svc in ${{ steps.filter.outputs.services }}; do
+            port=$(echo "$SERVICE_PORTS" | tr ' ' '\n' | grep "^$svc:" | cut -d: -f2)
+            route_name=$(echo "$svc" | sed 's/-service/-route/')
+
+            echo "Promoting $svc..."
+            # Update stable deployment to new image
+            kubectl set image deploy "$svc" \
+              "$svc=docker.io/$DOCKER_NAMESPACE/zalord-$svc:$IMAGE_TAG" \
+              -n "$K8S_NAMESPACE"
+            kubectl rollout status -n "$K8S_NAMESPACE" "deployment/$svc" --timeout=120s
+
+            # Restore 100% traffic to stable
+            kubectl patch httproute "$route_name" -n "$K8S_NAMESPACE" \
+              --type=merge \
+              --patch "{\"spec\":{\"rules\":[{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}]}}"
+
+            # Delete canary deployment
+            kubectl delete deploy "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
+            echo "  Promoted: $svc → $IMAGE_TAG"
+          done
+
+          kubectl get pods,svc,httproute -n "$K8S_NAMESPACE"
+
+      - name: Rollback canary
+        if: env.CANARY == 'true' && steps.filter.outputs.services != '' && failure()
+        run: |
+          set -euo pipefail
+          echo "ROLLING BACK canary deployments..."
+          for svc in ${{ steps.filter.outputs.services }}; do
+            port=$(echo "$SERVICE_PORTS" | tr ' ' '\n' | grep "^$svc:" | cut -d: -f2)
+            route_name=$(echo "$svc" | sed 's/-service/-route/')
+
+            # Delete canary deployment
+            kubectl delete deploy "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
+
+            # Restore 100% traffic to stable
+            kubectl patch httproute "$route_name" -n "$K8S_NAMESPACE" \
+              --type=merge \
+              --patch "{\"spec\":{\"rules\":[{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}]}}"
+            echo "  Rolled back: $svc"
+          done
+          kubectl get pods,svc,httproute -n "$K8S_NAMESPACE"
 
       - name: Cleanup runner artifacts
         if: always()

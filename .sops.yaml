@@ -1,8 +1,9 @@
 creation_rules:
   - path_regex: deploy/k8s/overlays/dev/.*-secret\.enc\.yaml$
     age: age1gsw3rsazcn7x6mt70xuw4xedffaxdukadl4xw6ll5vz0qe8ep3gs6he35k
-    # Only encrypt the actual secret values; leave apiVersion/kind/metadata
-    # readable in PRs so structural changes (renames, new fields) are reviewable.
+    encrypted_regex: "^(data|stringData)$"
+  - path_regex: deploy/k8s/overlays/staging/.*-secret\.enc\.yaml$
+    age: age1fz93gkdk5ytwghkmvxhr7vulgx6haqnwng9l30ka2e5m79r2cvxsrjnyhs
     encrypted_regex: "^(data|stringData)$"
   - path_regex: deploy/k8s/overlays/prod/.*-secret\.enc\.yaml$
     age: age1ye6uy78093vlep4sx7pmhj0cnrmes3q3utg3kyhyheqyjjcrgqgsy7rmye
