@@ -180,6 +180,11 @@
 			<artifactId>micrometer-registry-prometheus</artifactId>
 			<version>1.16.5</version>
 		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
 
 		<!-- Resilience4j circuit breaker on the UserGrpcClient: if user-service
 		     dies, register fails fast (503) instead of every /register call
