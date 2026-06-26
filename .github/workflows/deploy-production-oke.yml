@@ -135,12 +135,10 @@ jobs:
             sops -d "$secret" > "$target"
           done
 
-          if [ -n "${{ steps.filter.outputs.services }}" ]; then
-            for svc in ${{ steps.filter.outputs.services }}; do
-              f="deploy/k8s/overlays/prod/$svc-workload.yaml"
-              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-prod/$(basename "$f")"
-            done
-          fi
+          # Always include ALL workload files (image tag changes on every push)
+          for f in deploy/k8s/overlays/prod/*-workload.yaml; do
+            envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-prod/$(basename "$f")"
+          done
 
           for manifest in /tmp/zalord-k8s-prod/*.yaml; do
             printf '\n---\n'
@@ -168,13 +166,14 @@ jobs:
           set -euo pipefail
           services="${{ steps.filter.outputs.services }}"
           if [ -n "$services" ]; then
+            # Wait for specific changed services
             for service in $services; do
-              kubectl rollout status -n "$K8S_NAMESPACE" "deployment/$service" --timeout=180s
+              kubectl rollout status -n "$K8S_NAMESPACE" "deployment/$service" --timeout=180s || true
             done
-          elif [ "${{ steps.filter.outputs.restart_all }}" = "true" ] \
-              && kubectl get deploy -n "$K8S_NAMESPACE" -o name | grep -q .; then
-            for deploy in $(kubectl get deploy -n "$K8S_NAMESPACE" -o name); do
-              kubectl rollout status -n "$K8S_NAMESPACE" "$deploy" --timeout=180s
+          else
+            # No specific services detected — wait for all deployments
+            for deploy in $(kubectl get deploy -n "$K8S_NAMESPACE" -o name 2>/dev/null); do
+              kubectl rollout status -n "$K8S_NAMESPACE" "$deploy" --timeout=180s || true
             done
           fi
           kubectl get pods,svc -n "$K8S_NAMESPACE"
