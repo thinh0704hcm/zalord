@@ -962,47 +962,44 @@ CMD ["./server"]
 \column{0.55\textwidth}
 \begin{block}{Prometheus Scrape Config}
 \begin{table}[h]
-\tiny
+\scriptsize
 \centering
 \begin{tabular}{|l|l|}
 \hline
 \textbf{Target} & \textbf{Endpoint} \\
 \hline
-auth, message, group, media & \texttt{/actuator/prometheus} (Micrometer) \\
-user, chat, notification & \texttt{/metrics} (client\_golang + Gin) \\
-Kong & \texttt{kong:8001/metrics} (built-in plugin) \\
-RabbitMQ & \texttt{rabbitmq:15692/metrics} (rabbitmq\_prometheus) \\
-Kafka & \texttt{kafka-exporter:9308} (sidecar) \\
+Java Services & \texttt{/actuator/prometheus} \\
+Go Services & \texttt{/metrics} \\
+Kong & \texttt{kong:8001/metrics} \\
+RabbitMQ & \texttt{rabbitmq:15692/metrics} \\
+Kafka & \texttt{kafka-exporter:9308} \\
 \hline
 \end{tabular}
 \end{table}
 \end{block}
 \begin{block}{Metrics được track}
+\footnotesize
 \begin{itemize}
-  \item HTTP latency, request count, status codes (Micrometer, Kong)
-  \item Active WebSocket connections (chat-service custom metric)
-  \item Message throughput, queue lag (Kafka exporter)
-  \item JVM heap, GC (Java services)
+  \item HTTP latency, request count, status codes
+  \item Active WebSocket connections (chat)
+  \item Message throughput, queue lag
+  \item JVM heap, GC, Pod resource
 \end{itemize}
-\end{block}
-\begin{block}{Grafana Dashboard}
-Pre-provisioned: \texttt{zalord-overview.json} --- Datasource: Prometheus, anonymous viewer enabled
 \end{block}
 
 \column{0.43\textwidth}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
-\textit{Grafana dashboard}\\
-\texttt{http://localhost:3000}\\[0.2cm]
-\textit{Chụp màn hình panels:}\\
+\begin{alertblock}{[PLACEHOLDER --- chụp Grafana]}
+\centering\footnotesize
+Dashboard: \texttt{zalord-overview.json}\\
+\texttt{http://localhost:3000}\\[0.1cm]
+\textit{Chụp panels:}\\
 \textit{--- HTTP request rate/latency}\\
 \textit{--- Active WS connections}\\
-\textit{--- Message throughput}\\
-\textit{--- Pod resource usage}
+\textit{--- Message throughput}
 \end{alertblock}
 \vspace{0.3cm}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
+\begin{alertblock}{[PLACEHOLDER --- chụp Prom]}
+\centering\footnotesize
 \textit{Prometheus targets page}\\
 \texttt{localhost:9090/targets}\\
 \textit{all targets: State=UP}
