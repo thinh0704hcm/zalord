@@ -6,5 +6,5 @@ creation_rules:
     age: age1fz93gkdk5ytwghkmvxhr7vulgx6haqnwng9l30ka2e5m79r2cvxsrjnyhs
     encrypted_regex: "^(data|stringData)$"
   - path_regex: deploy/k8s/overlays/prod/.*-secret\.enc\.yaml$
-    age: age1ye6uy78093vlep4sx7pmhj0cnrmes3q3utg3kyhyheqyjjcrgqgsy7rmye
+    age: age19ejm0l5e55vsf6g4r2zg2kwfdczyree4j4hj4uqt2eptxwnwfgssx4qmk3
     encrypted_regex: "^(data|stringData)$"
