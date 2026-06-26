@@ -13,7 +13,7 @@ COPY pom.xml .
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
 
 COPY src src
-RUN ./mvnw -B -DskipTests clean package \
+RUN ./mvnw -B -Dmaven.test.skip=true clean package \
     && mkdir -p target/extracted \
     && java -Djarmode=layertools -jar target/*.jar extract --destination target/extracted
 
