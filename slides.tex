@@ -397,37 +397,41 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \begin{frame}{Event-Driven Architecture --- Message Flow (Req 4)}
 \begin{center}
 \begin{tikzpicture}[
-  svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\small,
-              align=center, minimum width=2.4cm, minimum height=0.65cm},
-  mq/.style={rectangle, draw, fill=yellow!30, font=\small, rounded corners=2pt,
-             minimum width=8cm, minimum height=0.7cm, align=center},
+  svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\scriptsize,
+              align=center, minimum width=2.6cm, minimum height=0.6cm},
+  bus/.style={rectangle, draw, fill=yellow!30, font=\scriptsize, rounded corners=2pt,
+             minimum width=1.5cm, minimum height=5.5cm, align=center},
   pub/.style={->, >=Stealth, thick, orange!80},
   sub/.style={->, >=Stealth, thick, dashed, green!60!black},
   scale=0.9
 ]
-\node[svc] (msg)   at (0,    3.5) {message-service};
-\node[svc] (grp)   at (3.5,  3.5) {group-service};
-\node[svc] (auth)  at (7,    3.5) {auth-service};
 
-\node[mq] (mq) at (3.5, 2) {RabbitMQ / Kafka\\{\tiny message.created (3p) \quad group.* (1p) \quad user.created (1p)}};
+% Publishers (Left)
+\node[svc] (msg)   at (0, 4.5) {message-service};
+\node[svc] (grp)   at (0, 2.5) {group-service};
+\node[svc] (auth)  at (0, 0.5) {auth-service};
 
-\node[svc] (chat)  at (-1.5, 0.5) {chat-service\\{\tiny WebSocket fan-out}};
-\node[svc] (notif) at (1.5,  0.5) {notification-service};
-\node[svc] (inbox) at (4.5,  0.5) {InboxProjector\\{\tiny (message-service)}};
-\node[svc] (conv)  at (7.5,  0.5) {GroupEventConsumer\\{\tiny (message-service)}};
-\node[svc] (uuser) at (10.5, 0.5) {user-service};
+% Message Bus (Center)
+\node[bus] (mq) at (4.5, 2.5) {RabbitMQ\\/\\Kafka};
 
-% Publishers
-\draw[pub] (msg)  -- (mq) node[midway, left,  font=\tiny] {pub: message.created};
-\draw[pub] (grp)  -- (mq) node[midway, right, font=\tiny] {pub: group.*};
-\draw[pub] (auth) -- (mq) node[midway, right, font=\tiny] {pub: user.created};
+% Subscribers (Right)
+\node[svc] (chat)  at (9, 4.8) {chat-service\\{\tiny (WebSocket fan-out)}};
+\node[svc] (notif) at (9, 3.6) {notification-service};
+\node[svc] (inbox) at (9, 2.4) {InboxProjector\\{\tiny (message-service)}};
+\node[svc] (conv)  at (9, 1.2) {GroupEventConsumer\\{\tiny (message-service)}};
+\node[svc] (uuser) at (9, 0.0) {user-service};
 
-% Subscribers
-\draw[sub] (mq) -- (chat)  node[midway, left,  font=\tiny] {sub: msg.created};
-\draw[sub] (mq) -- (notif) node[midway, left,  font=\tiny] {sub: msg.created};
-\draw[sub] (mq) -- (inbox) node[midway, right, font=\tiny] {sub: msg.*};
-\draw[sub] (mq) -- (conv)  node[midway, right, font=\tiny] {sub: group.*};
-\draw[sub] (mq) -- (uuser) node[midway, right, font=\tiny] {sub: user.created};
+% Publisher Arrows
+\draw[pub] (msg)  -- (msg -| mq.west) node[midway, above, font=\tiny] {pub: message.created};
+\draw[pub] (grp)  -- (grp -| mq.west) node[midway, above, font=\tiny] {pub: group.*};
+\draw[pub] (auth) -- (auth -| mq.west) node[midway, above, font=\tiny] {pub: user.created};
+
+% Subscriber Arrows
+\draw[sub] (chat -| mq.east)  -- (chat)  node[midway, above, font=\tiny] {sub: msg.created};
+\draw[sub] (notif -| mq.east) -- (notif) node[midway, above, font=\tiny] {sub: msg.created};
+\draw[sub] (inbox -| mq.east) -- (inbox) node[midway, above, font=\tiny] {sub: msg.*};
+\draw[sub] (conv -| mq.east)  -- (conv)  node[midway, above, font=\tiny] {sub: group.*};
+\draw[sub] (uuser -| mq.east) -- (uuser) node[midway, above, font=\tiny] {sub: user.created};
 
 \end{tikzpicture}
 \end{center}
