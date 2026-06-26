@@ -1,0 +1,34 @@
+Domain-Driven Design
+1. Chứng minh tại sao modulithic không phù hợp với system này
+
+Nguyên lý thiết kê Microservices
+2. Trình bày vì sao chia các service ra như vậy theo DDD, tức là theo khía cạnh data model, mỗi service hiện tại có chính xác bang 1 bounded context
+3. Về nguyên lý SRP, mỗi làm service hiện tại có thỏa mãn hay không, có High Cohesion - Low Coupling không, tức là về khía cạnh execution pipeline across all services.
+
+Giao tiếp giữa các dịch vụ
+4. Giao tiếp giữa service, sync hay async, có dùng event driven không, vì sao.
+5. Thiết kế endpoint, quy ước naming, paging, filtering, show swagger, chuẩn error response.
+
+Thiết kế & Quản lý cơ sở dữ liệu
+6. Db per service, mỗi service có db riêng, có chỗ nào cần consistency, chỗ nào cần eventual consistency, chỗ nào phải chấp nhận CAP, có chỗ nào áp dụng saga pattern không
+7. Có dùng outbox pattern chỗ nào không, vì sao, có dùng cqrs không, vì sao, polyglot persistence là gì (cái này lỡ mà system thật sự không có thì bỏ qua)
+
+Triên khai bang Docker & Compose
+8. Tạo Dockerfile hiệu quả: layer cache, multi-stage build. Docker Compose: gộp nhiều service, tạo network đồng bộ. Quản lý volume, port, env vars giữa các container. Áp dụng K8s cho orchestration.
+9. Service discovery dùng của k8s nên không cần của eureka hay consul, load balancing ta dùng của k8s luôn?, system của ta load balancing ở client side hay server side, vì sao
+
+API Gateway
+10. Có filter chưa (filter là gì?), có rate limiting chưa, có rewrite path chưa (rewrite path là gì?), có authentication filter chưa, có ingress controller, có để làm gì?
+
+Authentication & Authorization
+11. JWT, OAuth2 có chưa, có phải có keycloak không, nếu câu trả lời là có/không thì vì sao
+12. ConfigMap và Secret trong K8s là gì, có thật sự cần áp dụng không
+
+Logging, Monitoring, Tracing
+13. Đã có ELK, Grafana, them Prometheus, them open telemetry để truy vết phân tán, dùng k8s dashboard hoặc Lens để giám sát cluster
+14. Timeout, circuit breaker and recovery
+
+CI/CD và triển khai trên Cloud
+15. GitHub Actions to GCP, build, test, push docker image to registry, versioning rollback
+
+16. Vài recovery scenario để chứng minh resiliency
