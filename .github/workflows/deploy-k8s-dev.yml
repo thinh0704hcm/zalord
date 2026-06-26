@@ -212,20 +212,11 @@ jobs:
               "$DOCKER_NAMESPACE/zalord-$service:$IMAGE_TAG"
           done
 
-      - name: Prune replaced images and pull latest
+      - name: Prune replaced images
         if: steps.filter.outputs.services != ''
         run: |
-          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "bash -lc '
-            set -euo pipefail
-            sudo -n /usr/local/bin/zalord-k3s-image prune
-            pids=()
-            for service in ${{ steps.filter.outputs.services }}; do
-              sudo -n /usr/local/bin/zalord-k3s-image pull \
-                docker.io/${{ env.DOCKER_NAMESPACE }}/zalord-\$service:latest &
-              pids+=(\$!)
-            done
-            for pid in \"\${pids[@]}\"; do wait \"\$pid\"; done
-          '"
+          ssh -i ~/.ssh/vietnam-vps -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "bash -lc 'sudo -n /usr/local/bin/zalord-k3s-image prune'"
 
       - name: Cleanup runner artifacts
         if: always()
