@@ -866,48 +866,49 @@ CMD ["./server"]
 \begin{center}
 \begin{tikzpicture}[
   box/.style={rectangle, draw, rounded corners=2pt, font=\small,
-              align=center, minimum width=3cm, minimum height=0.65cm},
+              align=center, minimum width=2.8cm, minimum height=0.65cm},
   arr/.style={->, >=Stealth, thick},
   note/.style={font=\tiny, gray, align=center},
-  scale=0.92
+  scale=0.67, transform shape
 ]
 % === Login flow ===
-\node[font=\small\bfseries] at (-1, 4.6) {(1) Login};
-\node[box, fill=gray!15]    (cli1)  at (-1, 4)   {Client};
-\node[box, fill=teal!20]    (kong1) at (3,  4)   {Kong (no JWT)};
-\node[box, fill=blue!15]    (auth)  at (7,  4)   {auth-service};
-\node[box, fill=orange!15]  (pg)    at (10, 4)   {PostgreSQL\\(sessions)};
+\node[font=\small\bfseries, anchor=west] at (-1.5, 5.8) {(1) Login};
+\node[box, fill=gray!15]    (cli1)  at (0, 5)   {Client};
+\node[box, fill=teal!20]    (kong1) at (5.5, 5)   {Kong (no JWT)};
+\node[box, fill=blue!15]    (auth)  at (11, 5)  {auth-service};
+\node[box, fill=orange!15]  (pg)    at (15, 5)  {PostgreSQL};
 
 \draw[arr] (cli1)  -- (kong1) node[midway, above, font=\tiny] {POST /auth/login};
 \draw[arr] (kong1) -- (auth)  node[midway, above, font=\tiny] {forward};
-\draw[arr] (auth)  -- (pg)    node[midway, above, font=\tiny] {store refresh token};
-\draw[arr] (auth)  to[bend right=30] (cli1)
-  node[midway, below, font=\tiny] {JWT (HS256, exp=15m) + refresh token};
+\draw[arr] (auth)  -- (pg)    node[midway, above, font=\tiny] {store};
+\draw[arr] (auth.south)  -- ++(0, -0.5) -| (cli1.south)
+  node[near start, below, font=\tiny] {JWT (HS256, exp=15m) + refresh token};
 
 % === API request flow ===
-\node[font=\small\bfseries] at (-1, 2.6) {(2) API Call};
-\node[box, fill=gray!15]    (cli2)  at (-1, 2) {Client};
-\node[box, fill=teal!20]    (kong2) at (3,  2) {Kong};
-\node[box, fill=blue!15]    (svc)   at (8,  2) {Downstream Service};
+\node[font=\small\bfseries, anchor=west] at (-1.5, 3.3) {(2) API Call};
+\node[box, fill=gray!15]    (cli2)  at (0, 2.5) {Client};
+\node[box, fill=teal!20]    (kong2) at (5.5, 2.5) {Kong};
+\node[box, fill=blue!15]    (svc)   at (11, 2.5) {Downstream Service};
 
 \draw[arr] (cli2)  -- (kong2) node[midway, above, font=\tiny] {Bearer: \{JWT\}};
 \draw[arr] (kong2) -- (svc)
-  node[midway, above, font=\tiny] {X-User-Id: \{sub\}\ \ X-User-Roles: \{roles\}};
-\node[note] at (3, 1.4) {jwt plugin validate HS256\\inject headers via Lua};
-\node[note] at (8, 1.4) {Trust headers\\(no JWT parsing)};
+  node[midway, above, font=\tiny] {X-User-Id: \{sub\}}
+  node[midway, below, font=\tiny] {X-User-Roles: \{roles\}};
+\node[note] at (5.5, 1.6) {jwt plugin validate HS256\\inject headers via Lua};
+\node[note] at (11, 1.6) {Trust headers\\(no JWT parsing)};
 
 % === WebSocket ===
-\node[font=\small\bfseries] at (-1, 0.6) {(3) WebSocket};
-\node[box, fill=gray!15]    (cli3)  at (-1,  0) {Client};
-\node[box, fill=teal!20]    (kong3) at (3.5, 0) {Kong};
-\node[box, fill=green!15]   (chat)  at (8,   0) {chat-service};
+\node[font=\small\bfseries, anchor=west] at (-1.5, 0.8) {(3) WebSocket};
+\node[box, fill=gray!15]    (cli3)  at (0, 0) {Client};
+\node[box, fill=teal!20]    (kong3) at (5.5, 0) {Kong};
+\node[box, fill=green!15]   (chat)  at (11, 0) {chat-service};
 \draw[arr] (cli3)  -- (kong3) node[midway, above, font=\tiny] {/ws/chat?token=\{JWT\}};
 \draw[arr] (kong3) -- (chat)  node[midway, above, font=\tiny] {Upgrade + X-User-Id};
-\node[note] at (3.5, -0.55) {Browser không set WS headers\\$\rightarrow$ token qua query param};
+\node[note] at (5.5, -0.9) {Browser không set WS headers\\$\rightarrow$ token qua query param};
 
 % No OAuth2/Keycloak note
 \node[draw, fill=red!10, rounded corners, font=\tiny, align=center]
-  at (10.5, -0.3) {KHÔNG dùng OAuth2\\KHÔNG dùng Keycloak\\Lý do: xem EXPLANATION.md};
+  at (11.5, -1.2) {KHÔNG dùng OAuth2/Keycloak\\Lý do: xem EXPLANATION.md};
 
 \end{tikzpicture}
 \end{center}
