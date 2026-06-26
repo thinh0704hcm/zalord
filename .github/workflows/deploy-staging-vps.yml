@@ -141,10 +141,11 @@ jobs:
             echo "  Substituted: $(basename "$f")"
           done
 
-          # Concatenate into single manifest
+          # Concatenate into single manifest (exclude kong-routes — applied per-ns above)
           first=true
           for manifest in /tmp/zalord-k8s-staging/*.yaml; do
             [ -f "$manifest" ] || continue
+            [ "$(basename "$manifest")" = "kong-routes.yaml" ] && continue
             if [ "$first" = true ]; then
               first=false
             else
