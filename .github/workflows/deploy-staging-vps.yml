@@ -4,9 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Commit SHA image tag (from CI build)'
+        description: 'Image tag to deploy'
         required: true
         type: string
+  push:
+    branches:
+      - staging
+    paths:
+      - ".github/workflows/deploy-staging-vps.yml"
+      - ".sops.yaml"
+      - "deploy/k8s/overlays/staging/**"
 
 concurrency:
   group: deploy-staging-vps
@@ -16,7 +23,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-staging
       REMOTE_KUBECONFIG: ~/.kube/zalord-dev-deployer.config
@@ -91,7 +98,6 @@ jobs:
             sops -d "$secret" > "$target"
           done
 
-          # Apply envsubst to all workload files
           for f in deploy/k8s/overlays/staging/*-workload.yaml; do
             envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-staging/$(basename "$f")"
           done

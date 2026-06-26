@@ -13,12 +13,8 @@ on:
         default: 'false'
         type: boolean
   push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/deploy-production-oke.yml"
-      - ".sops.yaml"
-      - "deploy/k8s/overlays/prod/**"
+    tags:
+      - 'v*'
 
 concurrency:
   group: deploy-production-oke
@@ -28,7 +24,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.ref_name }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-prod
       KUBECONFIG: /home/runner/.kube/oke.config
@@ -73,6 +69,7 @@ jobs:
           set -euo pipefail
           before="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
+              || [ "${{ github.ref_type }}" = "tag" ] \
               || [ "$before" = "0000000000000000000000000000000000000000" ]; then
             echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
             echo "restart_all=false" >> "$GITHUB_OUTPUT"
