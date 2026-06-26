@@ -1096,41 +1096,39 @@ OpenTelemetry distributed tracing sẽ cho phép:
                align=center, minimum width=2.6cm, minimum height=0.65cm,
                fill=green!15},
   arr/.style={->, >=Stealth, thick},
-  scale=0.80
+  scale=0.75, transform shape
 ]
 %--- Shared pipeline ---
 \node[pipebox] (trigger)  at (0, 0)   {Trigger\\{\tiny push to main}};
-\node[pipebox] (detect)   at (3.0, 0) {Detect changed\\{\tiny git diff --name-only}};
-\node[pipebox] (build)    at (6.0, 0) {Build \& Push\\{\tiny Buildx $\rightarrow$ Docker Hub}};
-\node[pipebox] (registry) at (9.0, 0) {Docker Hub\\{\tiny :\{sha\} tag}};
+\node[pipebox] (detect)   at (3.4, 0) {Detect changed\\{\tiny git diff --name-only}};
+\node[pipebox] (build)    at (6.8, 0) {Build \& Push\\{\tiny Buildx $\rightarrow$ Docker Hub}};
+\node[pipebox] (registry) at (10.2, 0) {Docker Hub\\{\tiny :\{sha\} tag}};
 
 \draw[arr] (trigger) -- (detect);
 \draw[arr] (detect)  -- (build);
 \draw[arr] (build)   -- (registry);
 
 %--- Decrypt (shared step) ---
-\node[pipebox] (decrypt) at (4.5, -1.2) {Decrypt Secrets\\{\tiny SOPS + Age (GitHub Secret)}};
-\draw[arr] (registry.south) |- (decrypt.north);
+\node[pipebox] (decrypt) at (5.1, -1.8) {Decrypt Secrets\\{\tiny SOPS + Age (GitHub Secret)}};
+\draw[arr] (registry.south) -- (10.2, -0.9) -| (decrypt.north);
 
 %--- Branch point ---
-\coordinate (split) at (4.5, -1.75);
+\coordinate (split) at (5.1, -2.7);
 \draw (decrypt.south) -- (split);
 
 %--- DEV branch (left) ---
-\node[font=\footnotesize\bfseries] at (1.4, -2.15) {\textcolor{blue!70!black}{DEV --- k3s VPS}};
-\node[devbox] (ssh)       at (1.4, -2.7)  {SSH $\rightarrow$ VPS\\{\tiny k3s cluster}};
-\node[devbox] (apply_dev) at (1.4, -3.7)  {kubectl apply\\{\tiny -n zalord-dev}};
-\node[devbox] (roll_dev)  at (1.4, -4.7)  {rollout status\\{\tiny 180s timeout}};
+\node[devbox] (ssh)       at (1.7, -4.0)  {SSH $\rightarrow$ VPS\\{\tiny k3s cluster}};
+\node[devbox] (apply_dev) at (1.7, -5.4)  {kubectl apply\\{\tiny -n zalord-dev}};
+\node[devbox] (roll_dev)  at (1.7, -6.8)  {rollout status\\{\tiny 180s timeout}};
 
 %--- PROD branch (right) ---
-\node[font=\footnotesize\bfseries] at (7.6, -2.15) {\textcolor{green!60!black}{PROD --- GCP GKE}};
-\node[prodbox] (gke)        at (7.6, -2.7)  {gcloud get-credentials\\{\tiny GKE cluster}};
-\node[prodbox] (apply_prod) at (7.6, -3.7)  {kubectl apply\\{\tiny -n zalord-prod}};
-\node[prodbox] (roll_prod)  at (7.6, -4.7)  {rollout status\\{\tiny 180s timeout}};
+\node[prodbox] (gke)        at (8.5, -4.0)  {gcloud get-credentials\\{\tiny GKE cluster}};
+\node[prodbox] (apply_prod) at (8.5, -5.4)  {kubectl apply\\{\tiny -n zalord-prod}};
+\node[prodbox] (roll_prod)  at (8.5, -6.8)  {rollout status\\{\tiny 180s timeout}};
 
 %--- Branch arrows ---
-\draw[arr] (split) -| (ssh.north);
-\draw[arr] (split) -| (gke.north);
+\draw[arr] (split) -| node[pos=0.75, fill=white, font=\footnotesize\bfseries, text=blue!70!black, inner sep=2pt] {DEV --- k3s VPS} (ssh.north);
+\draw[arr] (split) -| node[pos=0.75, fill=white, font=\footnotesize\bfseries, text=green!60!black, inner sep=2pt] {PROD --- GCP GKE} (gke.north);
 
 %--- Dev path ---
 \draw[arr] (ssh)       -- (apply_dev);
@@ -1141,12 +1139,15 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \draw[arr] (apply_prod) -- (roll_prod);
 
 %--- Merge to promote ---
-\node[pipebox, fill=yellow!20] (promote) at (4.5, -5.8) {Promote :latest tag + Prune old images};
+\node[pipebox, fill=yellow!20] (promote) at (5.1, -8.4) {Promote :latest tag + Prune old images};
 \draw[arr] (roll_dev.south)  |- (promote.west);
 \draw[arr] (roll_prod.south) |- (promote.east);
 
 \end{tikzpicture}
 \end{center}
+\end{frame}
+
+\begin{frame}{GitHub Actions Pipeline (Req 15) --- Screenshot}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
 \centering
 \textit{GitHub Actions $\rightarrow$ tab Actions $\rightarrow$ chọn workflow run thành công $\rightarrow$ chụp màn hình các steps}
