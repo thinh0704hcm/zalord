@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: media-service
-          image: ${DOCKER_NAMESPACE}/zalord-media-service:${IMAGE_TAG}
+          image: docker.io/${DOCKER_NAMESPACE}/zalord-media-service:${IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

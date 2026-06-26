@@ -29,11 +29,13 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
               value: auth-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -113,11 +115,13 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
               value: user-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -197,11 +201,13 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
               value: message-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -281,11 +287,13 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
               value: group-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -365,11 +373,13 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
               value: media-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -449,11 +459,13 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: docker.io/library/postgres:16-alpine
           args: ["-c", "shared_buffers=64MB"]
           env:
             - name: POSTGRES_DB
               value: notification-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:

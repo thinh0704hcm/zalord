@@ -74,7 +74,7 @@ spec:
     spec:
       containers:
         - name: minio
-          image: minio/minio:latest
+          image: docker.io/minio/minio:latest
           args: ["server", "/data", "--console-address", ":9001"]
           env:
             - name: MINIO_ROOT_USER
@@ -136,7 +136,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: mc
-          image: minio/mc:latest
+          image: docker.io/minio/mc:latest
           command: ["/bin/sh", "/scripts/create-buckets.sh"]
           env:
             - name: MINIO_ENDPOINT

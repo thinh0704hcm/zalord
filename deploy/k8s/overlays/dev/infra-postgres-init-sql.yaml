@@ -87,6 +87,7 @@ data:
         conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
         user_id          UUID NOT NULL,
         joined_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+        left_at          TIMESTAMPTZ,
         CONSTRAINT conv_members_unique UNIQUE (conversation_id, user_id)
     );
 
@@ -102,10 +103,15 @@ data:
         conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
         sender_id        UUID NOT NULL,
         content          TEXT NOT NULL,
-        created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+        recalled_at      TIMESTAMPTZ,
+        reply_to_message_id UUID,
+        reply_to_sender_id  UUID,
+        reply_to_preview    VARCHAR(200)
     );
 
     CREATE INDEX idx_messages_conv_created ON messages (conversation_id, created_at DESC);
+    CREATE INDEX idx_messages_reply_to ON messages (reply_to_message_id) WHERE reply_to_message_id IS NOT NULL;
 
     CREATE TABLE message_attachments (
         message_id  UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -205,6 +211,7 @@ data:
         kind            VARCHAR(20) NOT NULL CHECK (kind IN ('AVATAR', 'ATTACHMENT')),
         conversation_id UUID,
         storage_key     VARCHAR(500) NOT NULL UNIQUE,
+        file_name       VARCHAR(255),
         mime_type       VARCHAR(100),
         size_bytes      BIGINT,
         status          VARCHAR(20) NOT NULL DEFAULT 'PENDING'
