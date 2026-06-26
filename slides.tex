@@ -65,7 +65,7 @@
 
 \begin{frame}{Giới thiệu Zalord}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Zalord là gì?}
 \begin{itemize}
   \item Ứng dụng chat real-time kiến trúc \textbf{Microservices}
@@ -75,7 +75,7 @@
 \end{itemize}
 \end{block}
 
-\column{0.5\textwidth}
+\column{0.48\textwidth}
 \begin{block}{Tech stack tổng quan}
 \begin{itemize}
   \item \textbf{Gateway}: Kong 3.7 (DB-less declarative)
@@ -233,16 +233,6 @@ notification-service & Notification & Notification \\
 \hline
 \end{tabular}
 \end{table}
-
-\begin{block}{Nguyên tắc phân chia}
-\begin{itemize}
-  \item Mỗi service có \textbf{1 bounded context} độc lập
-  \item Không share entity/table giữa các service
-  \item Giao tiếp qua \textbf{API / Event} (không gọi thẳng DB)
-  \item group.id được tái sử dụng làm conversation.id (shared key, không shared schema)
-\end{itemize}
-\end{block}
-
 \column{0.46\textwidth}
 \begin{center}
 \begin{tikzpicture}[
@@ -267,6 +257,15 @@ notification-service & Notification & Notification \\
 \end{frame}
 
 \begin{frame}{DB per Bounded Context (Req 2)}
+\begin{block}{Nguyên tắc phân chia}
+\begin{itemize}
+  \item Mỗi service có \textbf{1 bounded context} độc lập
+  \item Không share entity/table giữa các service
+  \item Giao tiếp qua \textbf{API / Event} (không gọi thẳng DB)
+  \item group.id được tái sử dụng làm conversation.id (shared key, không shared schema)
+\end{itemize}
+\end{block}
+\vspace{0.2cm}
 \begin{center}
 \begin{tikzpicture}[
   svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\tiny,
