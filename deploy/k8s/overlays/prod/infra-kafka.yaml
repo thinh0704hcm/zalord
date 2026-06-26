@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: zalord-prod
+data:
+  KAFKA_NODE_ID: "1"
+  KAFKA_PROCESS_ROLES: broker,controller
+  KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+  KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+  KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-0.kafka.zalord-prod.svc.cluster.local:9093
+  KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+  KAFKA_NUM_PARTITIONS: "3"
+  CLUSTER_ID: zalord-cluster-001
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-init-script
+  namespace: zalord-prod
+data:
+  create-topics.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    BOOTSTRAP="${KAFKA_BOOTSTRAP:-kafka:9092}"
+
+    create() {
+        local topic="$1"
+        local partitions="${2:-1}"
+        /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server "$BOOTSTRAP" \
+            --create \
+            --if-not-exists \
+            --topic "$topic" \
+            --partitions "$partitions" \
+            --replication-factor 1
+        echo "[kafka-init] ✓ $topic ($partitions partitions)"
+    }
+
+    echo "[kafka-init] waiting for broker at $BOOTSTRAP ..."
+    until /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server "$BOOTSTRAP" >/dev/null 2>&1; do
+        sleep 2
+    done
+    echo "[kafka-init] broker up, creating topics ..."
+
+    create "user.created"           1
+    create "message.created"        3
+    create "message.read"           1
+    create "group.created"          1
+    create "group.member.added"     1
+    create "group.member.removed"   1
+    create "group.updated"          1
+
+    echo "[kafka-init] all topics ready"
+    /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BOOTSTRAP" --list
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: zalord-prod
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - port: 9092
+      name: plaintext
+    - port: 9093
+      name: controller
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: zalord-prod
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: docker.io/apache/kafka:3.9.0
+          envFrom:
+            - configMapRef:
+                name: kafka-config
+          ports:
+            - containerPort: 9092
+              name: plaintext
+            - containerPort: 9093
+              name: controller
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+          resources:
+            requests:
+              memory: 512Mi
+            limits:
+              memory: 768Mi
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 60
+            periodSeconds: 15
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+  namespace: zalord-prod
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-init
+          image: docker.io/apache/kafka:3.9.0
+          command: ["/bin/bash", "/scripts/create-topics.sh"]
+          env:
+            - name: KAFKA_BOOTSTRAP
+              value: kafka:9092
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: kafka-init-script
+            defaultMode: 0755
