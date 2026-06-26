@@ -628,6 +628,8 @@ services:
     depends_on:
       auth-service:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     environment:
       KONG_DATABASE: 'off'
       KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
@@ -636,6 +638,8 @@ services:
       KONG_LOG_LEVEL: notice
       KONG_UNTRUSTED_LUA: sandbox
       KONG_UNTRUSTED_LUA_SANDBOX_REQUIRES: cjson.safe
+      KONG_TRACING_INSTRUMENTATIONS: all
+      KONG_TRACING_SAMPLING_RATE: "1.0"
       JWT_SECRET: ${JWT_SECRET}
     entrypoint:
     - /bin/sh
