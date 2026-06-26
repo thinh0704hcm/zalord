@@ -74,7 +74,7 @@ class AuthServiceImplTest {
         testUser.setPasswordHash("hashedPassword");
         testUser.setCreatedAt(Instant.now());
 
-        userDetails = new CustomUserDetails(testUser, java.util.Collections.emptyList());
+        userDetails = new CustomUserDetails(testUser, roleRepository);
     }
 
     @Test
