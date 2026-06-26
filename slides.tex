@@ -1033,22 +1033,22 @@ OpenTelemetry distributed tracing sẽ cho phép:
   state/.style={rectangle, draw, rounded corners=4pt, font=\small\bfseries,
                 align=center, minimum width=2.5cm, minimum height=0.8cm},
   arr/.style={->, >=Stealth, thick},
-  scale=0.88
+  scale=0.88, transform shape
 ]
 \node[state, fill=green!25]  (closed)   at (0, 4) {CLOSED\\{\tiny requests pass through}};
-\node[state, fill=red!25]    (open)     at (0, 2) {OPEN\\{\tiny fast-fail, fallback}};
-\node[state, fill=yellow!30] (half)     at (0, 0) {HALF-OPEN\\{\tiny 3 probe requests}};
+\node[state, fill=red!25]    (open)     at (-3, 0) {OPEN\\{\tiny fast-fail, fallback}};
+\node[state, fill=yellow!30] (half)     at (3, 0) {HALF-OPEN\\{\tiny 3 probe requests}};
 
-\draw[arr] (closed) -- (open)
-  node[midway, right, font=\tiny, align=left, text width=1.6cm] {failure rate $>$50\%\\(10-call window)};
+\draw[arr] (closed) to[bend right=20]
+  node[midway, left=0.1cm, font=\tiny, align=right, text width=1.8cm] {failure rate $>$50\%\\(10-call window)} (open);
 \draw[arr] (open) -- (half)
-  node[midway, right, font=\tiny] {wait 30s};
-\draw[arr] (half) to[bend right=45] (closed)
-  node[midway, left, font=\tiny] {3 probes OK};
-\draw[arr] (half) to[bend left=45] (open)
-  node[midway, right, font=\tiny] {any probe fails};
+  node[midway, below, font=\tiny] {wait 30s};
+\draw[arr] (half) to[bend right=20]
+  node[midway, right=0.1cm, font=\tiny] {3 probes OK} (closed);
+\draw[arr] (half) to[bend left=20]
+  node[midway, above, font=\tiny] {any probe fails} (open);
 
-\node[font=\tiny, gray] at (0, -0.8) {Resilience4j 2.2.0};
+\node[font=\tiny, gray] at (0, -1.2) {Resilience4j 2.2.0};
 \end{tikzpicture}
 \end{center}
 \end{frame}
