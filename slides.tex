@@ -815,46 +815,46 @@ CMD ["./server"]
 \end{frame}
 
 \begin{frame}{Kong --- DB-less Mode \& Route Table (Req 10)}
-\begin{columns}[T]
-\column{0.55\textwidth}
+
 \begin{block}{Declarative Config (DB-less)}
+\footnotesize
 \begin{itemize}
-  \item Config tại \texttt{infra/kong/kong.yml} --- version control được
-  \item \textbf{Cùng 1 file} cho Docker Compose (dev) và K8s (prod) --- không có config drift
-  \item \texttt{\_\_JWT\_SECRET\_\_} placeholder được \texttt{sed} substitute từ env var khi container start --- secret không lưu trong file
-  \item Kong \textbf{KHÔNG phải K8s Ingress Controller} --- standalone deployment. Xem \texttt{EXPLANATION.md} để biết lý do.
+  \item Config tại \texttt{infra/kong/kong.yml} (version control). \textbf{Cùng 1 file} cho Dev \& Prod (tránh config drift).
+  \item \texttt{\_\_JWT\_SECRET\_\_} được thay bằng env var khi start --- bảo mật secret.
+  \item \textbf{KHÔNG dùng K8s Ingress Controller} (\texttt{networking.k8s.io/v1}). Đây là \textbf{lựa chọn thiết kế} standalone (xem \texttt{EXPLANATION.md}).
 \end{itemize}
 \end{block}
-{\tiny\centering
+
+\begin{columns}[T]
+\column{0.57\textwidth}
+\begin{block}{Route Table}
+\centering\scriptsize
 \begin{tabular}{|l|l|c|}
 \hline
 \textbf{Route} & \textbf{Upstream} & \textbf{JWT} \\
 \hline
-\texttt{/api/v1/auth/\{register,login,...\}} & auth:8081 & $\times$ \\
+\texttt{/api/v1/auth/*} & auth:8081 & $\times$ \\
 \texttt{/api/v1/users} & user:8082 & \checkmark \\
-\texttt{/api/v1/\{conversations,messages,...\}} & message:8083 & \checkmark \\
+\texttt{/api/v1/messages} & message:8083 & \checkmark \\
 \texttt{/ws/chat} & chat:8084 & \checkmark \\
 \texttt{/api/v1/groups} & group-service:8085 & \checkmark \\
 \texttt{/api/v1/media} & media-service:8086 & \checkmark \\
-\texttt{/api/v1/notifications} & notification-service:8087 & \checkmark \\
+\texttt{/api/v1/notifications} & notification-svc:8087 & \checkmark \\
 \texttt{/docs} & swagger-ui:8080 & $\times$ \\
 \hline
-\end{tabular}}
+\end{tabular}
+\end{block}
 
-\column{0.43\textwidth}
+\column{0.41\textwidth}
 \begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
+\centering\footnotesize
 \textit{Kong Admin API:}\\
 \texttt{curl localhost:8001/routes}\\
+\vspace{0.2cm}
 \textit{hoặc Kong Manager UI}\\
 \textit{hiển thị danh sách routes/plugins}
 \end{alertblock}
-\vspace{0.3cm}
-\begin{alertblock}{Ingress Controller}
-Kong KHÔNG dùng \texttt{networking.k8s.io/v1 Ingress} resource.
 
-Đây là \textbf{lựa chọn thiết kế}, không phải thiếu sót. Xem \texttt{EXPLANATION.md}.
-\end{alertblock}
 \end{columns}
 \end{frame}
 
