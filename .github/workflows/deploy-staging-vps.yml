@@ -155,16 +155,21 @@ jobs:
 
           echo "Deploy bundle: $(wc -l < /tmp/zalord-k8s-staging.yaml) lines"
 
-      - name: Ensure namespace
+      - name: Ensure namespaces
         run: |
           kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace kong --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply manifests
         run: |
           set -euo pipefail
           # Delete stale init jobs
           kubectl delete job -n "$K8S_NAMESPACE" kafka-init minio-init --ignore-not-found=true --wait=true 2>/dev/null || true
-          # Apply all manifests
+          # Apply kong-namespace resources (ReferenceGrant) — uses per-resource namespace from the manifest
+          if [ -f /tmp/zalord-k8s-staging/kong-routes.yaml ]; then
+            kubectl apply -f /tmp/zalord-k8s-staging/kong-routes.yaml
+          fi
+          # Apply staging-namespace resources (everything except kong-routes)
           kubectl apply -n "$K8S_NAMESPACE" -f /tmp/zalord-k8s-staging.yaml
           echo "Apply complete"
 
