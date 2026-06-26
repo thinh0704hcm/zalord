@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"github.com/gin-gonic/gin"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/config"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/internal/events"
@@ -19,6 +20,7 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/logger"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/metrics"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/redisx"
+	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/otelx"
 	"go.uber.org/zap"
 )
 
@@ -31,6 +33,13 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// OTel tracing (reads OTEL_EXPORTER_OTLP_ENDPOINT from env).
+	otelShutdown, err := otelx.Init(ctx, "chat-service")
+	if err != nil {
+		logger.Log.Fatal("otel init failed", zap.Error(err))
+	}
+	defer func() { _ = otelShutdown(context.Background()) }()
 
 	// Redis powers the membership cache (read), presence registry, and presence
 	// pub/sub. All three are best-effort: a Redis outage degrades realtime
@@ -90,6 +99,7 @@ func main() {
 	go relay.Run(ctx)
 
 	r := gin.Default()
+	r.Use(otelgin.Middleware("chat-service"))
 	r.Use(metrics.Middleware())
 	// Prometheus scrape endpoint. Not behind auth — Prometheus scrapes
 	// directly via the docker network, never via Kong.

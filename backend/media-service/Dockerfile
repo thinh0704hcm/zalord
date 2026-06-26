@@ -17,6 +17,12 @@ FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
 RUN groupadd -r spring && useradd -r -g spring spring
+
+ARG OTEL_AGENT_VERSION=2.14.0
+ADD --chmod=444 \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar \
+    /app/opentelemetry-javaagent.jar
+
 USER spring:spring
 ARG EXTRACTED=/workspace/target/extracted
 COPY --from=build ${EXTRACTED}/dependencies/ ./

@@ -14,6 +14,12 @@ RUN ./mvnw -B -Dmaven.test.skip=true clean package \
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN addgroup -S spring && adduser -S spring -G spring
+
+ARG OTEL_AGENT_VERSION=2.14.0
+ADD --chmod=444 \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar \
+    /app/opentelemetry-javaagent.jar
+
 USER spring:spring
 ARG EXTRACTED=/workspace/target/extracted
 COPY --from=build ${EXTRACTED}/dependencies/ ./

@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"github.com/gin-gonic/gin"
 	queries "github.com/thinh0704hcm/zalord/backend/notification-service/db/sqlc"
 	docs "github.com/thinh0704hcm/zalord/backend/notification-service/docs"
@@ -20,6 +21,7 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/logger"
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/metrics"
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/mq"
+	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/otelx"
 	"go.uber.org/zap"
 )
 
@@ -40,6 +42,13 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// OTel tracing (reads OTEL_EXPORTER_OTLP_ENDPOINT from env).
+	otelShutdown, err := otelx.Init(ctx, "notification-service")
+	if err != nil {
+		logger.Log.Fatal("otel init failed", zap.Error(err))
+	}
+	defer func() { _ = otelShutdown(context.Background()) }()
 
 	pool, err := database.Connect(ctx, cfg.DbUri)
 	if err != nil {
@@ -102,6 +111,7 @@ func main() {
 
 	// HTTP
 	r := gin.Default()
+	r.Use(otelgin.Middleware("notification-service"))
 	r.Use(metrics.Middleware())
 	// Prometheus scrape endpoint — direct docker-network access, not via Kong.
 	r.GET("/metrics", metrics.Handler())

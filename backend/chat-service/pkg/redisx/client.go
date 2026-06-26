@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -31,5 +32,11 @@ func New(ctx context.Context) (*redis.Client, error) {
 		_ = cli.Close()
 		return nil, err
 	}
+
+	// Auto-instrument Redis calls with OTel spans.
+	if err := redisotel.InstrumentTracing(cli); err != nil {
+		return nil, err
+	}
+
 	return cli, nil
 }

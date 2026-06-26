@@ -1,26 +1,22 @@
 name: zalord
-
 networks:
   zalord-net:
     driver: bridge
-
 volumes:
-  pgdata_auth:
-  pgdata_user:
-  pgdata_message:
-  pgdata_group:
-  pgdata_media:
-  pgdata_notification:
-  miniodata:
-  redisdata:
-  rabbitdata:
-  kafkadata:
-  prometheus_data:
-  grafana_data:
-  frontend_node_modules:
-
+  pgdata_auth: null
+  pgdata_user: null
+  pgdata_message: null
+  pgdata_group: null
+  pgdata_media: null
+  pgdata_notification: null
+  miniodata: null
+  redisdata: null
+  rabbitdata: null
+  kafkadata: null
+  prometheus_data: null
+  grafana_data: null
+  frontend_node_modules: null
 services:
-  # ── Postgres: auth-service's database ─────────────────────────────────────
   auth-pg:
     image: postgres:16-alpine
     container_name: zalord-auth-db
@@ -28,23 +24,27 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: auth-db          
+      POSTGRES_DB: auth-db
     ports:
-      - "${POSTGRES_AUTH_HOST_PORT}:5432"
+    - ${POSTGRES_AUTH_HOST_PORT}:5432
     volumes:
-      - pgdata_auth:/var/lib/postgresql/data
-      - ./infra/postgres/init-auth.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
-    command: ["postgres", "-c", "shared_buffers=64MB"]
+    - pgdata_auth:/var/lib/postgresql/data
+    - ./infra/postgres/init-auth.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+    - postgres
+    - -c
+    - shared_buffers=64MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d auth-db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U $${POSTGRES_USER} -d auth-db
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 15s
     mem_limit: 256m
-    networks: [zalord-net]
-
-  # ── Postgres: notification-service's database ─────────────────────────────
+    networks:
+    - zalord-net
   notification-pg:
     image: postgres:16-alpine
     container_name: zalord-notification-db
@@ -54,21 +54,25 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notification-db
     ports:
-      - "${POSTGRES_NOTIFICATION_HOST_PORT}:5432"
+    - ${POSTGRES_NOTIFICATION_HOST_PORT}:5432
     volumes:
-      - pgdata_notification:/var/lib/postgresql/data
-      - ./infra/postgres/init-notification.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: ["postgres", "-c", "shared_buffers=64MB"]
+    - pgdata_notification:/var/lib/postgresql/data
+    - ./infra/postgres/init-notification.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+    - postgres
+    - -c
+    - shared_buffers=64MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d notification-db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U $${POSTGRES_USER} -d notification-db
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 15s
     mem_limit: 256m
-    networks: [zalord-net]
-
-  # ── Postgres: media-service's database (metadata only) ────────────────────
+    networks:
+    - zalord-net
   media-pg:
     image: postgres:16-alpine
     container_name: zalord-media-db
@@ -78,23 +82,25 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: media-db
     ports:
-      - "${POSTGRES_MEDIA_HOST_PORT}:5432"
+    - ${POSTGRES_MEDIA_HOST_PORT}:5432
     volumes:
-      - pgdata_media:/var/lib/postgresql/data
-      - ./infra/postgres/init-media.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: ["postgres", "-c", "shared_buffers=64MB"]
+    - pgdata_media:/var/lib/postgresql/data
+    - ./infra/postgres/init-media.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+    - postgres
+    - -c
+    - shared_buffers=64MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d media-db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U $${POSTGRES_USER} -d media-db
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 15s
     mem_limit: 256m
-    networks: [zalord-net]
-
-  # ── MinIO (S3-compatible object storage) ──────────────────────────────────
-  # API on 9000, console UI on 9001. Buckets are created by media-service at
-  # startup. Browser uploads/downloads hit localhost:9000 via presigned URLs.
+    networks:
+    - zalord-net
   minio:
     image: minio/minio:latest
     container_name: zalord-minio
@@ -102,27 +108,30 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+      MINIO_API_CORS_ALLOW_ORIGIN: '*'
     command: server /data --console-address ":9001"
     ports:
-      - "${MINIO_API_HOST_PORT}:9000"
-      - "${MINIO_CONSOLE_HOST_PORT}:9001"
+    - ${MINIO_API_HOST_PORT}:9000
+    - ${MINIO_CONSOLE_HOST_PORT}:9001
     volumes:
-      - miniodata:/data
+    - miniodata:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test:
+      - CMD
+      - mc
+      - ready
+      - local
       interval: 10s
       timeout: 5s
       retries: 6
       start_period: 10s
     mem_limit: 384m
-    networks: [zalord-net]
-
-  # ── MinIO init: one-shot bucket creation (exits after running) ────────────
+    networks:
+    - zalord-net
   minio-init:
     image: minio/mc:latest
     container_name: zalord-minio-init
-    restart: "no"
+    restart: 'no'
     depends_on:
       minio:
         condition: service_healthy
@@ -133,11 +142,12 @@ services:
       MINIO_BUCKET_AVATARS: avatars
       MINIO_BUCKET_ATTACHMENTS: attachments
     volumes:
-      - ./infra/minio/create-buckets.sh:/create-buckets.sh:ro
-    entrypoint: ["/bin/sh", "/create-buckets.sh"]
-    networks: [zalord-net]
-
-  # ── Postgres: group-service's database ────────────────────────────────────
+    - ./infra/minio/create-buckets.sh:/create-buckets.sh:ro
+    entrypoint:
+    - /bin/sh
+    - /create-buckets.sh
+    networks:
+    - zalord-net
   group-pg:
     image: postgres:16-alpine
     container_name: zalord-group-db
@@ -147,21 +157,25 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: group-db
     ports:
-      - "${POSTGRES_GROUP_HOST_PORT}:5432"
+    - ${POSTGRES_GROUP_HOST_PORT}:5432
     volumes:
-      - pgdata_group:/var/lib/postgresql/data
-      - ./infra/postgres/init-group.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: ["postgres", "-c", "shared_buffers=64MB"]
+    - pgdata_group:/var/lib/postgresql/data
+    - ./infra/postgres/init-group.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+    - postgres
+    - -c
+    - shared_buffers=64MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d group-db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U $${POSTGRES_USER} -d group-db
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 15s
     mem_limit: 256m
-    networks: [zalord-net]
-
-  # ── Postgres: message-service's database ──────────────────────────────────
+    networks:
+    - zalord-net
   message-pg:
     image: postgres:16-alpine
     container_name: zalord-message-db
@@ -171,21 +185,25 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: message-db
     ports:
-      - "${POSTGRES_MESSAGE_HOST_PORT}:5432"
+    - ${POSTGRES_MESSAGE_HOST_PORT}:5432
     volumes:
-      - pgdata_message:/var/lib/postgresql/data
-      - ./infra/postgres/init-message.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: ["postgres", "-c", "shared_buffers=64MB"]
+    - pgdata_message:/var/lib/postgresql/data
+    - ./infra/postgres/init-message.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+    - postgres
+    - -c
+    - shared_buffers=64MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d message-db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U $${POSTGRES_USER} -d message-db
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 15s
     mem_limit: 256m
-    networks: [zalord-net]
-
-  # ── Postgres: user-service's database ─────────────────────────────────────
+    networks:
+    - zalord-net
   user-pg:
     image: postgres:16-alpine
     container_name: zalord-user-db
@@ -195,48 +213,55 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: user-db
     ports:
-      - "${POSTGRES_USER_HOST_PORT}:5432"
+    - ${POSTGRES_USER_HOST_PORT}:5432
     volumes:
-      - pgdata_user:/var/lib/postgresql/data
-      - ./infra/postgres/init-user.sql:/docker-entrypoint-initdb.d/init.sql:ro   # shared init.sql
-    command: ["postgres", "-c", "shared_buffers=64MB"]
+    - pgdata_user:/var/lib/postgresql/data
+    - ./infra/postgres/init-user.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+    - postgres
+    - -c
+    - shared_buffers=64MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d user-db"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U $${POSTGRES_USER} -d user-db
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 15s
     mem_limit: 256m
-    networks: [zalord-net]
-
+    networks:
+    - zalord-net
   redis:
     image: redis:7-alpine
     container_name: zalord-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_HOST_PORT:-6380}:6379"
+    - ${REDIS_HOST_PORT:-6380}:6379
     volumes:
-      - redisdata:/data
-      - ./infra/redis/redis.conf:/etc/redis/redis.conf:ro
-    command: ["redis-server", "/etc/redis/redis.conf"]
+    - redisdata:/data
+    - ./infra/redis/redis.conf:/etc/redis/redis.conf:ro
+    command:
+    - redis-server
+    - /etc/redis/redis.conf
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+      - CMD
+      - redis-cli
+      - ping
       interval: 10s
       timeout: 3s
       retries: 12
       start_period: 5s
     mem_limit: 256m
-    networks: [zalord-net]
-
-  # ── Kafka (KRaft mode, single-node — alternative event bus to RabbitMQ) ──
-  # Used together with RabbitMQ for A/B benchmark via the EventBus interface.
-  # KRaft = no Zookeeper. Auto-creates topics on first publish (dev convenience).
+    networks:
+    - zalord-net
   kafka:
     image: apache/kafka:3.9.0
     container_name: zalord-kafka
     restart: unless-stopped
     environment:
-      KAFKA_NODE_ID: "1"
+      KAFKA_NODE_ID: '1'
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
@@ -244,42 +269,43 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_NUM_PARTITIONS: "3"
-      CLUSTER_ID: "zalord-cluster-001"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: '1'
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: '1'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_NUM_PARTITIONS: '3'
+      CLUSTER_ID: zalord-cluster-001
     ports:
-      - "${KAFKA_HOST_PORT:-9092}:9092"
+    - ${KAFKA_HOST_PORT:-9092}:9092
     volumes:
-      - kafkadata:/var/lib/kafka/data
+    - kafkadata:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1
       interval: 10s
       timeout: 10s
       retries: 12
       start_period: 30s
     mem_limit: 768m
-    networks: [zalord-net]
-
-  # ── Kafka init: one-shot topic creation (exits after running) ─────────────
+    networks:
+    - zalord-net
   kafka-init:
     image: apache/kafka:3.9.0
     container_name: zalord-kafka-init
-    restart: "no"
+    restart: 'no'
     depends_on:
       kafka:
         condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP: kafka:9092
     volumes:
-      - ./infra/kafka/create-topics.sh:/create-topics.sh:ro
-    entrypoint: ["/bin/bash", "/create-topics.sh"]
-    networks: [zalord-net]
-
-  # ── RabbitMQ (event bus — outbox publisher → consumers) ───────────────────
-  # Management UI on host port ${RABBITMQ_MGMT_HOST_PORT:-15672}.
+    - ./infra/kafka/create-topics.sh:/create-topics.sh:ro
+    entrypoint:
+    - /bin/bash
+    - /create-topics.sh
+    networks:
+    - zalord-net
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: zalord-rabbitmq
@@ -288,24 +314,25 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
-      - "${RABBITMQ_HOST_PORT:-5672}:5672"
-      - "${RABBITMQ_MGMT_HOST_PORT:-15672}:15672"
-      # Prometheus scrape endpoint. The rabbitmq_prometheus plugin (enabled
-      # via enabled_plugins below) serves /metrics on this port.
-      - "${RABBITMQ_PROM_HOST_PORT:-15692}:15692"
+    - ${RABBITMQ_HOST_PORT:-5672}:5672
+    - ${RABBITMQ_MGMT_HOST_PORT:-15672}:15672
+    - ${RABBITMQ_PROM_HOST_PORT:-15692}:15692
     volumes:
-      - rabbitdata:/var/lib/rabbitmq
-      # Override the default plugin list to add rabbitmq_prometheus.
-      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    - rabbitdata:/var/lib/rabbitmq
+    - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test:
+      - CMD
+      - rabbitmq-diagnostics
+      - -q
+      - ping
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 20s
     mem_limit: 384m
-    networks: [zalord-net]
-
+    networks:
+    - zalord-net
   auth-service:
     build:
       context: ./backend/auth-service
@@ -320,34 +347,42 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      SERVER_PORT: "8081"
-      POSTGRES_HOST: auth-pg      # hardcoded — this service only knows its own DB
-      POSTGRES_PORT: "5432"
+      SERVER_PORT: '8081'
+      POSTGRES_HOST: auth-pg
+      POSTGRES_PORT: '5432'
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      REDIS_PORT: '6379'
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: "5672"
+      RABBITMQ_PORT: '5672'
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES}
       REFRESH_EXPIRY_DAYS: ${REFRESH_EXPIRY_DAYS}
-      JWT_ISSUER: ${JWT_ISSUER}      # must equal kong.yml consumer key ("zalord")
-      # gRPC target for user-service internal API (CreateProfile during register).
+      JWT_ISSUER: ${JWT_ISSUER}
       ZALORD_USER_SERVICE_GRPC_TARGET: user-service:9082
+      JAVA_OPTS: -javaagent:/app/opentelemetry-javaagent.jar
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=vps,service.namespace=zalord
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_SERVICE_NAME: auth-service
     ports:
-      - "${AUTH_SERVICE_HOST_PORT}:8081"
+    - ${AUTH_SERVICE_HOST_PORT}:8081
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1
       interval: 10s
       timeout: 3s
       retries: 6
       start_period: 30s
     mem_limit: 512m
-    networks: [zalord-net]
-  
+    networks:
+    - zalord-net
   user-service:
     build:
       context: ./backend/user-service
@@ -359,29 +394,27 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      # redis:
-      #   condition: service_healthy
     environment:
-      SERVER_PORT: "8082"
-      GRPC_PORT: "9082"
+      SERVER_PORT: '8082'
+      GRPC_PORT: '9082'
       DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@user-pg:5432/user-db
       MQ_URI: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      # REDIS_HOST: redis
-      # REDIS_PORT: "6379"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=vps,service.namespace=zalord
+      OTEL_SERVICE_NAME: user-service
     ports:
-      - "${USER_SERVICE_HOST_PORT}:8082"
+    - ${USER_SERVICE_HOST_PORT}:8082
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:8082/health >/dev/null 2>&1
       interval: 10s
       timeout: 3s
       retries: 6
       start_period: 10s
     mem_limit: 128m
-    networks: [zalord-net]
-
-  # ── message-service ────────────────────────────────────────────────────────
-  # Java/Spring. Owns conversations + messages. Publishes message.created via
-  # outbox → RabbitMQ for downstream consumers (chat-service WebSocket, etc).
+    networks:
+    - zalord-net
   message-service:
     build:
       context: ./backend/message-service
@@ -398,39 +431,40 @@ services:
       media-service:
         condition: service_healthy
     environment:
-      SERVER_PORT: "8083"
+      SERVER_PORT: '8083'
       POSTGRES_HOST: message-pg
-      POSTGRES_PORT: "5432"
+      POSTGRES_PORT: '5432'
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: "5672"
+      RABBITMQ_PORT: '5672'
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      # EventBus selector for message.created chain. Must match chat-service
-      # and notification-service so they all read from the same broker.
+      REDIS_PORT: '6379'
       EVENT_BUS: ${EVENT_BUS:-rabbitmq}
       KAFKA_BOOTSTRAP: kafka:9092
-      # Sync gRPC into media-service to validate attachment ids before
-      # persisting a message with attached files.
       ZALORD_MEDIA_SERVICE_GRPC_TARGET: media-service:9086
+      JAVA_OPTS: -javaagent:/app/opentelemetry-javaagent.jar
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=vps,service.namespace=zalord
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_SERVICE_NAME: message-service
     ports:
-      - "${MESSAGE_SERVICE_HOST_PORT}:8083"
+    - ${MESSAGE_SERVICE_HOST_PORT}:8083
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:8083/actuator/health >/dev/null 2>&1
       interval: 10s
       timeout: 3s
       retries: 6
       start_period: 30s
     mem_limit: 512m
-    networks: [zalord-net]
-
-  # ── notification-service (Go) — bell icon feed ────────────────────────────
-  # Consumes message.created + group.* events, projects per-user notifications.
-  # Distinct from CQRS inbox: inbox = conversation-level unread; this = per-event
-  # alerts ("Alice added you to a group", "5 new messages in 'Trio'").
+    networks:
+    - zalord-net
   notification-service:
     build:
       context: ./backend/notification-service
@@ -443,25 +477,27 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      SERVER_PORT: "8087"
+      SERVER_PORT: '8087'
       DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@notification-pg:5432/notification-db
       MQ_URI: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       EVENT_BUS: ${EVENT_BUS:-rabbitmq}
       KAFKA_BOOTSTRAP: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=vps,service.namespace=zalord
+      OTEL_SERVICE_NAME: notification-service
     ports:
-      - "${NOTIFICATION_SERVICE_HOST_PORT}:8087"
+    - ${NOTIFICATION_SERVICE_HOST_PORT}:8087
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8087/health >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:8087/health >/dev/null 2>&1
       interval: 10s
       timeout: 3s
       retries: 6
       start_period: 10s
     mem_limit: 128m
-    networks: [zalord-net]
-
-  # ── media-service ──────────────────────────────────────────────────────────
-  # Issues presigned PUT/GET URLs to MinIO. For ATTACHMENT downloads, checks
-  # conversation membership via Redis (cache populated by message-service).
+    networks:
+    - zalord-net
   media-service:
     build:
       context: ./backend/media-service
@@ -476,39 +512,40 @@ services:
       redis:
         condition: service_healthy
     environment:
-      SERVER_PORT: "8086"
+      SERVER_PORT: '8086'
       POSTGRES_HOST: media-pg
-      POSTGRES_PORT: "5432"
+      POSTGRES_PORT: '5432'
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      # Internal endpoint (in-container API calls like headObject).
+      REDIS_PORT: '6379'
       MINIO_INTERNAL_ENDPOINT: http://minio:9000
-      # PUBLIC endpoint baked into presigned URLs (must be reachable from browser).
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_AVATARS: avatars
       MINIO_BUCKET_ATTACHMENTS: attachments
-      # Internal gRPC server (ValidateAttachments) — message-service calls in
-      # over the docker network; not routed through Kong.
-      ZALORD_GRPC_PORT: "9086"
+      ZALORD_GRPC_PORT: '9086'
+      JAVA_OPTS: -javaagent:/app/opentelemetry-javaagent.jar
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=vps,service.namespace=zalord
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_SERVICE_NAME: media-service
     ports:
-      - "${MEDIA_SERVICE_HOST_PORT}:8086"
+    - ${MEDIA_SERVICE_HOST_PORT}:8086
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/actuator/health >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:8086/actuator/health >/dev/null 2>&1
       interval: 10s
       timeout: 3s
       retries: 6
       start_period: 30s
     mem_limit: 512m
-    networks: [zalord-net]
-
-  # ── group-service ──────────────────────────────────────────────────────────
-  # Owns groups + members. Publishes group.* events; message-service consumes
-  # them and projects Conversation + ConversationMember rows (group.id reused
-  # as conversation.id so message routing works transparently).
+    networks:
+    - zalord-net
   group-service:
     build:
       context: ./backend/group-service
@@ -521,30 +558,35 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      SERVER_PORT: "8085"
+      SERVER_PORT: '8085'
       POSTGRES_HOST: group-pg
-      POSTGRES_PORT: "5432"
+      POSTGRES_PORT: '5432'
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: "5672"
+      RABBITMQ_PORT: '5672'
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      JAVA_OPTS: -javaagent:/app/opentelemetry-javaagent.jar
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=vps,service.namespace=zalord
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_SERVICE_NAME: group-service
     ports:
-      - "${GROUP_SERVICE_HOST_PORT}:8085"
+    - ${GROUP_SERVICE_HOST_PORT}:8085
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:8085/actuator/health >/dev/null 2>&1
       interval: 10s
       timeout: 3s
       retries: 6
       start_period: 30s
     mem_limit: 512m
-    networks: [zalord-net]
-
-  # ── chat-service (Go, WebSocket gateway) ──────────────────────────────────
-  # Consumes message.created from RabbitMQ and pushes via WebSocket to online
-  # recipients. In-memory session registry (single-instance for now; Redis
-  # planned for multi-instance per docs/architecture.md).
+    networks:
+    - zalord-net
   chat-service:
     build:
       context: ./backend/chat-service
@@ -557,30 +599,28 @@ services:
       redis:
         condition: service_healthy
     environment:
-      SERVER_PORT: "8084"
+      SERVER_PORT: '8084'
       MQ_URI: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       EVENT_BUS: ${EVENT_BUS:-rabbitmq}
       KAFKA_BOOTSTRAP: kafka:9092
-      # Redis powers the membership-lookup cache + presence (online/offline)
-      # registry + presence pub/sub for cross-instance fan-out.
       REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      REDIS_PORT: '6379'
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=vps,service.namespace=zalord
+      OTEL_SERVICE_NAME: chat-service
     ports:
-      - "${CHAT_SERVICE_HOST_PORT}:8084"
+    - ${CHAT_SERVICE_HOST_PORT}:8084
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/health >/dev/null 2>&1"]
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:8084/health >/dev/null 2>&1
       interval: 10s
       timeout: 3s
       retries: 6
       start_period: 10s
     mem_limit: 128m
-    networks: [zalord-net]
-
-  # ── Kong (API Gateway, DB-less) ───────────────────────────────────────────
-  # Validates JWT at the edge and injects X-User-Id so backend services never
-  # parse a token. Declarative config in infra/kong/kong.yml.
-  #   Proxy : host ${KONG_PROXY_HOST_PORT:-8080} -> 8000  (client traffic)
-  #   Admin : host ${KONG_ADMIN_HOST_PORT:-8001} -> 8001  (config/debug; keep off public)
+    networks:
+    - zalord-net
   kong:
     image: kong:3.7
     container_name: zalord-kong
@@ -589,86 +629,71 @@ services:
       auth-service:
         condition: service_healthy
     environment:
-      KONG_DATABASE: "off"
-      # Read the SUBSTITUTED config (see `command` below), not the raw mounted one.
+      KONG_DATABASE: 'off'
       KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
-      KONG_PROXY_LISTEN: "0.0.0.0:8000"
-      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_LOG_LEVEL: notice
-      # Serverless pre-function (X-User-Id injection) needs the Lua sandbox.
-      KONG_UNTRUSTED_LUA: "sandbox"
-      # Allow the pre-function to `require("cjson.safe")` inside the sandbox.
-      KONG_UNTRUSTED_LUA_SANDBOX_REQUIRES: "cjson.safe"
-      # JWT secret, kept out of git. The `command` below substitutes it into the
-      # config at startup; the value lives only in .env. (Kong's env vault can't
-      # be used here — its nginx workers don't inherit the env var at request
-      # time, so signature verification fails.)
+      KONG_UNTRUSTED_LUA: sandbox
+      KONG_UNTRUSTED_LUA_SANDBOX_REQUIRES: cjson.safe
       JWT_SECRET: ${JWT_SECRET}
-    # Substitute the __JWT_SECRET__ placeholder in the read-only mounted config
-    # into a writable copy, then hand off to Kong's normal entrypoint. `$$`
-    # escapes compose interpolation so the shell reads JWT_SECRET from the
-    # container env at runtime (secret never appears in the compose file).
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint:
+    - /bin/sh
+    - -c
     command:
-      - |
-        sed "s|__JWT_SECRET__|$$JWT_SECRET|g" /kong/kong.yml > /tmp/kong.yml
-        exec /docker-entrypoint.sh kong docker-start
+    - 'sed "s|__JWT_SECRET__|$$JWT_SECRET|g" /kong/kong.yml > /tmp/kong.yml
+
+      exec /docker-entrypoint.sh kong docker-start
+
+      '
     ports:
-      - "${KONG_PROXY_HOST_PORT:-8080}:8000"
-      - "${KONG_ADMIN_HOST_PORT:-8001}:8001"
+    - ${KONG_PROXY_HOST_PORT:-8080}:8000
+    - ${KONG_ADMIN_HOST_PORT:-8001}:8001
     volumes:
-      - ./infra/kong:/kong:ro
+    - ./infra/kong:/kong:ro
     healthcheck:
-      test: ["CMD", "kong", "health"]
+      test:
+      - CMD
+      - kong
+      - health
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 15s
     mem_limit: 512m
-    networks: [zalord-net]
-
-  # ── Swagger UI (dev only — aggregated API docs) ───────────────────────────
-  # Single UI with a dropdown over every service's OpenAPI spec. Not exposed to
-  # the host: reached only through Kong at http://localhost:${KONG_PROXY_HOST_PORT}/docs.
-  # URLS are origin-relative (same origin as the UI via Kong) → no CORS.
-  # Add an entry to URLS for each new service whose /v3/api-docs you route.
+    networks:
+    - zalord-net
   swagger-ui:
     image: swaggerapi/swagger-ui:latest
     container_name: zalord-swagger
     restart: unless-stopped
     environment:
-      BASE_URL: /docs                         # must match the Kong route path
+      BASE_URL: /docs
       URLS: '[{"url":"/api-docs/auth","name":"auth-service"},{"url":"/api-docs/user","name":"user-service"},{"url":"/api-docs/message","name":"message-service"},{"url":"/api-docs/group","name":"group-service"},{"url":"/api-docs/media","name":"media-service"},{"url":"/api-docs/notification","name":"notification-service"}]'
       URLS_PRIMARY_NAME: auth-service
     mem_limit: 64m
-    networks: [zalord-net]
-
-  # ── Frontend dev server (Vite hot reload) ─────────────────────────────────
-  # Source is bind-mounted from ./frontend. node_modules stays in a Docker
-  # volume so the VPS host does not need npm packages installed.
+    networks:
+    - zalord-net
   frontend:
     image: node:24-alpine
     container_name: zalord-frontend
     restart: unless-stopped
     working_dir: /app
     environment:
-      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_USEPOLLING: 'true'
       FRONTEND_CONTAINER_PORT: ${FRONTEND_CONTAINER_PORT:-15173}
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api/v1}
       VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8080/ws/chat}
-    command: sh -c "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port $${FRONTEND_CONTAINER_PORT:-15173} --strictPort"
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port $${FRONTEND_CONTAINER_PORT:-15173}
+      --strictPort"
     ports:
-      - "127.0.0.1:${FRONTEND_HOST_PORT:-15173}:${FRONTEND_CONTAINER_PORT:-15173}"
+    - 127.0.0.1:${FRONTEND_HOST_PORT:-15173}:${FRONTEND_CONTAINER_PORT:-15173}
     volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
+    - ./frontend:/app
+    - frontend_node_modules:/app/node_modules
     mem_limit: 512m
-    networks: [zalord-net]
-
-  # ── kafka-exporter — translates JMX/Admin-API to Prometheus metrics ───────
-  # apache/kafka image doesn't ship a Prometheus endpoint. This sidecar runs
-  # in the same docker network, polls the broker, and serves /metrics on :9308.
-  # Headline metrics for the thesis: consumer-group lag per topic+partition.
+    networks:
+    - zalord-net
   kafka-exporter:
     image: danielqsj/kafka-exporter:latest
     container_name: zalord-kafka-exporter
@@ -677,12 +702,11 @@ services:
       kafka:
         condition: service_healthy
     command:
-      - --kafka.server=kafka:9092
-      - --log.level=info
+    - --kafka.server=kafka:9092
+    - --log.level=info
     mem_limit: 64m
-    networks: [zalord-net]
-
-  # ── Prometheus — scrapes every app + infra exporter every 15s ─────────────
+    networks:
+    - zalord-net
   prometheus:
     image: prom/prometheus:v2.55.1
     container_name: zalord-prometheus
@@ -691,21 +715,18 @@ services:
       kong:
         condition: service_healthy
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=7d
-      - --web.enable-lifecycle           # /-/reload for hot config reload
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=7d
+    - --web.enable-lifecycle
     ports:
-      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    - ${PROMETHEUS_HOST_PORT:-9090}:9090
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
+    - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus_data:/prometheus
     mem_limit: 256m
-    networks: [zalord-net]
-
-  # ── Grafana — datasource + dashboard provisioned at startup ───────────────
-  # No DB/setup wizard — first boot reads /etc/grafana/provisioning and is
-  # immediately usable. Admin login: admin/admin (override via env in prod).
+    networks:
+    - zalord-net
   grafana:
     image: grafana/grafana:11.3.0
     container_name: zalord-grafana
@@ -716,15 +737,51 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_SIGN_UP: 'false'
     ports:
-      - "${GRAFANA_HOST_PORT:-3000}:3000"
+    - ${GRAFANA_HOST_PORT:-3000}:3000
     volumes:
-      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana_data:/var/lib/grafana
+    - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    - grafana_data:/var/lib/grafana
     mem_limit: 192m
-    networks: [zalord-net]
-
+    networks:
+    - zalord-net
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    container_name: zalord-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports:
+    - ${JAEGER_UI_HOST_PORT:-16686}:16686
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -qO- http://localhost:14269/ > /dev/null 2>&1
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    mem_limit: 512m
+    networks:
+    - zalord-net
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    container_name: zalord-otel-collector
+    restart: unless-stopped
+    depends_on:
+      jaeger:
+        condition: service_healthy
+    command:
+    - --config=/etc/otelcol/config.yaml
+    volumes:
+    - ./infra/otel/otelcol-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+    - ${OTEL_COLLECTOR_GRPC_HOST_PORT:-4317}:4317
+    - ${OTEL_COLLECTOR_HTTP_HOST_PORT:-4318}:4318
+    mem_limit: 256m
+    networks:
+    - zalord-net
