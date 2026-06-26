@@ -7,4 +7,5 @@ data:
   POSTGRES_HOST: message-pg
   POSTGRES_PORT: "5432"
   SERVER_PORT: "8083"
-  ZALORD_MEDIA_SERVICE_GRPC_TARGET: media-service:9086
+   ZALORD_MEDIA_SERVICE_GRPC_TARGET: media-service:9086
+   OTEL_SERVICE_NAME: message-service
