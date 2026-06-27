@@ -7,6 +7,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/thinh0704hcm/zalord/backend/chat-service/pkg/logger"
 	"go.uber.org/zap"
+
 )
 
 type HandlerFunc func(ctx context.Context, body []byte) error
@@ -50,11 +51,15 @@ func (c *Consumer) Consume(ctx context.Context, queue string, handler HandlerFun
 }
 
 func (c *Consumer) dispatch(ctx context.Context, handler HandlerFunc, msg amqp.Delivery) {
-	err := handler(ctx, msg.Body)
+	msgCtx, span := startConsumerSpan(ctx, msg.Headers, msg.RoutingKey)
+	defer span.End()
+
+	err := handler(msgCtx, msg.Body)
 	if err == nil {
 		_ = msg.Ack(false)
 		return
 	}
+	span.RecordError(err)
 	var perm *PermanentError
 	if errors.As(err, &perm) {
 		logger.Log.Warn("permanent error, dropping", zap.Error(err))
