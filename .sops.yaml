@@ -3,7 +3,7 @@ creation_rules:
     age: age1gsw3rsazcn7x6mt70xuw4xedffaxdukadl4xw6ll5vz0qe8ep3gs6he35k
     encrypted_regex: "^(data|stringData)$"
   - path_regex: deploy/k8s/overlays/staging/.*-secret\.enc\.yaml$
-    age: age1fz93gkdk5ytwghkmvxhr7vulgx6haqnwng9l30ka2e5m79r2cvxsrjnyhs
+    age: age1w6jg3u538kktaazrwkh0spqlncydp7c7y9eepxxg9upxn254geysk9q0ka
     encrypted_regex: "^(data|stringData)$"
   - path_regex: deploy/k8s/overlays/prod/.*-secret\.enc\.yaml$
     age: age19ejm0l5e55vsf6g4r2zg2kwfdczyree4j4hj4uqt2eptxwnwfgssx4qmk3
