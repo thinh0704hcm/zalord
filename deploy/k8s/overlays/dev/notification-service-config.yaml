@@ -5,6 +5,7 @@ data:
   DB_PORT: "5432"
   MQ_HOST: rabbitmq
   MQ_PORT: "5672"
+  OTEL_SERVICE_NAME: notification-service
   SERVER_PORT: "8087"
 kind: ConfigMap
 metadata:

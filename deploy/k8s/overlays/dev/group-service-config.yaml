@@ -1,10 +1,10 @@
 apiVersion: v1
 data:
+  OTEL_SERVICE_NAME: group-service
   POSTGRES_DB: group-db
   POSTGRES_HOST: group-pg
   POSTGRES_PORT: "5432"
-   SERVER_PORT: "8085"
-   OTEL_SERVICE_NAME: group-service
+  SERVER_PORT: "8085"
 kind: ConfigMap
 metadata:
   name: group-service-config

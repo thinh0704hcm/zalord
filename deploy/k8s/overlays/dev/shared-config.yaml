@@ -4,6 +4,8 @@ data:
   JWT_EXPIRY_MINUTES: "15"
   JWT_ISSUER: zalord
   KAFKA_BOOTSTRAP: kafka:9092
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment=k8s-dev,service.namespace=zalord
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
   REDIS_HOST: redis

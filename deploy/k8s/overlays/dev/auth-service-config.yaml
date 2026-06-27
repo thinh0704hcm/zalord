@@ -5,8 +5,8 @@ data:
   POSTGRES_PORT: "5432"
   REFRESH_EXPIRY_DAYS: "7"
   SERVER_PORT: "8081"
-   ZALORD_USER_SERVICE_GRPC_TARGET: user-service:9082
-   OTEL_SERVICE_NAME: auth-service
+  ZALORD_USER_SERVICE_GRPC_TARGET: user-service:9082
+  OTEL_SERVICE_NAME: auth-service
 kind: ConfigMap
 metadata:
   name: auth-service-config
