@@ -12,7 +12,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      auth-service: ${{ steps.filter.outputs.auth-service }}
+      user-service: ${{ steps.filter.outputs.user-service }}
+      message-service: ${{ steps.filter.outputs.message-service }}
+      chat-service: ${{ steps.filter.outputs.chat-service }}
+      group-service: ${{ steps.filter.outputs.group-service }}
+      media-service: ${{ steps.filter.outputs.media-service }}
+      notification-service: ${{ steps.filter.outputs.notification-service }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            auth-service:
+              - 'backend/auth-service/**'
+            user-service:
+              - 'backend/user-service/**'
+            message-service:
+              - 'backend/message-service/**'
+            chat-service:
+              - 'backend/chat-service/**'
+            group-service:
+              - 'backend/group-service/**'
+            media-service:
+              - 'backend/media-service/**'
+            notification-service:
+              - 'backend/notification-service/**'
+            frontend:
+              - 'frontend/**'
+
   java:
+    needs: [changes]
+    if: |
+      needs.changes.outputs.auth-service == 'true' ||
+      needs.changes.outputs.message-service == 'true' ||
+      needs.changes.outputs.group-service == 'true' ||
+      needs.changes.outputs.media-service == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -29,6 +69,11 @@ jobs:
         working-directory: backend/${{ matrix.service }}
 
   go:
+    needs: [changes]
+    if: |
+      needs.changes.outputs.user-service == 'true' ||
+      needs.changes.outputs.chat-service == 'true' ||
+      needs.changes.outputs.notification-service == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -47,8 +92,20 @@ jobs:
         working-directory: backend/${{ matrix.service }}
 
   build:
-    needs: [java, go]
-    if: github.event_name == 'push'
+    needs: [changes, java, go]
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      (needs.java.result == 'success' || needs.java.result == 'skipped') &&
+      (needs.go.result == 'success' || needs.go.result == 'skipped') &&
+      (needs.changes.outputs.auth-service == 'true' ||
+       needs.changes.outputs.user-service == 'true' ||
+       needs.changes.outputs.message-service == 'true' ||
+       needs.changes.outputs.chat-service == 'true' ||
+       needs.changes.outputs.group-service == 'true' ||
+       needs.changes.outputs.media-service == 'true' ||
+       needs.changes.outputs.notification-service == 'true' ||
+       needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
     env:
       IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
@@ -64,22 +121,39 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Build & push all services
+      - name: Build & push changed services
+        env:
+          AUTH_SERVICE: ${{ needs.changes.outputs.auth-service }}
+          USER_SERVICE: ${{ needs.changes.outputs.user-service }}
+          MESSAGE_SERVICE: ${{ needs.changes.outputs.message-service }}
+          CHAT_SERVICE: ${{ needs.changes.outputs.chat-service }}
+          GROUP_SERVICE: ${{ needs.changes.outputs.group-service }}
+          MEDIA_SERVICE: ${{ needs.changes.outputs.media-service }}
+          NOTIFICATION_SERVICE: ${{ needs.changes.outputs.notification-service }}
+          FRONTEND: ${{ needs.changes.outputs.frontend }}
         run: |
           set -euo pipefail
-          services="auth-service user-service message-service chat-service group-service media-service notification-service"
-          for svc in $services; do
-            echo "Building zalord-$svc:$IMAGE_TAG..."
+          build_service() {
+            local name=$1 changed=$2 dir=$3
+            if [ "$changed" != "true" ]; then
+              echo "Skipping zalord-$name (no changes)"
+              return
+            fi
+            echo "Building zalord-$name:$IMAGE_TAG..."
             docker buildx build \
               --platform linux/amd64,linux/arm64 \
               --push \
-              -t "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}" \
-              "backend/$svc"
-          done
-          echo "Building zalord-frontend:$IMAGE_TAG..."
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --push \
-            -t "docker.io/$DOCKER_NAMESPACE/zalord-frontend:${IMAGE_TAG}" \
-            "frontend"
-          echo "All images pushed with tag $IMAGE_TAG"
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${IMAGE_TAG}" \
+              "$dir"
+          }
+
+          build_service "auth-service"       "$AUTH_SERVICE"       "backend/auth-service"
+          build_service "user-service"       "$USER_SERVICE"       "backend/user-service"
+          build_service "message-service"    "$MESSAGE_SERVICE"    "backend/message-service"
+          build_service "chat-service"       "$CHAT_SERVICE"       "backend/chat-service"
+          build_service "group-service"      "$GROUP_SERVICE"      "backend/group-service"
+          build_service "media-service"      "$MEDIA_SERVICE"      "backend/media-service"
+          build_service "notification-service" "$NOTIFICATION_SERVICE" "backend/notification-service"
+          build_service "frontend"           "$FRONTEND"           "frontend"
+
+          echo "Done. Built tag: $IMAGE_TAG"
