@@ -78,6 +78,11 @@ spec:
       labels:
         app: otel-collector
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: con-cac-tao
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
       containers:
         - name: otel-collector
           image: docker.io/otel/opentelemetry-collector-contrib:0.121.0

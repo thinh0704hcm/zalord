@@ -34,6 +34,8 @@ spec:
             - name: http
               containerPort: 8081
           env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-javaagent:/app/opentelemetry-javaagent.jar"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4317"
           envFrom:

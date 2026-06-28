@@ -32,6 +32,11 @@ spec:
       labels:
         app: jaeger
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: con-cac-tao
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
       containers:
         - name: jaeger
           image: docker.io/jaegertracing/all-in-one:1.76.0
