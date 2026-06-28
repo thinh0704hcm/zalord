@@ -46,21 +46,26 @@ config:
       return val
     end
 
+    -- Extract token from Authorization header or query string (?token=...)
+    local token = nil
     local auth_header = kong.request.get_header("Authorization")
     if auth_header then
-      local token = string.match(auth_header, "^Bearer%s+(.+)$")
-      if token then
-        local payload_b64 = string.match(token, "^[^%.]+%.([^%.]+)%.")
-        if payload_b64 then
-          local payload_json = base64_decode(payload_b64)
-          local sub = extract_json_value(payload_json, "sub")
-          local roles = extract_json_value(payload_json, "roles")
-          if sub then
-            kong.service.request.set_header("X-User-Id", sub)
-          end
-          if roles then
-            kong.service.request.set_header("X-User-Roles", roles)
-          end
+      token = string.match(auth_header, "^Bearer%s+(.+)$")
+    end
+    if not token then
+      token = kong.request.get_query_arg("token")
+    end
+    if token then
+      local payload_b64 = string.match(token, "^[^%.]+%.([^%.]+)%.")
+      if payload_b64 then
+        local payload_json = base64_decode(payload_b64)
+        local sub = extract_json_value(payload_json, "sub")
+        local roles = extract_json_value(payload_json, "roles")
+        if sub then
+          kong.service.request.set_header("X-User-Id", sub)
+        end
+        if roles then
+          kong.service.request.set_header("X-User-Roles", roles)
         end
       end
     end
