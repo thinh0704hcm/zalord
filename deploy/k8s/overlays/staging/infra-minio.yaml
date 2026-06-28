@@ -8,7 +8,7 @@ data:
     #!/usr/bin/env sh
     set -e
 
-    ENDPOINT="${MINIO_ENDPOINT:-http://minio:19000}"
+    ENDPOINT="${MINIO_ENDPOINT:-http://minio:9000}"
     ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
     ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
     BUCKET_AVATARS="${MINIO_BUCKET_AVATARS:-avatars}"
@@ -40,6 +40,7 @@ data:
     echo "[minio-init] done"
     mc ls local
 ---
+# Headless Service for k8s DNS resolution (minio.zalord-staging.svc)
 apiVersion: v1
 kind: Service
 metadata:
@@ -47,82 +48,28 @@ metadata:
   namespace: zalord-staging
 spec:
   clusterIP: None
-  selector:
-    app: minio
   ports:
-    - port: 19000
+    - port: 9000
       targetPort: 9000
       name: api
     - port: 9001
+      targetPort: 9001
       name: console
 ---
-apiVersion: apps/v1
-kind: StatefulSet
+# Manual Endpoints pointing to host MinIO (runs on k3s node as systemd service)
+apiVersion: v1
+kind: Endpoints
 metadata:
   name: minio
   namespace: zalord-staging
-spec:
-  serviceName: minio
-  replicas: 1
-  selector:
-    matchLabels:
-      app: minio
-  template:
-    metadata:
-      labels:
-        app: minio
-    spec:
-      containers:
-        - name: minio
-          image: docker.io/minio/minio:latest
-          args: ["server", "/data", "--console-address", ":9001"]
-          env:
-            - name: MINIO_ROOT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: media-service-secret
-                  key: MINIO_ACCESS_KEY
-            - name: MINIO_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: media-service-secret
-                  key: MINIO_SECRET_KEY
-            - name: MINIO_API_CORS_ALLOW_ORIGIN
-              value: "*"
-          ports:
-            - containerPort: 9000
-              name: api
-            - containerPort: 9001
-              name: console
-          volumeMounts:
-            - name: data
-              mountPath: /data
-          resources:
-            requests:
-              memory: 256Mi
-            limits:
-              memory: 384Mi
-          readinessProbe:
-            httpGet:
-              path: /minio/health/live
-              port: 9000
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 12
-          livenessProbe:
-            httpGet:
-              path: /minio/health/live
-              port: 9000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: [ReadWriteOnce]
-        resources:
-          requests:
-            storage: 10Gi
+subsets:
+  - addresses:
+      - ip: 100.125.80.68   # Tailscale IP of oracle-vps (control-plane, runs host MinIO)
+    ports:
+      - port: 9000
+        name: api
+      - port: 9001
+        name: console
 ---
 apiVersion: batch/v1
 kind: Job
@@ -140,7 +87,7 @@ spec:
           command: ["/bin/sh", "/scripts/create-buckets.sh"]
           env:
             - name: MINIO_ENDPOINT
-              value: "http://minio:19000"
+              value: "http://minio:9000"
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:

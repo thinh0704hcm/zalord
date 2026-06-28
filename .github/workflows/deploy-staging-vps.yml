@@ -172,8 +172,9 @@ jobs:
           cp deploy/k8s/overlays/staging/*-config.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
           cp deploy/k8s/overlays/staging/infra-*.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
 
-          # Kong routes
+          # Kong routes + plugins
           cp deploy/k8s/overlays/staging/kong-routes.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
+          cp deploy/k8s/overlays/staging/kong-plugins.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
 
           # Decrypt secrets
           for secret in deploy/k8s/overlays/staging/*-secret.enc.yaml; do
@@ -219,17 +220,55 @@ jobs:
           kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
           kubectl create namespace kong --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Enable Kong pre-function plugin
+        run: |
+          # Ensure pre-function is in KONG_PLUGINS so Lua KongPlugins work
+          current=$(kubectl get deploy kong-kong -n kong -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KONG_PLUGINS")].value}' 2>/dev/null || echo "")
+          if [[ "$current" != *"pre-function"* ]]; then
+            helm upgrade kong kong/kong --namespace kong \
+              --set proxy.type=NodePort \
+              --set proxy.http.nodePort=30080 \
+              --set proxy.tls.nodePort=30443 \
+              --set ingressController.enabled=true \
+              --set admin.enabled=false \
+              --reuse-values 2>/dev/null || true
+            # Patch env directly if Helm reuse-values fails
+            kubectl set env deploy/kong-kong -n kong KONG_PLUGINS=bundled,pre-function 2>/dev/null || true
+            kubectl rollout status deploy/kong-kong -n kong --timeout=120s
+            echo "Kong pre-function plugin enabled"
+          else
+            echo "Kong pre-function already enabled"
+          fi
+
+      - name: Clean stale Gateway API resources
+        run: |
+          # k3s KIC doesn't process Gateway API HTTPRoutes — clean them up
+          kubectl delete httproute --all -n "$K8S_NAMESPACE" 2>/dev/null || true
+          kubectl delete httproute --all -n kong 2>/dev/null || true
+
       - name: Apply manifests
         run: |
           set -euo pipefail
           # Delete stale init jobs
           kubectl delete job -n "$K8S_NAMESPACE" kafka-init minio-init --ignore-not-found=true --wait=true 2>/dev/null || true
-          # Apply kong-namespace resources (ReferenceGrant) — uses per-resource namespace from the manifest
+          # Apply KongPlugin (in staging namespace)
+          if [ -f /tmp/zalord-k8s-staging/kong-plugins.yaml ]; then
+            kubectl apply -f /tmp/zalord-k8s-staging/kong-plugins.yaml
+          fi
+          # Apply kong-namespace resources (Ingresses)
           if [ -f /tmp/zalord-k8s-staging/kong-routes.yaml ]; then
             kubectl apply -f /tmp/zalord-k8s-staging/kong-routes.yaml
           fi
-          # Apply staging-namespace resources (everything except kong-routes)
-          kubectl apply -n "$K8S_NAMESPACE" -f /tmp/zalord-k8s-staging.yaml
+          # Apply staging-namespace resources (everything except kong-routes and kong-plugins)
+          first=true
+          for manifest in /tmp/zalord-k8s-staging/*.yaml; do
+            [ -f "$manifest" ] || continue
+            bn=$(basename "$manifest")
+            [ "$bn" = "kong-routes.yaml" ] && continue
+            [ "$bn" = "kong-plugins.yaml" ] && continue
+            if [ "$first" = true ]; then first=false; else printf '\n---\n'; fi
+            cat "$manifest"
+          done | kubectl apply -n "$K8S_NAMESPACE" -f -
           echo "Apply complete"
 
       - name: Wait for rollout

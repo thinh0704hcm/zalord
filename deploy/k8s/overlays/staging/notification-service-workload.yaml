@@ -47,6 +47,8 @@ spec:
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
             - name: MQ_URI
               value: "amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@$(MQ_HOST):$(MQ_PORT)/"
+            - name: OTEL_COLLECTOR_URL
+              value: "otel-collector:4317"
           readinessProbe:
             httpGet:
               path: /health

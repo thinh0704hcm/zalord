@@ -3,6 +3,8 @@ kind: Ingress
 metadata:
   name: auth-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
   ingressClassName: kong
   rules:
@@ -22,6 +24,8 @@ kind: Ingress
 metadata:
   name: user-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
   ingressClassName: kong
   rules:
@@ -41,6 +45,8 @@ kind: Ingress
 metadata:
   name: message-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
   ingressClassName: kong
   rules:
@@ -54,18 +60,41 @@ spec:
                 name: message-service
                 port:
                   number: 8083
+          - path: /api/v1/inbox
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 8083
+          - path: /api/v1/conversations
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 8083
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: chat-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
   ingressClassName: kong
   rules:
     - host: chat.staging.zalord.vn
       http:
         paths:
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: chat-service
+                port:
+                  number: 8084
           - path: /api/v1/chat
             pathType: Prefix
             backend:
@@ -86,6 +115,8 @@ kind: Ingress
 metadata:
   name: group-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
   ingressClassName: kong
   rules:
@@ -105,6 +136,8 @@ kind: Ingress
 metadata:
   name: media-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
   ingressClassName: kong
   rules:
@@ -124,6 +157,8 @@ kind: Ingress
 metadata:
   name: notification-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
   ingressClassName: kong
   rules:
@@ -137,24 +172,3 @@ spec:
                 name: notification-service
                 port:
                   number: 8087
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: frontend-ingress
-  namespace: zalord-staging
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
-spec:
-  ingressClassName: kong
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: 80
