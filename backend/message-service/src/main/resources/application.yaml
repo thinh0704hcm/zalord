@@ -33,6 +33,7 @@ spring:
 
 zalord:
   event-bus: ${EVENT_BUS:rabbitmq}   # rabbitmq | kafka — for message.created chain
+  outbox-poll-ms: ${OUTBOX_POLL_MS:3000}  # OutboxScheduler interval; benchmark drops to ~50ms
 
 # Circuit breaker config for gRPC calls into media-service. Tuning rationale:
 #   - sliding-window 10 calls + 50% threshold = need 5 failures in the last 10
