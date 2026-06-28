@@ -37,6 +37,7 @@ jobs:
         group-service
         media-service
         notification-service
+        frontend
       # Service name → port mapping
       SERVICE_PORTS: >-
         auth-service:8081
@@ -46,6 +47,7 @@ jobs:
         group-service:8085
         media-service:8086
         notification-service:8087
+        frontend:80
 
     steps:
       - name: Checkout
@@ -126,6 +128,7 @@ jobs:
           cp deploy/k8s/overlays/prod/*-config.yaml /tmp/zalord-k8s-prod/
           cp deploy/k8s/overlays/prod/infra-*.yaml /tmp/zalord-k8s-prod/
           cp deploy/k8s/overlays/prod/kong-routes.yaml /tmp/zalord-k8s-prod/
+          cp deploy/k8s/overlays/prod/kong-plugins.yaml /tmp/zalord-k8s-prod/
 
           for secret in deploy/k8s/overlays/prod/*-secret.enc.yaml; do
             target="/tmp/zalord-k8s-prod/$(basename "${secret%.enc.yaml}.yaml")"
