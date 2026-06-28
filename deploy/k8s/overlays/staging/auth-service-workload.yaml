@@ -37,7 +37,9 @@ spec:
             - name: JAVA_TOOL_OPTIONS
               value: "-javaagent:/app/opentelemetry-javaagent.jar"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otel-collector:4317"
+              value: "http://otel-collector:4318"
+            - name: OTEL_SERVICE_NAME
+              value: "auth-service"
           envFrom:
             - configMapRef:
                 name: auth-service-config
