@@ -76,4 +76,10 @@ jobs:
               -t "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}" \
               "backend/$svc"
           done
+          echo "Building zalord-frontend:$IMAGE_TAG..."
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --push \
+            -t "docker.io/$DOCKER_NAMESPACE/zalord-frontend:${IMAGE_TAG}" \
+            "frontend"
           echo "All images pushed with tag $IMAGE_TAG"

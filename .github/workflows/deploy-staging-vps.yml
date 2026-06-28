@@ -40,6 +40,7 @@ jobs:
         group-service
         media-service
         notification-service
+        frontend
 
     steps:
       - name: Checkout
