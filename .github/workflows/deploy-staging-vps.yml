@@ -11,6 +11,10 @@ on:
         description: 'Image tag for frontend (defaults to backend image_tag)'
         required: false
         type: string
+      services:
+        description: 'Space-separated services to deploy (default: all)'
+        required: false
+        type: string
   workflow_run:
     workflows: ["CI — Dev"]
     branches: [staging]
@@ -103,9 +107,15 @@ jobs:
 
           # Determine diff range based on trigger type
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual: deploy everything
-            echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
-            echo "restart_all=true" >> "$GITHUB_OUTPUT"
+            # Manual: deploy specified services (or all if empty)
+            input_services="${{ github.event.inputs.services || '' }}"
+            if [ -n "$input_services" ]; then
+              echo "services=$input_services" >> "$GITHUB_OUTPUT"
+              echo "restart_all=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
+              echo "restart_all=true" >> "$GITHUB_OUTPUT"
+            fi
           elif [ "${{ github.event_name }}" = "workflow_run" ]; then
             # Triggered by CI — detect changes from the CI's triggering commit
             # The CI run was triggered by a push to staging; find the latest commit
