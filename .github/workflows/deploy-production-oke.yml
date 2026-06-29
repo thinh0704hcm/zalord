@@ -259,7 +259,7 @@ jobs:
             # Create canary Service (required for HTTPRoute to route traffic)
             kubectl get svc "$svc" -n "$K8S_NAMESPACE" -o json \
               | jq --arg name "${svc}-canary" \
-                   --argport "$port" \
+                   --argjson port "$port" \
                    '.metadata.name=$name |
                     del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) |
                     .spec.selector.app=$name |
