@@ -16,6 +16,10 @@ on:
         required: false
         default: 'false'
         type: boolean
+      canary_image_tag:
+        description: 'Image tag for canary pods (defaults to image_tag)'
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -34,6 +38,7 @@ jobs:
       K8S_NAMESPACE: zalord-prod
       KUBECONFIG: /home/runner/.kube/oke.config
       CANARY: ${{ github.event.inputs.canary || 'false' }}
+      CANARY_IMAGE_TAG: ${{ github.event.inputs.canary_image_tag || github.event.inputs.image_tag || github.ref_name }}
       SERVICE_IMAGES: >-
         auth-service
         user-service
@@ -226,7 +231,7 @@ jobs:
             # Create canary deployment from stable (same image, name -canary)
             kubectl get deploy "$svc" -n "$K8S_NAMESPACE" -o json \
               | jq --arg name "${svc}-canary" \
-                   --arg image "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$svc_image_tag" \
+                   --arg image "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$CANARY_IMAGE_TAG" \
                    '.metadata.name=$name |
                     .metadata.labels."app.kubernetes.io/component"="canary" |
                     del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .status) |
