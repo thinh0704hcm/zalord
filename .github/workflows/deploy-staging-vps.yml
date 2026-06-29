@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag to deploy (commit SHA or v1.0.0)'
+        description: 'Image tag for backend services (commit SHA or v1.0.0)'
         required: true
+        type: string
+      frontend_image_tag:
+        description: 'Image tag for frontend (defaults to backend image_tag)'
+        required: false
         type: string
   workflow_run:
     workflows: ["CI — Dev"]
@@ -30,6 +34,7 @@ jobs:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     env:
       IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
+      FRONTEND_IMAGE_TAG: ${{ github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.sha }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-staging
       SERVICE_IMAGES: >-
@@ -196,7 +201,13 @@ jobs:
               echo "  Skipping $basename_f (service not changed)"
               continue
             fi
-            envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-staging/$basename_f"
+            # Use separate IMAGE_TAG for frontend if provided
+            if [ "$svc_name" = "frontend" ] && [ -n "$FRONTEND_IMAGE_TAG" ]; then
+              sed "s/\${IMAGE_TAG}/$FRONTEND_IMAGE_TAG/g" "$f" \
+                | envsubst '${DOCKER_NAMESPACE}' > "/tmp/zalord-k8s-staging/$basename_f"
+            else
+              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-staging/$basename_f"
+            fi
             echo "  Substituted: $basename_f"
           done
 
