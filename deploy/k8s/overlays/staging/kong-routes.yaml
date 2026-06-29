@@ -8,8 +8,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-    - host: auth.staging.zalord.vn
-      http:
+    - http:
         paths:
           - path: /api/v1/auth
             pathType: Prefix
@@ -29,8 +28,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-    - host: user.staging.zalord.vn
-      http:
+    - http:
         paths:
           - path: /api/v1/users
             pathType: Prefix
@@ -50,8 +48,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-    - host: message.staging.zalord.vn
-      http:
+    - http:
         paths:
           - path: /api/v1/messages
             pathType: Prefix
@@ -85,8 +82,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-    - host: chat.staging.zalord.vn
-      http:
+    - http:
         paths:
           - path: /health
             pathType: Exact
@@ -120,8 +116,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-    - host: group.staging.zalord.vn
-      http:
+    - http:
         paths:
           - path: /api/v1/groups
             pathType: Prefix
@@ -141,8 +136,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-    - host: media.staging.zalord.vn
-      http:
+    - http:
         paths:
           - path: /api/v1/media
             pathType: Prefix
@@ -162,8 +156,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-    - host: notification.staging.zalord.vn
-      http:
+    - http:
         paths:
           - path: /api/v1/notifications
             pathType: Prefix
