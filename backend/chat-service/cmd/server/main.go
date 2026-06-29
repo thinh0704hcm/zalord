@@ -113,6 +113,16 @@ func main() {
 		})
 	})
 
+	r.GET("/api/v1/chat/canary", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"version":   "v2",
+			"canary":    true,
+			"service":   "chat-service",
+			"message":   "This response came from the CANARY (v2) deployment",
+			"timestamp": c.Request.Header.Get("X-Request-Id"),
+		})
+	})
+
 	ws := r.Group("/ws")
 	ws.Use(middleware.Identity())
 	{

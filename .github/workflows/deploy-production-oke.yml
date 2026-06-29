@@ -216,10 +216,17 @@ jobs:
             # Scale stable down to 1 (if more)
             kubectl scale deploy "$svc" --replicas=1 -n "$K8S_NAMESPACE" 2>/dev/null || true
 
+            # Use FRONTEND_IMAGE_TAG for frontend, IMAGE_TAG for everything else
+            if [ "$svc" = "frontend" ]; then
+              svc_image_tag="$FRONTEND_IMAGE_TAG"
+            else
+              svc_image_tag="$IMAGE_TAG"
+            fi
+
             # Create canary deployment from stable (same image, name -canary)
             kubectl get deploy "$svc" -n "$K8S_NAMESPACE" -o json \
               | jq --arg name "${svc}-canary" \
-                   --arg image "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$IMAGE_TAG" \
+                   --arg image "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$svc_image_tag" \
                    '.metadata.name=$name |
                     .metadata.labels."app.kubernetes.io/component"="canary" |
                     del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.generation, .status) |
@@ -228,7 +235,7 @@ jobs:
                     .spec.template.metadata.labels.app=$name |
                     .spec.template.spec.containers[0].image=$image' \
               | kubectl apply -n "$K8S_NAMESPACE" -f -
-            echo "  Canary deployed: ${svc}-canary → $IMAGE_TAG"
+            echo "  Canary deployed: ${svc}-canary → $svc_image_tag"
           done
 
           kubectl get deploy -n "$K8S_NAMESPACE" -o wide

@@ -69,6 +69,10 @@ spec:
     - backendRefs:
         - name: chat-service
           port: 8084
+          weight: 50
+        - name: chat-service-canary
+          port: 8084
+          weight: 50
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
