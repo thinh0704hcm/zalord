@@ -301,21 +301,46 @@ jobs:
             exit 0
           fi
 
+          # Map service → canary test endpoint
+          canary_endpoint() {
+            case "$1" in
+              chat-service)           echo "chat.zalord.vn /api/v1/chat/canary" ;;
+              notification-service)   echo "notification.zalord.vn /api/v1/notifications/version" ;;
+              auth-service)           echo "auth.zalord.vn /api/v1/auth/version" ;;
+              *)                      echo "" ;;
+            esac
+          }
+
           echo "Smoke testing canary endpoints via $LB_IP..."
-          v1_count=0
-          v2_count=0
-          for i in $(seq 1 10); do
-            result=$(curl -s -H "Host: chat.zalord.vn" "http://$LB_IP/api/v1/chat/canary" --max-time 5 || echo '{"error":"timeout"}')
-            version=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "v1(404)")
-            if [ "$version" = "v1" ] || echo "$result" | grep -q "404"; then
-              v1_count=$((v1_count + 1))
-            else
-              v2_count=$((v2_count + 1))
+          total_v1=0
+          total_v2=0
+          for svc in $CANARY_SERVICES; do
+            ep=$(canary_endpoint "$svc")
+            if [ -z "$ep" ]; then
+              echo "  WARNING: No canary endpoint defined for $svc, skipping"
+              continue
             fi
-            echo "  Request $i: $version ($result)"
+            host=$(echo "$ep" | cut -d' ' -f1)
+            path=$(echo "$ep" | cut -d' ' -f2)
+            echo "  Testing $svc: Host=$host, Path=$path"
+            v1_count=0
+            v2_count=0
+            for i in $(seq 1 10); do
+              result=$(curl -s -H "Host: $host" "http://$LB_IP$path" --max-time 5 || echo '{"error":"timeout"}')
+              version=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "v1(404)")
+              if [ "$version" = "v1" ] || echo "$result" | grep -q "404"; then
+                v1_count=$((v1_count + 1))
+              else
+                v2_count=$((v2_count + 1))
+              fi
+              echo "    Request $i: $version"
+            done
+            echo "  $svc traffic split: v1=$v1_count, v2=$v2_count (out of 10)"
+            total_v1=$((total_v1 + v1_count))
+            total_v2=$((total_v2 + v2_count))
           done
           echo ""
-          echo "Traffic split: v1=$v1_count, v2=$v2_count (out of 10)"
+          echo "Total traffic split: v1=$total_v1, v2=$total_v2"
 
       - name: Promote canary to stable
         if: env.CANARY == 'true' && env.CANARY_SERVICES != '' && env.PROMOTE == 'true' && success()
