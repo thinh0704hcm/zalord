@@ -1,147 +1,167 @@
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: auth-route
+  name: auth-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
-  parentRefs:
-    - name: main
-      namespace: kong
-      sectionName: http
-  hostnames:
-    - "auth.staging.zalord.vn"
+  ingressClassName: kong
   rules:
-    - backendRefs:
-        - name: auth-service
-          port: 8081
+    - http:
+        paths:
+          - path: /api/v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8081
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: user-route
+  name: user-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
-  parentRefs:
-    - name: main
-      namespace: kong
-      sectionName: http
-  hostnames:
-    - "user.staging.zalord.vn"
+  ingressClassName: kong
   rules:
-    - backendRefs:
-        - name: user-service
-          port: 8082
+    - http:
+        paths:
+          - path: /api/v1/users
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8082
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: message-route
+  name: message-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
-  parentRefs:
-    - name: main
-      namespace: kong
-      sectionName: http
-  hostnames:
-    - "message.staging.zalord.vn"
+  ingressClassName: kong
   rules:
-    - backendRefs:
-        - name: message-service
-          port: 8083
+    - http:
+        paths:
+          - path: /api/v1/messages
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 8083
+          - path: /api/v1/inbox
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 8083
+          - path: /api/v1/conversations
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 8083
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: chat-route
+  name: chat-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
-  parentRefs:
-    - name: main
-      namespace: kong
-      sectionName: http
-  hostnames:
-    - "chat.staging.zalord.vn"
+  ingressClassName: kong
   rules:
-    - backendRefs:
-        - name: chat-service
-          port: 8084
+    - http:
+        paths:
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: chat-service
+                port:
+                  number: 8084
+          - path: /api/v1/chat
+            pathType: Prefix
+            backend:
+              service:
+                name: chat-service
+                port:
+                  number: 8084
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: chat-service
+                port:
+                  number: 8084
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: group-route
+  name: group-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
-  parentRefs:
-    - name: main
-      namespace: kong
-      sectionName: http
-  hostnames:
-    - "group.staging.zalord.vn"
+  ingressClassName: kong
   rules:
-    - backendRefs:
-        - name: group-service
-          port: 8085
+    - http:
+        paths:
+          - path: /api/v1/groups
+            pathType: Prefix
+            backend:
+              service:
+                name: group-service
+                port:
+                  number: 8085
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: media-route
+  name: media-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
-  parentRefs:
-    - name: main
-      namespace: kong
-      sectionName: http
-  hostnames:
-    - "media.staging.zalord.vn"
+  ingressClassName: kong
   rules:
-    - backendRefs:
-        - name: media-service
-          port: 8086
+    - http:
+        paths:
+          - path: /api/v1/media
+            pathType: Prefix
+            backend:
+              service:
+                name: media-service
+                port:
+                  number: 8086
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: notification-route
+  name: notification-ingress
   namespace: zalord-staging
+  annotations:
+    konghq.com/plugins: jwt-header-injection
 spec:
-  parentRefs:
-    - name: main
-      namespace: kong
-      sectionName: http
-  hostnames:
-    - "notification.staging.zalord.vn"
+  ingressClassName: kong
   rules:
-    - backendRefs:
-        - name: notification-service
-          port: 8087
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-kong-to-staging
-  namespace: zalord-staging
-spec:
-  from:
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      namespace: kong
-  to:
-    - group: ""
-      kind: Service
----
-# ReferenceGrant in kong namespace: allows HTTPRoutes from zalord-staging to reference Gateway in kong
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-staging-routes
-  namespace: kong
-spec:
-  from:
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      namespace: zalord-staging
-  to:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
+    - http:
+        paths:
+          - path: /api/v1/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 8087

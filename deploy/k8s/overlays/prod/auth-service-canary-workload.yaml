@@ -1,57 +1,50 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: media-service
-  namespace: zalord-staging
+  name: auth-service-canary
+  namespace: zalord-prod
 spec:
   selector:
-    app: media-service
+    app: auth-service
+    track: canary
   ports:
     - name: http
-      port: 8086
+      port: 8081
       targetPort: http
-    - name: grpc
-      port: 9086
-      targetPort: grpc
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: media-service
-  namespace: zalord-staging
+  name: auth-service-canary
+  namespace: zalord-prod
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: media-service
+      app: auth-service
+      track: canary
   template:
     metadata:
       labels:
-        app: media-service
+        app: auth-service
+        track: canary
     spec:
       containers:
-        - name: media-service
-          image: docker.io/${DOCKER_NAMESPACE}/zalord-media-service:${IMAGE_TAG}
+        - name: auth-service
+          image: docker.io/${DOCKER_NAMESPACE}/zalord-auth-service:${IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 8086
-            - name: grpc
-              containerPort: 9086
-          env:
-            - name: JAVA_TOOL_OPTIONS
-              value: "-javaagent:/app/opentelemetry-javaagent.jar"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otel-collector:4318"
-            - name: OTEL_SERVICE_NAME
-              value: "media-service"
+              containerPort: 8081
           envFrom:
             - configMapRef:
-                name: media-service-config
+                name: auth-service-config
             - configMapRef:
                 name: shared-config
             - secretRef:
-                name: media-service-secret
+                name: auth-service-secret
+            - secretRef:
+                name: shared-secret
           readinessProbe:
             tcpSocket:
               port: http
