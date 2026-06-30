@@ -93,6 +93,39 @@ jobs:
           printf '%s\n' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
           chmod 600 ~/.config/sops/age/keys.txt
 
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Check image existence
+        id: image-check
+        run: |
+          set -euo pipefail
+          deployable=""
+          missing=""
+          for svc in $SERVICE_IMAGES; do
+            if [ "$svc" = "frontend" ]; then
+              tag="$FRONTEND_IMAGE_TAG"
+            else
+              tag="$IMAGE_TAG"
+            fi
+            img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag"
+            if docker manifest inspect "$img" >/dev/null 2>&1; then
+              deployable="$deployable $svc"
+            else
+              missing="$missing $svc"
+              echo "::warning::Image not found: $img — will skip $svc"
+            fi
+          done
+          deployable="$(echo "$deployable" | xargs)"
+          missing="$(echo "$missing" | xargs)"
+          echo "deployable_services=$deployable" >> "$GITHUB_OUTPUT"
+          echo "missing_services=$missing" >> "$GITHUB_OUTPUT"
+          echo "Deployable: $deployable"
+          [ -n "$missing" ] && echo "::warning::Skipped missing images: $missing" || true
+
       - name: Detect changed services
         id: filter
         run: |
@@ -157,6 +190,7 @@ jobs:
         env:
           CHANGED_SERVICES: ${{ steps.filter.outputs.services }}
           CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
+          DEPLOYABLE_SERVICES: ${{ steps.image-check.outputs.deployable_services }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/zalord-k8s-staging
@@ -193,6 +227,11 @@ jobs:
             if grep -q '${IMAGE_TAG}' "$f" \
                 && ! echo "$CODE_SERVICES" | grep -qw "$svc_name"; then
               echo "  Skipping $basename_f (code unchanged — image $IMAGE_TAG may not exist)"
+              continue
+            fi
+            if grep -q '${IMAGE_TAG}' "$f" \
+                && ! echo "$DEPLOYABLE_SERVICES" | grep -qw "$svc_name"; then
+              echo "  Skipping $basename_f (image not found in registry)"
               continue
             fi
             # Use separate IMAGE_TAG for frontend if provided
@@ -280,6 +319,7 @@ jobs:
         if: steps.filter.outputs.restart_all == 'true'
         env:
           CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
+          DEPLOYABLE_SERVICES: ${{ steps.image-check.outputs.deployable_services }}
         run: |
           set -euo pipefail
           # restart_all means config/infra changed. Services whose code did NOT
@@ -287,7 +327,7 @@ jobs:
           # SHA), so bounce them to pick up new ConfigMaps/Secrets while keeping
           # whatever image they're currently running.
           for svc in $SERVICE_IMAGES; do
-            if echo "$CODE_SERVICES" | grep -qw "$svc"; then
+            if echo "$CODE_SERVICES $DEPLOYABLE_SERVICES" | grep -qw "$svc"; then
               continue  # already rolled by the new-image apply above
             fi
             if kubectl get deploy "$svc" -n "$K8S_NAMESPACE" >/dev/null 2>&1; then
