@@ -59,8 +59,6 @@ spec:
     - name: main
       namespace: kong
       sectionName: http
-  hostnames:
-    - "chat.zalord.vn"
   rules:
     - backendRefs:
         - name: chat-service
