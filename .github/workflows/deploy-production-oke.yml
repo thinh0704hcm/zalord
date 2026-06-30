@@ -22,7 +22,7 @@ on:
         required: false
         type: string
       canary_services:
-        description: 'Space-separated services to canary (default: CI-updated services)'
+        description: 'Space-separated services to canary (default: all services)'
         required: false
         type: string
       canary_weight:
@@ -196,7 +196,7 @@ jobs:
           echo "code_services=$code_services" >> "$GITHUB_OUTPUT"
           echo "restart_all=$restart_all" >> "$GITHUB_OUTPUT"
           echo "Detected services: ${services:-none}"
-          echo "Canary candidates: ${code_services:-none}"
+          echo "Changed code services: ${code_services:-none}"
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v5
@@ -263,7 +263,7 @@ jobs:
           canary_missing=""
           canary_svc_list=""
           if [ "$CANARY" = "true" ]; then
-            canary_svc_list="${CANARY_SERVICES:-${{ steps.filter.outputs.code_services }}}"
+            canary_svc_list="${CANARY_SERVICES:-$SERVICE_IMAGES}"
             for svc in $canary_svc_list; do
               img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$CANARY_IMAGE_TAG"
               if image_exists "$img" "$svc" "$CANARY_IMAGE_TAG"; then
@@ -279,7 +279,7 @@ jobs:
           echo "canary_deployable_services=$canary_deployable" >> "$GITHUB_OUTPUT"
           echo "Canary deployable: $canary_deployable"
           if [ "$CANARY" = "true" ] && [ -z "$canary_svc_list" ]; then
-            echo "::warning::No canary services detected. Use canary_services for manual runs, or trigger from CI."
+            echo "::warning::No canary services selected."
           fi
           [ -n "$canary_missing" ] && echo "::warning::Skipped missing canary images: $canary_missing" || true
 
