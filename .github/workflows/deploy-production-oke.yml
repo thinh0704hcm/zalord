@@ -367,7 +367,7 @@ jobs:
             route_name=$(echo "$svc" | sed 's/-service/-route/')
 
             if [ "$svc" = "chat-service" ]; then
-              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":50},{\"name\":\"${svc}-canary\",\"port\":$port,\"weight\":50}]}"
+              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}},{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/ws\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":50},{\"name\":\"${svc}-canary\",\"port\":$port,\"weight\":50}]}"
             else
               rule="{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":50},{\"name\":\"${svc}-canary\",\"port\":$port,\"weight\":50}]}"
             fi
@@ -443,7 +443,7 @@ jobs:
             kubectl rollout status -n "$K8S_NAMESPACE" "deployment/$svc" --timeout=120s
 
             if [ "$svc" = "chat-service" ]; then
-              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
+              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}},{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/ws\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
             else
               rule="{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
             fi
@@ -470,7 +470,7 @@ jobs:
             kubectl delete deploy "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
             kubectl delete svc "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
             if [ "$svc" = "chat-service" ]; then
-              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
+              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}},{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/ws\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
             else
               rule="{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
             fi
