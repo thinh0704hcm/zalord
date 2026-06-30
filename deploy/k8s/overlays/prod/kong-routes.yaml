@@ -60,7 +60,11 @@ spec:
       namespace: kong
       sectionName: http
   rules:
-    - backendRefs:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/v1/chat
+      backendRefs:
         - name: chat-service
           port: 8084
 ---

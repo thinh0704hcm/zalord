@@ -366,9 +366,14 @@ jobs:
             port=$(echo "$SERVICE_PORTS" | tr ' ' '\n' | grep "^$svc:" | cut -d: -f2)
             route_name=$(echo "$svc" | sed 's/-service/-route/')
 
+            if [ "$svc" = "chat-service" ]; then
+              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":50},{\"name\":\"${svc}-canary\",\"port\":$port,\"weight\":50}]}"
+            else
+              rule="{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":50},{\"name\":\"${svc}-canary\",\"port\":$port,\"weight\":50}]}"
+            fi
             kubectl patch httproute "$route_name" -n "$K8S_NAMESPACE" \
               --type=merge \
-              --patch "{\"spec\":{\"rules\":[{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":50},{\"name\":\"${svc}-canary\",\"port\":$port,\"weight\":50}]}]}}"
+              --patch "{\"spec\":{\"rules\":[$rule]}}"
             echo "  Traffic: $route_name → 50% stable / 50% canary"
           done
 
@@ -437,9 +442,14 @@ jobs:
               -n "$K8S_NAMESPACE"
             kubectl rollout status -n "$K8S_NAMESPACE" "deployment/$svc" --timeout=120s
 
+            if [ "$svc" = "chat-service" ]; then
+              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
+            else
+              rule="{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
+            fi
             kubectl patch httproute "$route_name" -n "$K8S_NAMESPACE" \
               --type=merge \
-              --patch "{\"spec\":{\"rules\":[{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}]}}"
+              --patch "{\"spec\":{\"rules\":[$rule]}}"
 
             kubectl delete deploy "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
             kubectl delete svc "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
@@ -459,9 +469,14 @@ jobs:
 
             kubectl delete deploy "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
             kubectl delete svc "${svc}-canary" -n "$K8S_NAMESPACE" --ignore-not-found=true
+            if [ "$svc" = "chat-service" ]; then
+              rule="{\"matches\":[{\"path\":{\"type\":\"PathPrefix\",\"value\":\"/api/v1/chat\"}}],\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
+            else
+              rule="{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}"
+            fi
             kubectl patch httproute "$route_name" -n "$K8S_NAMESPACE" \
               --type=merge \
-              --patch "{\"spec\":{\"rules\":[{\"backendRefs\":[{\"name\":\"$svc\",\"port\":$port,\"weight\":100}]}]}}"
+              --patch "{\"spec\":{\"rules\":[$rule]}}"
             echo "  Rolled back: $svc"
           done
           kubectl get pods,svc,httproute -n "$K8S_NAMESPACE"
