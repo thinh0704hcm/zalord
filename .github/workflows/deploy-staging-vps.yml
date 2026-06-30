@@ -303,7 +303,15 @@ jobs:
               continue
             fi
             echo "Waiting for $name..."
-            kubectl rollout status -n "$K8S_NAMESPACE" "$deploy" --timeout=180s
+            if ! kubectl rollout status -n "$K8S_NAMESPACE" "$deploy" --timeout=180s; then
+              if kubectl wait -n "$K8S_NAMESPACE" "$deploy" --for=condition=Available=True --timeout=10s; then
+                echo "$name available; old replica termination still pending"
+              else
+                kubectl describe -n "$K8S_NAMESPACE" "$deploy" || true
+                kubectl get pods,rs -n "$K8S_NAMESPACE" -l "app=$name" -o wide || true
+                exit 1
+              fi
+            fi
           done
           echo ""
           echo "=== Staging cluster state ==="
