@@ -302,6 +302,15 @@ jobs:
       MEDIA_SERVICE: ${{ needs.changes.outputs.media-service }}
       NOTIFICATION_SERVICE: ${{ needs.changes.outputs.notification-service }}
       FRONTEND: ${{ needs.changes.outputs.frontend }}
+      SERVICE_IMAGES: >-
+        auth-service
+        user-service
+        message-service
+        chat-service
+        group-service
+        media-service
+        notification-service
+        frontend
     steps:
       - name: Login to Docker Hub
         uses: docker/login-action@v4
@@ -311,7 +320,7 @@ jobs:
       - name: Create multi-arch manifests
         run: |
           set -euo pipefail
-          SERVICES="auth-service user-service message-service chat-service group-service media-service notification-service frontend"
+          SERVICES="$SERVICE_IMAGES"
           create_manifest() {
             local svc=$1 tag=$2
             echo "Combining zalord-$svc:$tag from arm64 + amd64..."
@@ -347,3 +356,55 @@ jobs:
           done
 
           echo "Done. Multi-arch tags: $IMAGE_TAG, $CHANNEL_TAG"
+
+      - name: Write digest image manifest
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ci-image-manifest
+          manifest=/tmp/ci-image-manifest/image-manifest.env
+          yaml_manifest=/tmp/ci-image-manifest/image-manifest.yaml
+
+          digest_for() {
+            local ref=$1 digest=""
+            for _ in 1 2 3 4 5; do
+              digest=$(docker buildx imagetools inspect "$ref" 2>/dev/null | awk '/^Digest:/ {print $2; exit}')
+              [ -n "$digest" ] && break
+              sleep 3
+            done
+            [ -n "$digest" ] || { echo "Missing digest for $ref"; return 1; }
+            printf '%s' "$digest"
+          }
+
+          : > "$manifest"
+          {
+            echo "version: $IMAGE_TAG"
+            echo "channel: $CHANNEL_TAG"
+            echo "updatedServices:"
+            for svc in ${{ needs.changes.outputs.services }}; do
+              echo "  - $svc"
+            done
+            echo "services:"
+          } > "$yaml_manifest"
+
+          for svc in $SERVICE_IMAGES; do
+            repo="docker.io/$DOCKER_NAMESPACE/zalord-$svc"
+            digest=$(digest_for "$repo:$CHANNEL_TAG")
+            image="$repo@$digest"
+            echo "$svc=$image" >> "$manifest"
+            echo "  $svc: $image" >> "$yaml_manifest"
+          done
+
+          cat > /tmp/ci-image-manifest/ci-image-metadata.env <<EOF
+          image_tag=$IMAGE_TAG
+          channel_tag=$CHANNEL_TAG
+          updated_services=${{ needs.changes.outputs.services }}
+          EOF
+
+          echo "Digest image manifest:"
+          cat "$yaml_manifest"
+
+      - name: Upload digest image manifest
+        uses: actions/upload-artifact@v5
+        with:
+          name: ci-image-manifest
+          path: /tmp/ci-image-manifest

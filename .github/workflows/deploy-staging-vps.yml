@@ -16,6 +16,10 @@ on:
         description: 'Space-separated services to deploy (default: all)'
         required: false
         type: string
+      image_manifest_run_id:
+        description: 'CI run ID with ci-image-manifest artifact (rollback/exact deploy)'
+        required: false
+        type: string
   workflow_run:
     workflows: ["CI — Dev"]
     branches: [staging]
@@ -135,31 +139,71 @@ jobs:
           echo "updated_services=${updated_services:-}" >> "$GITHUB_OUTPUT"
           echo "CI updated services: ${updated_services:-none}"
 
+      - name: Download CI image manifest
+        if: github.event_name == 'workflow_run' || github.event.inputs.image_manifest_run_id != ''
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ci-image-manifest
+          path: /tmp/ci-image-manifest
+          run-id: ${{ github.event.inputs.image_manifest_run_id || github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Load CI image manifest
+        id: image-manifest
+        run: |
+          set -euo pipefail
+          manifest=/tmp/ci-image-manifest/image-manifest.env
+          if [ -s "$manifest" ]; then
+            services=$(cut -d= -f1 "$manifest" | xargs)
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "services=$services" >> "$GITHUB_OUTPUT"
+            echo "Digest manifest services: $services"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "services=" >> "$GITHUB_OUTPUT"
+            echo "No digest image manifest"
+          fi
+
       - name: Check image existence
         id: image-check
         run: |
           set -euo pipefail
+          manifest=/tmp/ci-image-manifest/image-manifest.env
           candidates="$SERVICE_IMAGES"
-          ci_candidates="${{ steps.ci-meta.outputs.updated_services }}"
-          if [ "${{ github.event_name }}" = "workflow_run" ] && [ -n "$ci_candidates" ]; then
-            candidates="$ci_candidates"
+          if [ -s "$manifest" ]; then
+            candidates=$(cut -d= -f1 "$manifest" | xargs)
+          else
+            ci_candidates="${{ steps.ci-meta.outputs.updated_services }}"
+            if [ "${{ github.event_name }}" = "workflow_run" ] && [ -n "$ci_candidates" ]; then
+              candidates="$ci_candidates"
+            fi
           fi
 
+          image_ref_for() {
+            local svc=$1
+            [ -s "$manifest" ] || return 1
+            awk -F= -v svc="$svc" '$1 == svc {print $2; found=1} END {exit found ? 0 : 1}' "$manifest"
+          }
+
           image_exists() {
-            local img=$1 svc=$2 tag=$3
+            local img=$1 svc=$2 tag=${3:-}
             docker manifest inspect "$img" >/dev/null 2>&1 && return 0
-            curl -fsS "https://hub.docker.com/v2/repositories/$DOCKER_NAMESPACE/zalord-$svc/tags/$tag" >/dev/null 2>&1
+            [ -n "$tag" ] && curl -fsS "https://hub.docker.com/v2/repositories/$DOCKER_NAMESPACE/zalord-$svc/tags/$tag" >/dev/null 2>&1
           }
 
           deployable=""
           missing=""
           for svc in $candidates; do
-            if [ "$svc" = "frontend" ]; then
+            if img=$(image_ref_for "$svc"); then
+              tag=""
+            elif [ "$svc" = "frontend" ]; then
               tag="$FRONTEND_IMAGE_TAG"
+              img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag"
             else
               tag="$IMAGE_TAG"
+              img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag"
             fi
-            img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag"
             if image_exists "$img" "$svc" "$tag"; then
               deployable="$deployable $svc"
             else
@@ -266,30 +310,35 @@ jobs:
             echo "  Decrypted: $(basename "$secret")"
           done
 
-          # Workload files — only for services whose CODE changed, so the image
-          # tag ($IMAGE_TAG) is guaranteed to exist in the registry. Config-only
-          # changes are handled by a rollout restart below, NOT by re-templating
-          # to a SHA that was never built.
+          manifest=/tmp/ci-image-manifest/image-manifest.env
+          image_ref_for() {
+            local svc=$1
+            [ -s "$manifest" ] || return 1
+            awk -F= -v svc="$svc" '$1 == svc {print $2; found=1} END {exit found ? 0 : 1}' "$manifest"
+          }
+
           for f in deploy/k8s/overlays/staging/*-workload.yaml; do
             [ -f "$f" ] || continue
             basename_f="$(basename "$f")"
-            # Extract service name from workload filename (e.g. auth-service-workload.yaml → auth-service)
             svc_name="${basename_f%-workload.yaml}"
-            # Static-image workloads (no ${IMAGE_TAG}, e.g. grafana) have no build
-            # dependency — always apply. Build-dependent workloads are gated on
-            # whether their code changed, so $IMAGE_TAG exists in the registry.
-            if grep -q '${IMAGE_TAG}' "$f" \
-                && ! echo "$CODE_SERVICES" | grep -qw "$svc_name"; then
-              echo "  Skipping $basename_f (code unchanged — image $IMAGE_TAG may not exist)"
-              continue
+            image_ref=""
+            image_ref=$(image_ref_for "$svc_name" || true)
+
+            if grep -q '${IMAGE_TAG}' "$f" && [ -z "$image_ref" ]; then
+              if ! echo "$CODE_SERVICES" | grep -qw "$svc_name"; then
+                echo "  Skipping $basename_f (code unchanged — image $IMAGE_TAG may not exist)"
+                continue
+              fi
+              if ! echo "$DEPLOYABLE_SERVICES" | grep -qw "$svc_name"; then
+                echo "  Skipping $basename_f (image not found in registry)"
+                continue
+              fi
             fi
-            if grep -q '${IMAGE_TAG}' "$f" \
-                && ! echo "$DEPLOYABLE_SERVICES" | grep -qw "$svc_name"; then
-              echo "  Skipping $basename_f (image not found in registry)"
-              continue
-            fi
-            # Use separate IMAGE_TAG for frontend if provided
-            if [ "$svc_name" = "frontend" ] && [ -n "$FRONTEND_IMAGE_TAG" ]; then
+
+            if [ -n "$image_ref" ]; then
+              sed "s#docker.io/\${DOCKER_NAMESPACE}/zalord-$svc_name:\${IMAGE_TAG}#$image_ref#g" "$f" \
+                | envsubst '${DOCKER_NAMESPACE}' > "/tmp/zalord-k8s-staging/$basename_f"
+            elif [ "$svc_name" = "frontend" ] && [ -n "$FRONTEND_IMAGE_TAG" ]; then
               sed "s/\${IMAGE_TAG}/$FRONTEND_IMAGE_TAG/g" "$f" \
                 | envsubst '${DOCKER_NAMESPACE}' > "/tmp/zalord-k8s-staging/$basename_f"
             else
@@ -367,6 +416,12 @@ jobs:
             if [ "$first" = true ]; then first=false; else printf '\n---\n'; fi
             cat "$manifest"
           done | kubectl apply -n "$K8S_NAMESPACE" -f -
+          if [ -f /tmp/ci-image-manifest/image-manifest.yaml ]; then
+            kubectl create configmap zalord-image-manifest -n "$K8S_NAMESPACE" \
+              --from-file=image-manifest.yaml=/tmp/ci-image-manifest/image-manifest.yaml \
+              --from-file=image-manifest.env=/tmp/ci-image-manifest/image-manifest.env \
+              --dry-run=client -o yaml | kubectl apply -f -
+          fi
           echo "Apply complete"
 
       - name: Restart config-only services
@@ -380,8 +435,12 @@ jobs:
           # change were not re-templated (their built image may not exist at this
           # SHA), so bounce them to pick up new ConfigMaps/Secrets while keeping
           # whatever image they're currently running.
+          rolled_services="$CODE_SERVICES $DEPLOYABLE_SERVICES"
+          if [ "${{ steps.image-manifest.outputs.present }}" = "true" ]; then
+            rolled_services="$CODE_SERVICES"
+          fi
           for svc in $SERVICE_IMAGES; do
-            if echo "$CODE_SERVICES $DEPLOYABLE_SERVICES" | grep -qw "$svc"; then
+            if echo "$rolled_services" | grep -qw "$svc"; then
               continue  # already rolled by the new-image apply above
             fi
             if kubectl get deploy "$svc" -n "$K8S_NAMESPACE" >/dev/null 2>&1; then
@@ -391,7 +450,7 @@ jobs:
           done
 
       - name: Restart updated stable-tag services
-        if: steps.filter.outputs.code_services != '' && (github.event_name == 'workflow_run' || env.IMAGE_TAG == 'staging' || env.FRONTEND_IMAGE_TAG == 'staging')
+        if: steps.image-manifest.outputs.present != 'true' && steps.filter.outputs.code_services != '' && (github.event_name == 'workflow_run' || env.IMAGE_TAG == 'staging' || env.FRONTEND_IMAGE_TAG == 'staging')
         env:
           CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
         run: |
