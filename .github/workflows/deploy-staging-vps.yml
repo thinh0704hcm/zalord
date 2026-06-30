@@ -19,13 +19,6 @@ on:
     workflows: ["CI — Dev"]
     branches: [staging]
     types: [completed]
-  push:
-    branches:
-      - staging
-    paths:
-      - ".github/workflows/deploy-staging-vps.yml"
-      - ".sops.yaml"
-      - "deploy/k8s/overlays/staging/**"
 
 concurrency:
   group: deploy-staging
