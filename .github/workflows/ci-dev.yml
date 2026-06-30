@@ -6,6 +6,7 @@ on:
     tags: ['v*']
   pull_request:
     branches: [staging, main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-dev-${{ github.ref }}
@@ -27,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v4
+        if: github.event_name != 'workflow_dispatch'
         id: filter
         with:
           filters: |
@@ -51,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           all=false
-          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+          if [ "${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}" = "true" ]; then
             all=true
           fi
 
@@ -81,7 +83,7 @@ jobs:
           echo "Changed services: ${services:-none}"
 
       - name: Write image metadata
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           cat > /tmp/ci-image-metadata.env <<EOF
@@ -91,7 +93,7 @@ jobs:
           EOF
 
       - name: Upload image metadata
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v5
         with:
           name: ci-image-metadata
@@ -146,7 +148,7 @@ jobs:
     needs: [changes, java, go]
     if: |
       always() &&
-      github.event_name == 'push' &&
+      github.event_name != 'pull_request' &&
       (needs.java.result == 'success' || needs.java.result == 'skipped') &&
       (needs.go.result == 'success' || needs.go.result == 'skipped') &&
       (needs.changes.outputs.auth-service == 'true' ||
@@ -217,7 +219,7 @@ jobs:
     needs: [changes, java, go]
     if: |
       always() &&
-      github.event_name == 'push' &&
+      github.event_name != 'pull_request' &&
       (needs.java.result == 'success' || needs.java.result == 'skipped') &&
       (needs.go.result == 'success' || needs.go.result == 'skipped') &&
       (needs.changes.outputs.auth-service == 'true' ||
