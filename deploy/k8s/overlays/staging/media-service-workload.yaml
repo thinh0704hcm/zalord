@@ -32,7 +32,7 @@ spec:
       containers:
         - name: media-service
           image: docker.io/${DOCKER_NAMESPACE}/zalord-media-service:${IMAGE_TAG}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8086

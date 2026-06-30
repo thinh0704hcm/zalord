@@ -15,17 +15,18 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      auth-service: ${{ steps.filter.outputs.auth-service }}
-      user-service: ${{ steps.filter.outputs.user-service }}
-      message-service: ${{ steps.filter.outputs.message-service }}
-      chat-service: ${{ steps.filter.outputs.chat-service }}
-      group-service: ${{ steps.filter.outputs.group-service }}
-      media-service: ${{ steps.filter.outputs.media-service }}
-      notification-service: ${{ steps.filter.outputs.notification-service }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      auth-service: ${{ steps.changed.outputs.auth-service }}
+      user-service: ${{ steps.changed.outputs.user-service }}
+      message-service: ${{ steps.changed.outputs.message-service }}
+      chat-service: ${{ steps.changed.outputs.chat-service }}
+      group-service: ${{ steps.changed.outputs.group-service }}
+      media-service: ${{ steps.changed.outputs.media-service }}
+      notification-service: ${{ steps.changed.outputs.notification-service }}
+      frontend: ${{ steps.changed.outputs.frontend }}
+      services: ${{ steps.changed.outputs.services }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -45,12 +46,56 @@ jobs:
               - 'backend/notification-service/**'
             frontend:
               - 'frontend/**'
-      - name: Override for tag pushes (build everything)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Resolve changed services
+        id: changed
         run: |
-          for svc in auth-service user-service message-service chat-service group-service media-service notification-service frontend; do
-            echo "${svc}=true" >> "$GITHUB_OUTPUT"
-          done
+          set -euo pipefail
+          all=false
+          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            all=true
+          fi
+
+          services=""
+          write_service() {
+            local svc=$1 changed=$2
+            if [ "$all" = "true" ]; then
+              changed=true
+            fi
+            echo "$svc=$changed" >> "$GITHUB_OUTPUT"
+            if [ "$changed" = "true" ]; then
+              services="$services $svc"
+            fi
+          }
+
+          write_service "auth-service" "${{ steps.filter.outputs.auth-service }}"
+          write_service "user-service" "${{ steps.filter.outputs.user-service }}"
+          write_service "message-service" "${{ steps.filter.outputs.message-service }}"
+          write_service "chat-service" "${{ steps.filter.outputs.chat-service }}"
+          write_service "group-service" "${{ steps.filter.outputs.group-service }}"
+          write_service "media-service" "${{ steps.filter.outputs.media-service }}"
+          write_service "notification-service" "${{ steps.filter.outputs.notification-service }}"
+          write_service "frontend" "${{ steps.filter.outputs.frontend }}"
+
+          services="$(echo "$services" | xargs)"
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+          echo "Changed services: ${services:-none}"
+
+      - name: Write image metadata
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          cat > /tmp/ci-image-metadata.env <<EOF
+          image_tag=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+          channel_tag=${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
+          updated_services=${{ steps.changed.outputs.services }}
+          EOF
+
+      - name: Upload image metadata
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ci-image-metadata
+          path: /tmp/ci-image-metadata.env
 
   java:
     needs: [changes]
@@ -64,8 +109,8 @@ jobs:
       matrix:
         service: [auth-service, message-service, group-service, media-service]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: temurin
@@ -85,8 +130,8 @@ jobs:
       matrix:
         service: [user-service, chat-service, notification-service]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           cache-dependency-path: backend/${{ matrix.service }}/go.sum
@@ -115,6 +160,7 @@ jobs:
     runs-on: [self-hosted, ARM64]
     env:
       IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+      CHANNEL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       AUTH_SERVICE: ${{ needs.changes.outputs.auth-service }}
       USER_SERVICE: ${{ needs.changes.outputs.user-service }}
@@ -125,9 +171,9 @@ jobs:
       NOTIFICATION_SERVICE: ${{ needs.changes.outputs.notification-service }}
       FRONTEND: ${{ needs.changes.outputs.frontend }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -140,11 +186,19 @@ jobs:
               echo "Skipping zalord-$name (no changes)"
               return
             fi
-            echo "Building zalord-$name:${IMAGE_TAG}-arm64..."
+            echo "Building zalord-$name:${IMAGE_TAG}-arm64 and ${CHANNEL_TAG}-arm64..."
+            local tag_args=(
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${IMAGE_TAG}-arm64"
+            )
+            if [ "$CHANNEL_TAG" != "$IMAGE_TAG" ]; then
+              tag_args+=(
+                -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${CHANNEL_TAG}-arm64"
+              )
+            fi
             docker buildx build \
               --platform linux/arm64 \
               --push \
-              -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${IMAGE_TAG}-arm64" \
+              "${tag_args[@]}" \
               "$dir"
           }
 
@@ -177,6 +231,7 @@ jobs:
     runs-on: [self-hosted, linux, X64]
     env:
       IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+      CHANNEL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       AUTH_SERVICE: ${{ needs.changes.outputs.auth-service }}
       USER_SERVICE: ${{ needs.changes.outputs.user-service }}
@@ -187,9 +242,9 @@ jobs:
       NOTIFICATION_SERVICE: ${{ needs.changes.outputs.notification-service }}
       FRONTEND: ${{ needs.changes.outputs.frontend }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -202,11 +257,19 @@ jobs:
               echo "Skipping zalord-$name (no changes)"
               return
             fi
-            echo "Building zalord-$name:${IMAGE_TAG}-amd64..."
+            echo "Building zalord-$name:${IMAGE_TAG}-amd64 and ${CHANNEL_TAG}-amd64..."
+            local tag_args=(
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${IMAGE_TAG}-amd64"
+            )
+            if [ "$CHANNEL_TAG" != "$IMAGE_TAG" ]; then
+              tag_args+=(
+                -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${CHANNEL_TAG}-amd64"
+              )
+            fi
             docker buildx build \
               --platform linux/amd64 \
               --push \
-              -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${IMAGE_TAG}-amd64" \
+              "${tag_args[@]}" \
               "$dir"
           }
 
@@ -227,6 +290,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+      CHANNEL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       AUTH_SERVICE: ${{ needs.changes.outputs.auth-service }}
       USER_SERVICE: ${{ needs.changes.outputs.user-service }}
@@ -238,7 +302,7 @@ jobs:
       FRONTEND: ${{ needs.changes.outputs.frontend }}
     steps:
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -246,6 +310,16 @@ jobs:
         run: |
           set -euo pipefail
           SERVICES="auth-service user-service message-service chat-service group-service media-service notification-service frontend"
+          create_manifest() {
+            local svc=$1 tag=$2
+            echo "Combining zalord-$svc:$tag from arm64 + amd64..."
+            docker buildx imagetools create \
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag" \
+              "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${tag}-arm64" \
+              "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${tag}-amd64"
+            echo "  ✓ zalord-$svc:$tag"
+          }
+
           for svc in $SERVICES; do
             change_var=$(echo "$svc" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
             changed="${!change_var:-false}"
@@ -253,12 +327,10 @@ jobs:
               echo "Skipping zalord-$svc (unchanged)"
               continue
             fi
-            echo "Combining zalord-$svc:${IMAGE_TAG} from arm64 + amd64..."
-            docker buildx imagetools create \
-              -t "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}" \
-              "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}-arm64" \
-              "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}-amd64"
-            echo "  ✓ zalord-$svc:${IMAGE_TAG}"
+            create_manifest "$svc" "$IMAGE_TAG"
+            if [ "$CHANNEL_TAG" != "$IMAGE_TAG" ]; then
+              create_manifest "$svc" "$CHANNEL_TAG"
+            fi
           done
 
           # Clean up per-arch tags
@@ -268,6 +340,8 @@ jobs:
             if [ "$changed" != "true" ]; then continue; fi
             docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}-arm64" 2>/dev/null || true
             docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}-amd64" 2>/dev/null || true
+            docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${CHANNEL_TAG}-arm64" 2>/dev/null || true
+            docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${CHANNEL_TAG}-amd64" 2>/dev/null || true
           done
 
-          echo "Done. Multi-arch tag: $IMAGE_TAG"
+          echo "Done. Multi-arch tags: $IMAGE_TAG, $CHANNEL_TAG"

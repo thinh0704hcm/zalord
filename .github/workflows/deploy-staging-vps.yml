@@ -24,14 +24,18 @@ concurrency:
   group: deploy-staging
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     # Only deploy if CI passed (for workflow_run triggers)
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     env:
-      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
-      FRONTEND_IMAGE_TAG: ${{ github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.sha }}
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag || github.sha }}
+      FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.sha }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-staging
       SERVICE_IMAGES: >-
@@ -46,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -94,18 +98,55 @@ jobs:
           chmod 600 ~/.config/sops/age/keys.txt
 
       - name: Docker Hub login
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Download CI image metadata
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ci-image-metadata
+          path: /tmp/ci-image-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Load CI image metadata
+        id: ci-meta
+        run: |
+          set -euo pipefail
+          updated_services=""
+          channel_tag=""
+          if [ -f /tmp/ci-image-metadata/ci-image-metadata.env ]; then
+            while IFS='=' read -r key value; do
+              case "$key" in
+                updated_services) updated_services="$value" ;;
+                channel_tag) channel_tag="$value" ;;
+              esac
+            done < /tmp/ci-image-metadata/ci-image-metadata.env
+          fi
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ -n "$channel_tag" ]; then
+            echo "IMAGE_TAG=$channel_tag" >> "$GITHUB_ENV"
+            echo "FRONTEND_IMAGE_TAG=$channel_tag" >> "$GITHUB_ENV"
+          fi
+          echo "updated_services=${updated_services:-}" >> "$GITHUB_OUTPUT"
+          echo "CI updated services: ${updated_services:-none}"
 
       - name: Check image existence
         id: image-check
         run: |
           set -euo pipefail
+          candidates="$SERVICE_IMAGES"
+          ci_candidates="${{ steps.ci-meta.outputs.updated_services }}"
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ -n "$ci_candidates" ]; then
+            candidates="$ci_candidates"
+          fi
+
           deployable=""
           missing=""
-          for svc in $SERVICE_IMAGES; do
+          for svc in $candidates; do
             if [ "$svc" = "frontend" ]; then
               tag="$FRONTEND_IMAGE_TAG"
             else
@@ -146,16 +187,27 @@ jobs:
               echo "restart_all=true" >> "$GITHUB_OUTPUT"
             fi
           else
+            ci_services="${{ steps.ci-meta.outputs.updated_services }}"
             # workflow_run (triggered by CI on staging push). No event.before is
             # carried, so diff the CI head commit against its parent.
             head="${{ github.event.workflow_run.head_sha || github.sha }}"
             base="$(git rev-parse "${head}^" 2>/dev/null || true)"
+            config_changed=false
+            if [ -n "$base" ] && git diff --name-only "$base" "$head" \
+                | grep -q "^deploy/k8s/overlays/staging/.*\(config\|secret\|provisioning\)"; then
+              config_changed=true
+            fi
             if [ -z "$base" ]; then
               # Cannot determine a diff range: restart everything but DO NOT re-template
               # workloads to this SHA — images may not have been built for it.
               echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
               echo "code_services=" >> "$GITHUB_OUTPUT"
               echo "restart_all=true" >> "$GITHUB_OUTPUT"
+            elif [ -n "$ci_services" ]; then
+              # CI already recorded exactly which images it updated.
+              echo "services=$ci_services" >> "$GITHUB_OUTPUT"
+              echo "code_services=$ci_services" >> "$GITHUB_OUTPUT"
+              echo "restart_all=$config_changed" >> "$GITHUB_OUTPUT"
             else
               # code_services = services whose source changed → image built at $head.
               code_services=""
@@ -169,11 +221,6 @@ jobs:
               fi
               code_services="$(echo "$code_services" | xargs)"
               echo "code_services=$code_services" >> "$GITHUB_OUTPUT"
-              config_changed=false
-              if git diff --name-only "$base" "$head" \
-                  | grep -q "^deploy/k8s/overlays/staging/.*\(config\|secret\|provisioning\)"; then
-                config_changed=true
-              fi
               if [ -z "$code_services" ]; then
                 # Only config/infra changed (or nothing relevant): restart all, keep running images.
                 echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
@@ -332,6 +379,18 @@ jobs:
             fi
             if kubectl get deploy "$svc" -n "$K8S_NAMESPACE" >/dev/null 2>&1; then
               echo "Restarting $svc (config-only)"
+              kubectl rollout restart deploy/"$svc" -n "$K8S_NAMESPACE"
+            fi
+          done
+
+      - name: Restart updated stable-tag services
+        if: github.event_name == 'workflow_run' && steps.filter.outputs.code_services != ''
+        env:
+          CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
+        run: |
+          set -euo pipefail
+          for svc in $CODE_SERVICES; do
+            if kubectl get deploy "$svc" -n "$K8S_NAMESPACE" >/dev/null 2>&1; then
               kubectl rollout restart deploy/"$svc" -n "$K8S_NAMESPACE"
             fi
           done
