@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: zalord-staging
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.zalord-staging.svc.cluster.local:9090
+        isDefault: true
+        editable: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-providers
+  namespace: zalord-staging
+data:
+  dashboard.yml: |
+    apiVersion: 1
+    providers:
+      - name: zalord
+        orgId: 1
+        folder: Zalord
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/provisioning/dashboards/json
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: zalord-staging
+data:
+  zalord-overview.json: |
+    {
+      "uid": "zalord-overview",
+      "title": "Zalord Overview",
+      "tags": ["zalord", "staging"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "15s",
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Scrape Targets Up",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "expr": "up{job=~\"java-apps|go-apps|kong|rabbitmq|rabbitmq-detail|kafka|otel-collector|prometheus\"}",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ],
+          "datasource": { "type": "prometheus", "uid": "Prometheus" }
+        }
+      ]
+    }

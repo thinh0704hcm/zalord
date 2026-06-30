@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: zalord-staging
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        monitor: zalord-staging
+
+    scrape_configs:
+      - job_name: java-apps
+        metrics_path: /actuator/prometheus
+        static_configs:
+          - targets: ["auth-service.zalord-staging.svc.cluster.local:8081"]
+            labels: { service: auth-service }
+          - targets: ["message-service.zalord-staging.svc.cluster.local:8083"]
+            labels: { service: message-service }
+          - targets: ["group-service.zalord-staging.svc.cluster.local:8085"]
+            labels: { service: group-service }
+          - targets: ["media-service.zalord-staging.svc.cluster.local:8086"]
+            labels: { service: media-service }
+
+      - job_name: go-apps
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["chat-service.zalord-staging.svc.cluster.local:8084"]
+            labels: { service: chat-service }
+          - targets: ["notification-service.zalord-staging.svc.cluster.local:8087"]
+            labels: { service: notification-service }
+          - targets: ["user-service.zalord-staging.svc.cluster.local:8082"]
+            labels: { service: user-service }
+
+      - job_name: kong
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["kong.zalord-staging.svc.cluster.local:8001"]
+            labels: { service: kong }
+
+      - job_name: rabbitmq
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["rabbitmq.zalord-staging.svc.cluster.local:15692"]
+            labels: { service: rabbitmq }
+
+      - job_name: rabbitmq-detail
+        metrics_path: /metrics/per-object
+        static_configs:
+          - targets: ["rabbitmq.zalord-staging.svc.cluster.local:15692"]
+            labels: { service: rabbitmq }
+
+      - job_name: kafka
+        static_configs:
+          - targets: ["kafka-exporter.zalord-staging.svc.cluster.local:9308"]
+            labels: { service: kafka }
+
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+            labels: { service: prometheus }
+
+      - job_name: otel-collector
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["otel-collector.zalord-staging.svc.cluster.local:8889"]
+            labels: { service: otel-collector }

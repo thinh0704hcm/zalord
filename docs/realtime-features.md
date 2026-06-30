@@ -403,7 +403,7 @@ docker run --rm --network zalord_zalord-net -v /tmp/test_features.py:/test.py \
   python:3.11-alpine sh -c "pip install -q websockets && python /test.py"
 ```
 
-The script in `scripts/test-realtime-features.py` (or `/tmp` for ad-hoc runs) covers all three features in sequence.
+Run ad-hoc by writing a `/tmp/test.py` and exec'ing it in a Python container on the compose network (the original dedicated script has been removed).
 
 ---
 

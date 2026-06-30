@@ -359,9 +359,7 @@ function onMessageRecalled(data) {
 | `infra/kafka/create-topics.sh` | + `message.recalled` topic |
 
 ### Test
-| Path | Purpose |
-|---|---|
-| `scripts/test-recall-reply.py` | E2E happy + negative paths for both features |
+The original `scripts/test-recall-reply.py` script was removed during cleanup. Re-test ad-hoc by issuing the documented REST + WS calls manually, or write a fresh one against the API contracts above.
 
 ---
 

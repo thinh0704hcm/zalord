@@ -252,7 +252,8 @@ jobs:
                     .spec.selector.matchLabels.app=$name |
                     .spec.template.metadata.labels.app=$name |
                     .spec.template.spec.containers[0].image=$image |
-                    .spec.template.spec.containers[0].ports[0].containerPort=(($port | tonumber))' \
+                    .spec.template.spec.containers[0].ports[0].containerPort=(($port | tonumber)) |
+                    .spec.template.spec.containers[0].env = ((.spec.template.spec.containers[0].env // []) + [{"name":"CANARY","value":"true"}])' \
               | kubectl apply -n "$K8S_NAMESPACE" -f -
             echo "  Canary deployment: ${svc}-canary → $CANARY_IMAGE_TAG"
 
@@ -305,8 +306,6 @@ jobs:
           canary_endpoint() {
             case "$1" in
               chat-service)           echo "chat.zalord.vn /api/v1/chat/canary" ;;
-              notification-service)   echo "notification.zalord.vn /api/v1/notifications/version" ;;
-              auth-service)           echo "auth.zalord.vn /api/v1/auth/version" ;;
               *)                      echo "" ;;
             esac
           }
