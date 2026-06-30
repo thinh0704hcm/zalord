@@ -1,0 +1,410 @@
+name: CI — Dev
+
+on:
+  push:
+    branches: [staging, main]
+    tags: ['v*']
+  pull_request:
+    branches: [staging, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      auth-service: ${{ steps.changed.outputs.auth-service }}
+      user-service: ${{ steps.changed.outputs.user-service }}
+      message-service: ${{ steps.changed.outputs.message-service }}
+      chat-service: ${{ steps.changed.outputs.chat-service }}
+      group-service: ${{ steps.changed.outputs.group-service }}
+      media-service: ${{ steps.changed.outputs.media-service }}
+      notification-service: ${{ steps.changed.outputs.notification-service }}
+      frontend: ${{ steps.changed.outputs.frontend }}
+      services: ${{ steps.changed.outputs.services }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v4
+        if: github.event_name != 'workflow_dispatch'
+        id: filter
+        with:
+          filters: |
+            auth-service:
+              - 'backend/auth-service/**'
+            user-service:
+              - 'backend/user-service/**'
+            message-service:
+              - 'backend/message-service/**'
+            chat-service:
+              - 'backend/chat-service/**'
+            group-service:
+              - 'backend/group-service/**'
+            media-service:
+              - 'backend/media-service/**'
+            notification-service:
+              - 'backend/notification-service/**'
+            frontend:
+              - 'frontend/**'
+      - name: Resolve changed services
+        id: changed
+        run: |
+          set -euo pipefail
+          all=false
+          if [ "${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}" = "true" ]; then
+            all=true
+          fi
+
+          services=""
+          write_service() {
+            local svc=$1 changed=$2
+            if [ "$all" = "true" ]; then
+              changed=true
+            fi
+            echo "$svc=$changed" >> "$GITHUB_OUTPUT"
+            if [ "$changed" = "true" ]; then
+              services="$services $svc"
+            fi
+          }
+
+          write_service "auth-service" "${{ steps.filter.outputs.auth-service }}"
+          write_service "user-service" "${{ steps.filter.outputs.user-service }}"
+          write_service "message-service" "${{ steps.filter.outputs.message-service }}"
+          write_service "chat-service" "${{ steps.filter.outputs.chat-service }}"
+          write_service "group-service" "${{ steps.filter.outputs.group-service }}"
+          write_service "media-service" "${{ steps.filter.outputs.media-service }}"
+          write_service "notification-service" "${{ steps.filter.outputs.notification-service }}"
+          write_service "frontend" "${{ steps.filter.outputs.frontend }}"
+
+          services="$(echo "$services" | xargs)"
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+          echo "Changed services: ${services:-none}"
+
+      - name: Write image metadata
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          cat > /tmp/ci-image-metadata.env <<EOF
+          image_tag=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+          channel_tag=${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
+          updated_services=${{ steps.changed.outputs.services }}
+          EOF
+
+      - name: Upload image metadata
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ci-image-metadata
+          path: /tmp/ci-image-metadata.env
+
+  java:
+    needs: [changes]
+    if: |
+      needs.changes.outputs.auth-service == 'true' ||
+      needs.changes.outputs.message-service == 'true' ||
+      needs.changes.outputs.group-service == 'true' ||
+      needs.changes.outputs.media-service == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth-service, message-service, group-service, media-service]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Compile & unit tests
+        run: ./mvnw -B verify -Dtest='!*ApplicationTests' -Dsurefire.failIfNoSpecifiedTests=false
+        working-directory: backend/${{ matrix.service }}
+
+  go:
+    needs: [changes]
+    if: |
+      needs.changes.outputs.user-service == 'true' ||
+      needs.changes.outputs.chat-service == 'true' ||
+      needs.changes.outputs.notification-service == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [user-service, chat-service, notification-service]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache-dependency-path: backend/${{ matrix.service }}/go.sum
+      - name: Build
+        run: go build ./...
+        working-directory: backend/${{ matrix.service }}
+      - name: Test
+        run: go test ./... -count=1 -timeout 60s
+        working-directory: backend/${{ matrix.service }}
+
+  build-arm64:
+    needs: [changes, java, go]
+    if: |
+      always() &&
+      github.event_name != 'pull_request' &&
+      (needs.java.result == 'success' || needs.java.result == 'skipped') &&
+      (needs.go.result == 'success' || needs.go.result == 'skipped') &&
+      (needs.changes.outputs.auth-service == 'true' ||
+       needs.changes.outputs.user-service == 'true' ||
+       needs.changes.outputs.message-service == 'true' ||
+       needs.changes.outputs.chat-service == 'true' ||
+       needs.changes.outputs.group-service == 'true' ||
+       needs.changes.outputs.media-service == 'true' ||
+       needs.changes.outputs.notification-service == 'true' ||
+       needs.changes.outputs.frontend == 'true')
+    runs-on: [self-hosted, ARM64]
+    env:
+      IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+      CHANNEL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
+      DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
+      AUTH_SERVICE: ${{ needs.changes.outputs.auth-service }}
+      USER_SERVICE: ${{ needs.changes.outputs.user-service }}
+      MESSAGE_SERVICE: ${{ needs.changes.outputs.message-service }}
+      CHAT_SERVICE: ${{ needs.changes.outputs.chat-service }}
+      GROUP_SERVICE: ${{ needs.changes.outputs.group-service }}
+      MEDIA_SERVICE: ${{ needs.changes.outputs.media-service }}
+      NOTIFICATION_SERVICE: ${{ needs.changes.outputs.notification-service }}
+      FRONTEND: ${{ needs.changes.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build & push arm64 images
+        run: |
+          set -euo pipefail
+          build_service() {
+            local name=$1 changed=$2 dir=$3
+            if [ "$changed" != "true" ]; then
+              echo "Skipping zalord-$name (no changes)"
+              return
+            fi
+            echo "Building zalord-$name:${IMAGE_TAG}-arm64 and ${CHANNEL_TAG}-arm64..."
+            local tag_args=(
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${IMAGE_TAG}-arm64"
+            )
+            if [ "$CHANNEL_TAG" != "$IMAGE_TAG" ]; then
+              tag_args+=(
+                -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${CHANNEL_TAG}-arm64"
+              )
+            fi
+            docker buildx build \
+              --platform linux/arm64 \
+              --push \
+              "${tag_args[@]}" \
+              "$dir"
+          }
+
+          build_service "auth-service"       "$AUTH_SERVICE"       "backend/auth-service"
+          build_service "user-service"       "$USER_SERVICE"       "backend/user-service"
+          build_service "message-service"    "$MESSAGE_SERVICE"    "backend/message-service"
+          build_service "chat-service"       "$CHAT_SERVICE"       "backend/chat-service"
+          build_service "group-service"      "$GROUP_SERVICE"      "backend/group-service"
+          build_service "media-service"      "$MEDIA_SERVICE"      "backend/media-service"
+          build_service "notification-service" "$NOTIFICATION_SERVICE" "backend/notification-service"
+          build_service "frontend"           "$FRONTEND"           "frontend"
+
+          echo "Done. Built arm64 tag: $IMAGE_TAG"
+
+  build-amd64:
+    needs: [changes, java, go]
+    if: |
+      always() &&
+      github.event_name != 'pull_request' &&
+      (needs.java.result == 'success' || needs.java.result == 'skipped') &&
+      (needs.go.result == 'success' || needs.go.result == 'skipped') &&
+      (needs.changes.outputs.auth-service == 'true' ||
+       needs.changes.outputs.user-service == 'true' ||
+       needs.changes.outputs.message-service == 'true' ||
+       needs.changes.outputs.chat-service == 'true' ||
+       needs.changes.outputs.group-service == 'true' ||
+       needs.changes.outputs.media-service == 'true' ||
+       needs.changes.outputs.notification-service == 'true' ||
+       needs.changes.outputs.frontend == 'true')
+    runs-on: [self-hosted, linux, X64]
+    env:
+      IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+      CHANNEL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
+      DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
+      AUTH_SERVICE: ${{ needs.changes.outputs.auth-service }}
+      USER_SERVICE: ${{ needs.changes.outputs.user-service }}
+      MESSAGE_SERVICE: ${{ needs.changes.outputs.message-service }}
+      CHAT_SERVICE: ${{ needs.changes.outputs.chat-service }}
+      GROUP_SERVICE: ${{ needs.changes.outputs.group-service }}
+      MEDIA_SERVICE: ${{ needs.changes.outputs.media-service }}
+      NOTIFICATION_SERVICE: ${{ needs.changes.outputs.notification-service }}
+      FRONTEND: ${{ needs.changes.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build & push amd64 images
+        run: |
+          set -euo pipefail
+          build_service() {
+            local name=$1 changed=$2 dir=$3
+            if [ "$changed" != "true" ]; then
+              echo "Skipping zalord-$name (no changes)"
+              return
+            fi
+            echo "Building zalord-$name:${IMAGE_TAG}-amd64 and ${CHANNEL_TAG}-amd64..."
+            local tag_args=(
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${IMAGE_TAG}-amd64"
+            )
+            if [ "$CHANNEL_TAG" != "$IMAGE_TAG" ]; then
+              tag_args+=(
+                -t "docker.io/$DOCKER_NAMESPACE/zalord-$name:${CHANNEL_TAG}-amd64"
+              )
+            fi
+            docker buildx build \
+              --platform linux/amd64 \
+              --push \
+              "${tag_args[@]}" \
+              "$dir"
+          }
+
+          build_service "auth-service"       "$AUTH_SERVICE"       "backend/auth-service"
+          build_service "user-service"       "$USER_SERVICE"       "backend/user-service"
+          build_service "message-service"    "$MESSAGE_SERVICE"    "backend/message-service"
+          build_service "chat-service"       "$CHAT_SERVICE"       "backend/chat-service"
+          build_service "group-service"      "$GROUP_SERVICE"      "backend/group-service"
+          build_service "media-service"      "$MEDIA_SERVICE"      "backend/media-service"
+          build_service "notification-service" "$NOTIFICATION_SERVICE" "backend/notification-service"
+          build_service "frontend"           "$FRONTEND"           "frontend"
+
+          echo "Done. Built amd64 tag: $IMAGE_TAG"
+
+  combine-manifests:
+    needs: [changes, build-arm64, build-amd64]
+    if: always() && (needs.build-arm64.result == 'success') && (needs.build-amd64.result == 'success')
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+      CHANNEL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && 'prod' || github.ref_name }}
+      DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
+      AUTH_SERVICE: ${{ needs.changes.outputs.auth-service }}
+      USER_SERVICE: ${{ needs.changes.outputs.user-service }}
+      MESSAGE_SERVICE: ${{ needs.changes.outputs.message-service }}
+      CHAT_SERVICE: ${{ needs.changes.outputs.chat-service }}
+      GROUP_SERVICE: ${{ needs.changes.outputs.group-service }}
+      MEDIA_SERVICE: ${{ needs.changes.outputs.media-service }}
+      NOTIFICATION_SERVICE: ${{ needs.changes.outputs.notification-service }}
+      FRONTEND: ${{ needs.changes.outputs.frontend }}
+      SERVICE_IMAGES: >-
+        auth-service
+        user-service
+        message-service
+        chat-service
+        group-service
+        media-service
+        notification-service
+        frontend
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Create multi-arch manifests
+        run: |
+          set -euo pipefail
+          SERVICES="$SERVICE_IMAGES"
+          create_manifest() {
+            local svc=$1 tag=$2
+            echo "Combining zalord-$svc:$tag from arm64 + amd64..."
+            docker buildx imagetools create \
+              -t "docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag" \
+              "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${tag}-arm64" \
+              "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${tag}-amd64"
+            echo "  ✓ zalord-$svc:$tag"
+          }
+
+          for svc in $SERVICES; do
+            change_var=$(echo "$svc" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
+            changed="${!change_var:-false}"
+            if [ "$changed" != "true" ]; then
+              echo "Skipping zalord-$svc (unchanged)"
+              continue
+            fi
+            create_manifest "$svc" "$IMAGE_TAG"
+            if [ "$CHANNEL_TAG" != "$IMAGE_TAG" ]; then
+              create_manifest "$svc" "$CHANNEL_TAG"
+            fi
+          done
+
+          # Clean up per-arch tags
+          for svc in $SERVICES; do
+            change_var=$(echo "$svc" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
+            changed="${!change_var:-false}"
+            if [ "$changed" != "true" ]; then continue; fi
+            docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}-arm64" 2>/dev/null || true
+            docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${IMAGE_TAG}-amd64" 2>/dev/null || true
+            docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${CHANNEL_TAG}-arm64" 2>/dev/null || true
+            docker rmi "docker.io/$DOCKER_NAMESPACE/zalord-$svc:${CHANNEL_TAG}-amd64" 2>/dev/null || true
+          done
+
+          echo "Done. Multi-arch tags: $IMAGE_TAG, $CHANNEL_TAG"
+
+      - name: Write digest image manifest
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ci-image-manifest
+          manifest=/tmp/ci-image-manifest/image-manifest.env
+          yaml_manifest=/tmp/ci-image-manifest/image-manifest.yaml
+
+          digest_for() {
+            local ref=$1 digest=""
+            for _ in 1 2 3 4 5; do
+              digest=$(docker buildx imagetools inspect "$ref" 2>/dev/null | awk '/^Digest:/ {print $2; exit}')
+              [ -n "$digest" ] && break
+              sleep 3
+            done
+            [ -n "$digest" ] || { echo "Missing digest for $ref"; return 1; }
+            printf '%s' "$digest"
+          }
+
+          : > "$manifest"
+          {
+            echo "version: $IMAGE_TAG"
+            echo "channel: $CHANNEL_TAG"
+            echo "updatedServices:"
+            for svc in ${{ needs.changes.outputs.services }}; do
+              echo "  - $svc"
+            done
+            echo "services:"
+          } > "$yaml_manifest"
+
+          for svc in $SERVICE_IMAGES; do
+            repo="docker.io/$DOCKER_NAMESPACE/zalord-$svc"
+            digest=$(digest_for "$repo:$CHANNEL_TAG")
+            image="$repo@$digest"
+            echo "$svc=$image" >> "$manifest"
+            echo "  $svc: $image" >> "$yaml_manifest"
+          done
+
+          cat > /tmp/ci-image-manifest/ci-image-metadata.env <<EOF
+          image_tag=$IMAGE_TAG
+          channel_tag=$CHANNEL_TAG
+          updated_services=${{ needs.changes.outputs.services }}
+          EOF
+
+          echo "Digest image manifest:"
+          cat "$yaml_manifest"
+
+      - name: Upload digest image manifest
+        uses: actions/upload-artifact@v5
+        with:
+          name: ci-image-manifest
+          path: /tmp/ci-image-manifest

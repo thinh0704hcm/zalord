@@ -1,0 +1,500 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag for backend services (default: staging)'
+        required: false
+        default: 'staging'
+        type: string
+      frontend_image_tag:
+        description: 'Image tag for frontend (defaults to image_tag)'
+        required: false
+        type: string
+      services:
+        description: 'Space-separated services to deploy (default: all)'
+        required: false
+        type: string
+      image_manifest_run_id:
+        description: 'CI run ID with ci-image-manifest artifact (rollback/exact deploy)'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["CI — Dev"]
+    branches: [staging]
+    types: [completed]
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Only deploy if CI passed (for workflow_run triggers)
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    env:
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag || 'staging' }}
+      FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || 'staging' }}
+      DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
+      K8S_NAMESPACE: zalord-staging
+      SERVICE_IMAGES: >-
+        auth-service
+        user-service
+        message-service
+        chat-service
+        group-service
+        media-service
+        notification-service
+        frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Validate required secrets
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY_STAGING }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$DOCKER_NAMESPACE" || { echo "Missing DOCKER_USERNAME"; exit 1; }
+          test -n "$IMAGE_TAG" || { echo "Missing IMAGE_TAG"; exit 1; }
+          test -n "$SOPS_AGE_KEY" || { echo "Missing SOPS_AGE_KEY_STAGING"; exit 1; }
+          test -n "$STAGING_KUBECONFIG_B64" || { echo "Missing STAGING_KUBECONFIG_B64"; exit 1; }
+
+      - name: Install deploy tools
+        run: |
+          set -euo pipefail
+          # kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/kubectl
+          # sops
+          curl -sL https://github.com/getsops/sops/releases/download/v3.13.1/sops-v3.13.1.linux.amd64 -o /usr/local/bin/sops
+          chmod 755 /usr/local/bin/sops
+          # envsubst
+          sudo apt-get update -qq && sudo apt-get install -y -qq gettext-base
+
+      - name: Configure kubeconfig
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$STAGING_KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          # Verify connectivity
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Configure SOPS age key
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY_STAGING }}
+        run: |
+          mkdir -p ~/.config/sops/age
+          printf '%s\n' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+
+      - name: Docker Hub login
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Download CI image metadata
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ci-image-metadata
+          path: /tmp/ci-image-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Load CI image metadata
+        id: ci-meta
+        run: |
+          set -euo pipefail
+          updated_services=""
+          channel_tag=""
+          if [ -f /tmp/ci-image-metadata/ci-image-metadata.env ]; then
+            while IFS='=' read -r key value; do
+              case "$key" in
+                updated_services) updated_services="$value" ;;
+                channel_tag) channel_tag="$value" ;;
+              esac
+            done < /tmp/ci-image-metadata/ci-image-metadata.env
+          fi
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ -n "$channel_tag" ]; then
+            echo "IMAGE_TAG=$channel_tag" >> "$GITHUB_ENV"
+            echo "FRONTEND_IMAGE_TAG=$channel_tag" >> "$GITHUB_ENV"
+          fi
+          echo "updated_services=${updated_services:-}" >> "$GITHUB_OUTPUT"
+          echo "CI updated services: ${updated_services:-none}"
+
+      - name: Download CI image manifest
+        if: github.event_name == 'workflow_run' || github.event.inputs.image_manifest_run_id != ''
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ci-image-manifest
+          path: /tmp/ci-image-manifest
+          run-id: ${{ github.event.inputs.image_manifest_run_id || github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Load CI image manifest
+        id: image-manifest
+        run: |
+          set -euo pipefail
+          manifest=/tmp/ci-image-manifest/image-manifest.env
+          if [ -s "$manifest" ]; then
+            services=$(cut -d= -f1 "$manifest" | xargs)
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "services=$services" >> "$GITHUB_OUTPUT"
+            echo "Digest manifest services: $services"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "services=" >> "$GITHUB_OUTPUT"
+            echo "No digest image manifest"
+          fi
+
+      - name: Check image existence
+        id: image-check
+        run: |
+          set -euo pipefail
+          manifest=/tmp/ci-image-manifest/image-manifest.env
+          candidates="$SERVICE_IMAGES"
+          if [ -s "$manifest" ]; then
+            candidates=$(cut -d= -f1 "$manifest" | xargs)
+          else
+            ci_candidates="${{ steps.ci-meta.outputs.updated_services }}"
+            if [ "${{ github.event_name }}" = "workflow_run" ] && [ -n "$ci_candidates" ]; then
+              candidates="$ci_candidates"
+            fi
+          fi
+
+          image_ref_for() {
+            local svc=$1
+            [ -s "$manifest" ] || return 1
+            awk -F= -v svc="$svc" '$1 == svc {print $2; found=1} END {exit found ? 0 : 1}' "$manifest"
+          }
+
+          image_exists() {
+            local img=$1 svc=$2 tag=${3:-}
+            docker manifest inspect "$img" >/dev/null 2>&1 && return 0
+            [ -n "$tag" ] && curl -fsS "https://hub.docker.com/v2/repositories/$DOCKER_NAMESPACE/zalord-$svc/tags/$tag" >/dev/null 2>&1
+          }
+
+          deployable=""
+          missing=""
+          for svc in $candidates; do
+            if img=$(image_ref_for "$svc"); then
+              tag=""
+            elif [ "$svc" = "frontend" ]; then
+              tag="$FRONTEND_IMAGE_TAG"
+              img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag"
+            else
+              tag="$IMAGE_TAG"
+              img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag"
+            fi
+            if image_exists "$img" "$svc" "$tag"; then
+              deployable="$deployable $svc"
+            else
+              missing="$missing $svc"
+              echo "::warning::Image not found: $img — will skip $svc"
+            fi
+          done
+          deployable="$(echo "$deployable" | xargs)"
+          missing="$(echo "$missing" | xargs)"
+          echo "deployable_services=$deployable" >> "$GITHUB_OUTPUT"
+          echo "missing_services=$missing" >> "$GITHUB_OUTPUT"
+          echo "Deployable: $deployable"
+          [ -n "$missing" ] && echo "::warning::Skipped missing images: $missing" || true
+
+      - name: Detect changed services
+        id: filter
+        run: |
+          set -euo pipefail
+
+          # Determine diff range based on trigger type
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual: deploy specified services (or all if empty).
+            # image_tag is a required input, so every workload image exists at that tag.
+            input_services="${{ github.event.inputs.services || '' }}"
+            if [ -n "$input_services" ]; then
+              echo "services=$input_services" >> "$GITHUB_OUTPUT"
+              echo "code_services=$input_services" >> "$GITHUB_OUTPUT"
+              echo "restart_all=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
+              echo "code_services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
+              echo "restart_all=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            ci_services="${{ steps.ci-meta.outputs.updated_services }}"
+            # workflow_run (triggered by CI on staging push). No event.before is
+            # carried, so diff the CI head commit against its parent.
+            head="${{ github.event.workflow_run.head_sha || github.sha }}"
+            base="$(git rev-parse "${head}^" 2>/dev/null || true)"
+            config_changed=false
+            if [ -n "$base" ] && git diff --name-only "$base" "$head" \
+                | grep -q "^deploy/k8s/overlays/staging/.*\(config\|secret\|provisioning\)"; then
+              config_changed=true
+            fi
+            if [ -z "$base" ]; then
+              # Cannot determine a diff range: restart everything but DO NOT re-template
+              # workloads to this SHA — images may not have been built for it.
+              echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
+              echo "code_services=" >> "$GITHUB_OUTPUT"
+              echo "restart_all=true" >> "$GITHUB_OUTPUT"
+            elif [ -n "$ci_services" ]; then
+              # CI already recorded exactly which images it updated.
+              echo "services=$ci_services" >> "$GITHUB_OUTPUT"
+              echo "code_services=$ci_services" >> "$GITHUB_OUTPUT"
+              echo "restart_all=$config_changed" >> "$GITHUB_OUTPUT"
+            else
+              # code_services = services whose source changed → image built at $head.
+              code_services=""
+              for svc in $SERVICE_IMAGES; do
+                if git diff --name-only "$base" "$head" | grep -q "^backend/$svc/"; then
+                  code_services="$code_services $svc"
+                fi
+              done
+              if git diff --name-only "$base" "$head" | grep -q "^frontend/"; then
+                code_services="$code_services frontend"
+              fi
+              code_services="$(echo "$code_services" | xargs)"
+              echo "code_services=$code_services" >> "$GITHUB_OUTPUT"
+              if [ -z "$code_services" ]; then
+                # Only config/infra changed (or nothing relevant): restart all, keep running images.
+                echo "services=$SERVICE_IMAGES" >> "$GITHUB_OUTPUT"
+                echo "restart_all=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "services=$code_services" >> "$GITHUB_OUTPUT"
+                echo "restart_all=$config_changed" >> "$GITHUB_OUTPUT"
+              fi
+            fi
+          fi
+          echo "Detected services: $(cat "$GITHUB_OUTPUT" | grep '^services=' | cut -d= -f2)"
+
+      - name: Build deploy bundle
+        env:
+          CHANGED_SERVICES: ${{ steps.filter.outputs.services }}
+          CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
+          DEPLOYABLE_SERVICES: ${{ steps.image-check.outputs.deployable_services }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/zalord-k8s-staging
+
+          # Config files (no substitution needed)
+          cp deploy/k8s/overlays/staging/*-config.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
+          cp deploy/k8s/overlays/staging/infra-*.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
+          cp deploy/k8s/overlays/staging/*-provisioning.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
+
+          # Kong routes + plugins
+          cp deploy/k8s/overlays/staging/kong-routes.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
+          cp deploy/k8s/overlays/staging/kong-plugins.yaml /tmp/zalord-k8s-staging/ 2>/dev/null || true
+
+          # Decrypt secrets
+          for secret in deploy/k8s/overlays/staging/*-secret.enc.yaml; do
+            [ -f "$secret" ] || continue
+            target="/tmp/zalord-k8s-staging/$(basename "${secret%.enc.yaml}.yaml")"
+            sops -d "$secret" > "$target"
+            echo "  Decrypted: $(basename "$secret")"
+          done
+
+          manifest=/tmp/ci-image-manifest/image-manifest.env
+          image_ref_for() {
+            local svc=$1
+            [ -s "$manifest" ] || return 1
+            awk -F= -v svc="$svc" '$1 == svc {print $2; found=1} END {exit found ? 0 : 1}' "$manifest"
+          }
+
+          for f in deploy/k8s/overlays/staging/*-workload.yaml; do
+            [ -f "$f" ] || continue
+            basename_f="$(basename "$f")"
+            svc_name="${basename_f%-workload.yaml}"
+            image_ref=""
+            image_ref=$(image_ref_for "$svc_name" || true)
+
+            if grep -q '${IMAGE_TAG}' "$f" && [ -z "$image_ref" ]; then
+              if ! echo "$CODE_SERVICES" | grep -qw "$svc_name"; then
+                echo "  Skipping $basename_f (code unchanged — image $IMAGE_TAG may not exist)"
+                continue
+              fi
+              if ! echo "$DEPLOYABLE_SERVICES" | grep -qw "$svc_name"; then
+                echo "  Skipping $basename_f (image not found in registry)"
+                continue
+              fi
+            fi
+
+            if [ -n "$image_ref" ]; then
+              sed "s#docker.io/\${DOCKER_NAMESPACE}/zalord-$svc_name:\${IMAGE_TAG}#$image_ref#g" "$f" \
+                | envsubst '${DOCKER_NAMESPACE}' > "/tmp/zalord-k8s-staging/$basename_f"
+            elif [ "$svc_name" = "frontend" ] && [ -n "$FRONTEND_IMAGE_TAG" ]; then
+              sed "s/\${IMAGE_TAG}/$FRONTEND_IMAGE_TAG/g" "$f" \
+                | envsubst '${DOCKER_NAMESPACE}' > "/tmp/zalord-k8s-staging/$basename_f"
+            else
+              envsubst '${DOCKER_NAMESPACE} ${IMAGE_TAG}' < "$f" > "/tmp/zalord-k8s-staging/$basename_f"
+            fi
+            echo "  Substituted: $basename_f"
+          done
+
+          # Concatenate into single manifest (exclude kong-routes — applied per-ns above)
+          first=true
+          for manifest in /tmp/zalord-k8s-staging/*.yaml; do
+            [ -f "$manifest" ] || continue
+            [ "$(basename "$manifest")" = "kong-routes.yaml" ] && continue
+            if [ "$first" = true ]; then
+              first=false
+            else
+              printf '\n---\n'
+            fi
+            cat "$manifest"
+          done > /tmp/zalord-k8s-staging.yaml
+
+          echo "Deploy bundle: $(wc -l < /tmp/zalord-k8s-staging.yaml) lines"
+
+      - name: Ensure namespaces
+        run: |
+          kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace kong --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Enable Kong pre-function plugin
+        run: |
+          # Ensure pre-function is in KONG_PLUGINS so Lua KongPlugins work
+          current=$(kubectl get deploy kong-kong -n kong -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KONG_PLUGINS")].value}' 2>/dev/null || echo "")
+          if [[ "$current" != *"pre-function"* ]]; then
+            helm upgrade kong kong/kong --namespace kong \
+              --set proxy.type=NodePort \
+              --set proxy.http.nodePort=30080 \
+              --set proxy.tls.nodePort=30443 \
+              --set ingressController.enabled=true \
+              --set admin.enabled=false \
+              --reuse-values 2>/dev/null || true
+            # Patch env directly if Helm reuse-values fails
+            kubectl set env deploy/kong-kong -n kong KONG_PLUGINS=bundled,pre-function 2>/dev/null || true
+            kubectl rollout status deploy/kong-kong -n kong --timeout=120s
+            echo "Kong pre-function plugin enabled"
+          else
+            echo "Kong pre-function already enabled"
+          fi
+
+      - name: Clean stale Gateway API resources
+        run: |
+          # k3s KIC doesn't process Gateway API HTTPRoutes — clean them up
+          kubectl delete httproute --all -n "$K8S_NAMESPACE" 2>/dev/null || true
+          kubectl delete httproute --all -n kong 2>/dev/null || true
+
+      - name: Apply manifests
+        run: |
+          set -euo pipefail
+          # Delete stale init jobs
+          kubectl delete job -n "$K8S_NAMESPACE" kafka-init minio-init --ignore-not-found=true --wait=true 2>/dev/null || true
+          # Apply KongPlugin (in staging namespace)
+          if [ -f /tmp/zalord-k8s-staging/kong-plugins.yaml ]; then
+            kubectl apply -f /tmp/zalord-k8s-staging/kong-plugins.yaml
+          fi
+          # Apply kong-namespace resources (Ingresses)
+          if [ -f /tmp/zalord-k8s-staging/kong-routes.yaml ]; then
+            kubectl apply -f /tmp/zalord-k8s-staging/kong-routes.yaml
+          fi
+          # Apply staging-namespace resources (everything except kong-routes and kong-plugins)
+          first=true
+          for manifest in /tmp/zalord-k8s-staging/*.yaml; do
+            [ -f "$manifest" ] || continue
+            bn=$(basename "$manifest")
+            [ "$bn" = "kong-routes.yaml" ] && continue
+            [ "$bn" = "kong-plugins.yaml" ] && continue
+            if [ "$first" = true ]; then first=false; else printf '\n---\n'; fi
+            cat "$manifest"
+          done | kubectl apply -n "$K8S_NAMESPACE" -f -
+          if [ -f /tmp/ci-image-manifest/image-manifest.yaml ]; then
+            kubectl create configmap zalord-image-manifest -n "$K8S_NAMESPACE" \
+              --from-file=image-manifest.yaml=/tmp/ci-image-manifest/image-manifest.yaml \
+              --from-file=image-manifest.env=/tmp/ci-image-manifest/image-manifest.env \
+              --dry-run=client -o yaml | kubectl apply -f -
+          fi
+          echo "Apply complete"
+
+      - name: Restart config-only services
+        if: steps.filter.outputs.restart_all == 'true'
+        env:
+          CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
+          DEPLOYABLE_SERVICES: ${{ steps.image-check.outputs.deployable_services }}
+        run: |
+          set -euo pipefail
+          # restart_all means config/infra changed. Services whose code did NOT
+          # change were not re-templated (their built image may not exist at this
+          # SHA), so bounce them to pick up new ConfigMaps/Secrets while keeping
+          # whatever image they're currently running.
+          rolled_services="$CODE_SERVICES $DEPLOYABLE_SERVICES"
+          if [ "${{ steps.image-manifest.outputs.present }}" = "true" ]; then
+            rolled_services="$CODE_SERVICES"
+          fi
+          for svc in $SERVICE_IMAGES; do
+            if echo "$rolled_services" | grep -qw "$svc"; then
+              continue  # already rolled by the new-image apply above
+            fi
+            if kubectl get deploy "$svc" -n "$K8S_NAMESPACE" >/dev/null 2>&1; then
+              echo "Restarting $svc (config-only)"
+              kubectl rollout restart deploy/"$svc" -n "$K8S_NAMESPACE"
+            fi
+          done
+
+      - name: Restart updated stable-tag services
+        if: steps.image-manifest.outputs.present != 'true' && steps.filter.outputs.code_services != '' && (github.event_name == 'workflow_run' || env.IMAGE_TAG == 'staging' || env.FRONTEND_IMAGE_TAG == 'staging')
+        env:
+          CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
+        run: |
+          set -euo pipefail
+          for svc in $CODE_SERVICES; do
+            if kubectl get deploy "$svc" -n "$K8S_NAMESPACE" >/dev/null 2>&1; then
+              kubectl rollout restart deploy/"$svc" -n "$K8S_NAMESPACE"
+            fi
+          done
+
+      - name: Wait for rollout
+        env:
+          CHANGED_SERVICES: ${{ steps.filter.outputs.services }}
+        run: |
+          set -euo pipefail
+          restart_all="${{ steps.filter.outputs.restart_all }}"
+          if [ -z "$CHANGED_SERVICES" ] && [ "$restart_all" != "true" ]; then
+            echo "No services changed — skipping rollout wait"
+            exit 0
+          fi
+          # Wait for changed deployments (or all if restart_all)
+          for deploy in $(kubectl get deploy -n "$K8S_NAMESPACE" -o name 2>/dev/null); do
+            name=$(echo "$deploy" | cut -d/ -f2)
+            if [ "$restart_all" != "true" ] && ! echo "$CHANGED_SERVICES" | grep -qw "$name"; then
+              echo "Skipping $name (not changed)"
+              continue
+            fi
+            echo "Waiting for $name..."
+            if ! kubectl rollout status -n "$K8S_NAMESPACE" "$deploy" --timeout=180s; then
+              if kubectl wait -n "$K8S_NAMESPACE" "$deploy" --for=condition=Available=True --timeout=10s; then
+                echo "$name available; old replica termination still pending"
+              else
+                kubectl describe -n "$K8S_NAMESPACE" "$deploy" || true
+                kubectl get pods,rs -n "$K8S_NAMESPACE" -l "app=$name" -o wide || true
+                exit 1
+              fi
+            fi
+          done
+          echo ""
+          echo "=== Staging cluster state ==="
+          kubectl get pods,svc -n "$K8S_NAMESPACE"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/zalord-k8s-staging /tmp/zalord-k8s-staging.yaml
+          rm -f ~/.config/sops/age/keys.txt ~/.kube/config

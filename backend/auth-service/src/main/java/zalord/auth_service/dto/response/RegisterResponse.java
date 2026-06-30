@@ -6,8 +6,11 @@ import java.time.Instant;
 
 @Builder
 public record RegisterResponse(
-        String displayName,
-        String phoneNumber,
-        Instant createdAt
-) {
+		String displayName,
+		String phoneNumber,
+		Instant createdAt
+	) {
+		public String getDisplayName() { return displayName(); }
+		public String getPhoneNumber() { return phoneNumber(); }
+	
 }

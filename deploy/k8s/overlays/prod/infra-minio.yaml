@@ -1,0 +1,165 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minio-init-script
+  namespace: zalord-prod
+data:
+  create-buckets.sh: |
+    #!/usr/bin/env sh
+    set -e
+
+    ENDPOINT="${MINIO_ENDPOINT:-http://minio:19000}"
+    ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
+    ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
+    BUCKET_AVATARS="${MINIO_BUCKET_AVATARS:-avatars}"
+    BUCKET_ATTACHMENTS="${MINIO_BUCKET_ATTACHMENTS:-attachments}"
+
+    echo "[minio-init] waiting for MinIO at $ENDPOINT ..."
+    until mc alias set local "$ENDPOINT" "$ROOT_USER" "$ROOT_PASSWORD" >/dev/null 2>&1; do
+        sleep 2
+    done
+    echo "[minio-init] MinIO ready"
+
+    echo "[minio-init] Configuring CORS..."
+    mc admin config set local api cors_allow_origin="*"
+    mc admin service restart local || echo "Restart failed but continuing..."
+
+    ensure_bucket() {
+        local bucket="$1"
+        if mc ls "local/$bucket" >/dev/null 2>&1; then
+            echo "[minio-init] ✓ $bucket already exists"
+        else
+            mc mb "local/$bucket"
+            echo "[minio-init] ✓ $bucket created"
+        fi
+    }
+
+    ensure_bucket "$BUCKET_AVATARS"
+    ensure_bucket "$BUCKET_ATTACHMENTS"
+
+    echo "[minio-init] done"
+    mc ls local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: zalord-prod
+spec:
+  clusterIP: None
+  selector:
+    app: minio
+  ports:
+    - port: 19000
+      targetPort: 9000
+      name: api
+    - port: 9001
+      name: console
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: zalord-prod
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: docker.io/minio/minio:latest
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: media-service-secret
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: media-service-secret
+                  key: MINIO_SECRET_KEY
+            - name: MINIO_API_CORS_ALLOW_ORIGIN
+              value: "*"
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: 256Mi
+            limits:
+              memory: 384Mi
+          readinessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: zalord-prod
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: docker.io/minio/mc:latest
+          command: ["/bin/sh", "/scripts/create-buckets.sh"]
+          env:
+            - name: MINIO_ENDPOINT
+              value: "http://minio:19000"
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: media-service-secret
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: media-service-secret
+                  key: MINIO_SECRET_KEY
+            - name: MINIO_BUCKET_AVATARS
+              value: avatars
+            - name: MINIO_BUCKET_ATTACHMENTS
+              value: attachments
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: minio-init-script
+            defaultMode: 0755

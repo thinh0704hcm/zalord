@@ -1,0 +1,247 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-pg-init-sql
+  namespace: zalord-staging
+data:
+  init.sql: |
+    CREATE TABLE users (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      phone_number  VARCHAR(20) UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      deleted_at    TIMESTAMPTZ,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE roles (
+      id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT UNIQUE NOT NULL
+    );
+
+    CREATE TABLE user_roles (
+      id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
+      UNIQUE(user_id, role_id)
+    );
+
+    CREATE TABLE sessions (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token      TEXT NOT NULL UNIQUE,
+      expires_at  TIMESTAMPTZ NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      deleted_at  TIMESTAMPTZ
+    );
+
+    CREATE TABLE outbox_events (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      routing_key TEXT NOT NULL,
+      topic_exchange TEXT NOT NULL,
+      payload     JSONB NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      published_at TIMESTAMPTZ
+    );
+
+    CREATE INDEX idx_auth_outbox_unpublished ON outbox_events (created_at)
+        WHERE published_at IS NULL;
+
+    INSERT INTO roles (name) VALUES ('USER'), ('ADMIN');
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-pg-init-sql
+  namespace: zalord-staging
+data:
+  init.sql: |
+    CREATE TABLE profiles (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id       UUID NOT NULL UNIQUE,
+      display_name  VARCHAR(100) NOT NULL,
+      phone_number  VARCHAR(20) NOT NULL UNIQUE,
+      avatar_url    TEXT,
+      gender        VARCHAR(20),
+      date_of_birth DATE,
+      notifications_enabled BOOLEAN DEFAULT TRUE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      deleted_at    TIMESTAMPTZ
+    );
+
+    CREATE INDEX idx_profiles_phone_number ON profiles (phone_number);
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: message-pg-init-sql
+  namespace: zalord-staging
+data:
+  init.sql: |
+    CREATE TABLE conversations (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        type        VARCHAR(20) NOT NULL CHECK (type IN ('DIRECT', 'GROUP')),
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE conversation_members (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id          UUID NOT NULL,
+        joined_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+        left_at          TIMESTAMPTZ,
+        CONSTRAINT conv_members_unique UNIQUE (conversation_id, user_id)
+    );
+
+    CREATE INDEX idx_conv_members_user ON conversation_members (user_id);
+
+    CREATE TABLE direct_lookup (
+        pair_key         VARCHAR(80) PRIMARY KEY,
+        conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE messages (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        sender_id        UUID NOT NULL,
+        content          TEXT NOT NULL,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+        recalled_at      TIMESTAMPTZ,
+        reply_to_message_id UUID,
+        reply_to_sender_id  UUID,
+        reply_to_preview    VARCHAR(200)
+    );
+
+    CREATE INDEX idx_messages_conv_created ON messages (conversation_id, created_at DESC);
+    CREATE INDEX idx_messages_reply_to ON messages (reply_to_message_id) WHERE reply_to_message_id IS NOT NULL;
+
+    CREATE TABLE message_attachments (
+        message_id  UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        media_id    UUID NOT NULL,
+        position    SMALLINT NOT NULL DEFAULT 0,
+        PRIMARY KEY (message_id, media_id)
+    );
+
+    CREATE INDEX idx_msg_att_message ON message_attachments (message_id);
+
+    CREATE TABLE message_read_receipts (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        message_id       UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        conversation_id  UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id          UUID NOT NULL,
+        read_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT message_read_receipts_unique UNIQUE (message_id, user_id)
+    );
+
+    CREATE INDEX idx_msg_reads_message ON message_read_receipts (message_id, read_at DESC);
+    CREATE INDEX idx_msg_reads_conversation_user ON message_read_receipts (conversation_id, user_id);
+
+    CREATE TABLE conversation_views (
+        id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id               UUID NOT NULL,
+        conversation_id       UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        other_user_id         UUID,
+        last_message_preview  VARCHAR(200),
+        last_message_at       TIMESTAMPTZ,
+        last_sender_id        UUID,
+        unread_count          INT NOT NULL DEFAULT 0,
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT conv_views_unique UNIQUE (user_id, conversation_id)
+    );
+
+    CREATE INDEX idx_view_user_last ON conversation_views (user_id, last_message_at DESC NULLS LAST);
+
+    CREATE TABLE outbox_events (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        topic_exchange  VARCHAR(255) NOT NULL,
+        routing_key     VARCHAR(255) NOT NULL,
+        payload         JSONB NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+        published_at    TIMESTAMPTZ
+    );
+
+    CREATE INDEX idx_outbox_unpublished ON outbox_events (created_at) WHERE published_at IS NULL;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: group-pg-init-sql
+  namespace: zalord-staging
+data:
+  init.sql: |
+    CREATE TABLE groups (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name         VARCHAR(100) NOT NULL,
+        avatar_url   TEXT,
+        created_by   UUID NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at   TIMESTAMPTZ
+    );
+
+    CREATE TABLE group_members (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        group_id    UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        user_id     UUID NOT NULL,
+        role        VARCHAR(20) NOT NULL CHECK (role IN ('OWNER', 'ADMIN', 'MEMBER')),
+        joined_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT group_members_unique UNIQUE (group_id, user_id)
+    );
+
+    CREATE INDEX idx_group_members_user ON group_members (user_id);
+
+    CREATE TABLE outbox_events (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        topic_exchange  VARCHAR(255) NOT NULL,
+        routing_key     VARCHAR(255) NOT NULL,
+        payload         JSONB NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+        published_at    TIMESTAMPTZ
+    );
+
+    CREATE INDEX idx_outbox_unpublished ON outbox_events (created_at) WHERE published_at IS NULL;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: media-pg-init-sql
+  namespace: zalord-staging
+data:
+  init.sql: |
+    CREATE TABLE media (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        owner_id        UUID NOT NULL,
+        kind            VARCHAR(20) NOT NULL CHECK (kind IN ('AVATAR', 'ATTACHMENT')),
+        conversation_id UUID,
+        storage_key     VARCHAR(500) NOT NULL UNIQUE,
+        file_name       VARCHAR(255),
+        mime_type       VARCHAR(100),
+        size_bytes      BIGINT,
+        status          VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+                        CHECK (status IN ('PENDING', 'READY', 'DELETED')),
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+        finalized_at    TIMESTAMPTZ
+    );
+
+    CREATE INDEX idx_media_owner ON media (owner_id);
+    CREATE INDEX idx_media_conversation ON media (conversation_id) WHERE conversation_id IS NOT NULL;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-pg-init-sql
+  namespace: zalord-staging
+data:
+  init.sql: |
+    CREATE TABLE notifications (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id     UUID NOT NULL,
+        type        VARCHAR(50) NOT NULL,
+        title       VARCHAR(200),
+        body        TEXT,
+        payload     JSONB,
+        is_read     BOOLEAN NOT NULL DEFAULT false,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        read_at     TIMESTAMPTZ
+    );
+
+    CREATE INDEX idx_notif_user_unread ON notifications (user_id, is_read, created_at DESC);
+    CREATE INDEX idx_notif_user_created ON notifications (user_id, created_at DESC);

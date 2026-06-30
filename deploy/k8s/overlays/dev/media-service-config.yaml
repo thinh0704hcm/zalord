@@ -4,6 +4,7 @@ data:
   MINIO_BUCKET_AVATARS: avatars
   MINIO_INTERNAL_ENDPOINT: http://minio:19000
   MINIO_PUBLIC_ENDPOINT: http://localhost:19000
+  OTEL_SERVICE_NAME: media-service
   POSTGRES_DB: media-db
   POSTGRES_HOST: media-pg
   POSTGRES_PORT: "5432"

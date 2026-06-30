@@ -42,6 +42,10 @@ spec:
                 name: auth-service-secret
             - secretRef:
                 name: shared-secret
+
+          env:
+            - name: JAVA_OPTS
+              value: "-javaagent:/app/opentelemetry-javaagent.jar"
           readinessProbe:
             tcpSocket:
               port: http

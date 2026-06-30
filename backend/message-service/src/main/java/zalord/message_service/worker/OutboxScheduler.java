@@ -13,9 +13,12 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Polls outbox table every 3s and ships pending events via the EventPublisher
- * abstraction — backend (RabbitMQ or Kafka) is chosen at startup by the
- * zalord.event-bus property. FOR UPDATE SKIP LOCKED enables multi-instance.
+ * Polls outbox table on a fixed delay and ships pending events via the
+ * EventPublisher abstraction — backend (RabbitMQ or Kafka) is chosen at startup
+ * by the zalord.event-bus property. FOR UPDATE SKIP LOCKED enables multi-instance.
+ *
+ * Poll interval defaults to 3000ms; OUTBOX_POLL_MS env overrides it (benchmark
+ * sets it to 50ms so end-to-end latency reflects broker perf, not poll wait).
  */
 @Component
 @Slf4j
@@ -31,7 +34,7 @@ public class OutboxScheduler {
         this.eventBus = eventBus;
     }
 
-    @Scheduled(fixedDelay = 3000)
+    @Scheduled(fixedDelayString = "${zalord.outbox-poll-ms:3000}")
     @Transactional
     public void publishPending() {
         List<OutboxEvent> batch = outboxRepo.lockUnpublishedBatch(BATCH_SIZE);

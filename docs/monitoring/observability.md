@@ -100,10 +100,12 @@ docker compose start media-service
 
 Mở 2 panel: "HTTP req rate per service" + "RabbitMQ msgs ready/queue". Chạy:
 ```bash
-PROFILE=ramp scripts/run-loadtest.sh
+RATE=500 DURATION=120 scripts/run-benchmark-rabbit.sh
 ```
-- "HTTP req rate" trên `message-service` ramp từ 50 → 2000 RPS trong 7 phút
-- Đồng thời "msgs ready" cho `chat-fanout.queue` / `notification-message.queue` tăng vọt rồi giảm dần khi consumer bắt kịp → minh hoạ outbox + broker lag.
+- "HTTP req rate" trên `message-service` lên ~500 RPS sustained 2 phút
+- Đồng thời "msgs ready" cho `chat-fanout.queue` / `notification-message.queue` tăng vọt rồi giảm dần khi consumer bắt kịp → minh hoạ outbox + broker lag
+
+→ Chi tiết load test xem [docs/benchmark.md](benchmark.md).
 
 ---
 
@@ -127,155 +129,52 @@ Mở http://localhost:9090/graph → tab Graph → dán expression:
 
 ---
 
-## 5. Load test với k6 — Kafka vs RabbitMQ
+## 5. Load test — Kafka vs RabbitMQ
 
-Toàn bộ benchmark dùng [k6](https://k6.io/) (Go-based load tester) chạy trong **Docker container** trên cùng network với compose stack — không cần install gì trên host ngoài Docker + `jq`.
+> **Doc đầy đủ**: [docs/benchmark.md](benchmark.md). Phần này chỉ tóm tắt và trỏ panel cần xem khi chạy.
 
-### 5.1 File liên quan
+Benchmark đo **end-to-end**: Alice POST → outbox → broker → consumer → WS push → Bob nhận. Đó là cái user cảm nhận, cũng là cái phản ánh đúng broker (POST thuần không chạm broker — xem [docs/patterns.md](../patterns.md) Outbox).
 
-| File | Vai trò |
-|---|---|
-| `scripts/loadtest.js` | k6 script: define 3 profile (smoke / sustained / ramp), POST `/api/v1/messages`, ghi JSON summary |
-| `scripts/run-loadtest.sh` | Wrapper bash: bootstrap Alice/Bob + conv → loop từng backend → recreate 3 service với `EVENT_BUS=<backend>` → chạy k6 → repeat |
-| `scripts/loadtest-<backend>-<profile>.json` | Output: full k6 metrics dump (per backend), regenerate mỗi lần chạy |
-
-### 5.2 Prerequisite
+### 5.1 Quick start
 
 ```bash
-# Lần đầu — pull k6 image (~30MB)
-docker pull grafana/k6:latest
-brew install jq                                # macOS, hoặc apt-get install jq trên Linux
+make dev                                    # stack up
+# register Alice (0900111001) + Bob (0900111002) lần đầu — xem benchmark.md §4
 
-# Stack phải up + Alice (0900111001) + Bob (0900111002) đã register
-make dev
-# Nếu chưa có user, register thủ công qua /api/v1/auth/register hoặc chạy seed script
+# Chạy 2 backend back-to-back, append vào cùng JSON
+RESET=1 RATE=200 DURATION=120 scripts/run-benchmark-rabbit.sh \
+ &&     RATE=200 DURATION=120 scripts/run-benchmark-kafka.sh
 ```
 
-### 5.3 Ba profile
+4 file:
+- `scripts/benchmark-e2e.py` — Python engine (WS subscribe + HTTP sender + DB lag query)
+- `scripts/run-benchmark-rabbit.sh` — wrapper riêng cho RabbitMQ
+- `scripts/run-benchmark-kafka.sh` — wrapper riêng cho Kafka
+- `scripts/benchmark-results.json` — kết quả append, mỗi run +1 row
 
-| Profile | Pattern | RPS | Thời gian | Tổng req | Dùng khi |
-|---|---|---|---|---|---|
-| `smoke` | `constant-arrival-rate` | 50 | 30s | 1.5K | Sanity check sau khi sửa code |
-| **`sustained`** *(default)* | `constant-arrival-rate` | 500 | 5 phút | 150K | **Số liệu chính cho thesis** — steady-state |
-| `ramp` | `ramping-arrival-rate` | 50 → 2000 | 7 phút | ~400K | Tìm điểm gãy (error rate vọt / throughput sụp) |
+### 5.2 3 metric quan trọng (chi tiết §2 của benchmark.md)
 
-Lý do dùng `constant-arrival-rate` chứ không `constant-vus`:
-- VUs mode = "luôn có N user gửi tuần tự" → throughput thay đổi theo latency, khó so sánh fair
-- Arrival rate mode = "**đảm bảo X RPS bất kể latency**" → giống traffic prod thật, latency phản ánh đúng load
-
-### 5.4 Cách chạy
-
-```bash
-# Mặc định: profile=sustained, cả 2 backend
-scripts/run-loadtest.sh
-
-# Profile khác
-PROFILE=smoke     scripts/run-loadtest.sh     # 30s × 2 backend = ~1.5 phút
-PROFILE=sustained scripts/run-loadtest.sh     # 5 phút × 2 backend + recreate = ~12 phút
-PROFILE=ramp      scripts/run-loadtest.sh     # 7 phút × 2 backend + recreate = ~16 phút
-
-# Chỉ 1 backend
-BACKENDS=kafka scripts/run-loadtest.sh
-BACKENDS=rabbitmq scripts/run-loadtest.sh
-
-# Cả 2 ở smoke
-BACKENDS="rabbitmq kafka" PROFILE=smoke scripts/run-loadtest.sh
-```
-
-### 5.5 Wrapper làm gì step-by-step
-
-1. **Bootstrap** (5–10s): login Alice + Bob qua Kong (retry 5 lần nếu 502/429), lấy user-id, tạo DIRECT conv (gọi thẳng `message-service:8083` để né Kong flakiness)
-2. **Loop từng backend**:
-   - `EVENT_BUS=<backend> docker compose up -d --force-recreate --no-deps message-service chat-service notification-service` (~30s downtime)
-   - Wait 3 service /health OK (timeout 90s)
-   - Sleep 3s cho consumer subscribe xong
-3. **Chạy k6**:
-   ```bash
-   docker run --rm -i \
-     --network zalord_zalord-net \              # vào chung network compose
-     --user $(id -u):$(id -g) \                  # avoid file perm issue
-     -v $(pwd)/scripts:/scripts -w /scripts \
-     -e UID=$UID_A -e CONV=$CONV \
-     -e BACKEND=$BACKEND -e PROFILE=$PROFILE \
-     -e TARGET=http://message-service:8083/api/v1/messages \
-     grafana/k6:latest run /scripts/loadtest.js
-   ```
-4. **Output**: JSON summary tự ghi vào `scripts/loadtest-<backend>-<profile>.json` (k6 `handleSummary` hook)
-
-### 5.6 Kết quả mẫu — sustained 500 RPS × 5 phút
-
-Đã chạy trên VPS dev local (M1 Mac, Docker Desktop, 8GB RAM allocated):
-
-| Backend | Requests | Throughput | Error rate | p50 | p95 | p99 | max |
-|---|---|---|---|---|---|---|---|
-| **RabbitMQ** | 149,957 | 500/s | 0.00% | 0.81ms | 2.20ms | **9.26ms** | 453.3ms |
-| **Kafka** | 150,000 | 500/s | 0.00% | 0.84ms | 1.76ms | **6.25ms** | 212.0ms |
-
-### 5.7 Cách đọc
-
-- **p50 ngang nhau** (~0.8ms) — happy path identical, broker write không phải bottleneck ở 500 RPS
-- **p95 Kafka thắng 20%** (1.76 vs 2.20ms) — Kafka batch write ổn định hơn dưới load đều
-- **p99 Kafka thắng 32%** (6.25 vs 9.26ms) — quan trọng nhất cho SLO, Kafka tail latency tốt hơn rõ rệt
-- **max Kafka thắng 53%** (212 vs 453ms) — RabbitMQ có spike GC/flush rare nhưng to gấp đôi
-- **0 error cả 2** — outbox + Postgres connection pool đủ headroom ở 500 RPS
-- **500 RPS = 30K msg/phút = 1.8M msg/giờ** → đủ vượt target 10K concurrent user (mỗi user ~1 msg/phút)
-
-### 5.8 Khi nào nên dùng cái nào
-
-| Tình huống | Chọn | Lý do (theo số liệu) |
-|---|---|---|
-| Production target ≥10K user, ưu tiên UX | **Kafka** | Tail latency p99 ổn định hơn 32% |
-| Dev/staging, ưu tiên ops đơn giản | **RabbitMQ** | 1 UI quản lý, ít moving parts |
-| Cần partition/consumer rebalance | **Kafka** | Built-in, Rabbit phải tự sharding queue |
-| Cần routing phức tạp (topic exchange) | **RabbitMQ** | Native, Kafka phải làm app-side |
-
-Trong Zalord: **switchable** qua env `EVENT_BUS`. Default `rabbitmq` cho dev, deploy `kafka` cho prod.
-
-### 5.9 Xem trong Grafana lúc chạy
-
-Mở [http://localhost:3000/d/zalord-overview](http://localhost:3000/d/zalord-overview) trước khi launch k6. Panel cần để mắt:
-
-| Panel | Quan sát gì |
+| Metric | Phản ánh |
 |---|---|
-| **HTTP req rate per service** | `message-service` ramp lên ~500 RPS (sustained) hoặc 50→2000 RPS (ramp). Phase 1 = rabbit, recreate gap, phase 2 = kafka |
-| **HTTP p95 latency** | So sánh trực quan 2 phase. Kafka phase đường thấp hơn = tail latency tốt hơn |
-| **Kong status codes** | Vẫn flat (k6 bypass Kong) — nếu thấy spike ở đây = có request rò qua Kong |
-| **RabbitMQ msgs ready/queue** | Phase rabbit: queue depth dao động nhẹ → consumer kịp. Nếu tăng đều = consumer là bottleneck |
+| **POST p95** | Postgres + media-gRPC, **không** liên quan broker |
+| **OUTBOX_LAG p95** | Poll wait (avg = POLL_MS/2) + broker publish thuần |
+| **DELIVERY p95** | End-to-end user cảm nhận |
+| **delivery_rate** | Phải = 100%, < 100% là bug |
+
+### 5.3 Panel cần để mắt khi chạy benchmark
+
+Mở dashboard trước, mỗi run sẽ thấy 2 phase trên trục thời gian (rabbit → ~30s gap recreate → kafka).
+
+| Panel | Quan sát |
+|---|---|
+| **HTTP req rate** | `message-service` line lên đúng `RATE` env |
+| **HTTP p95 latency** | `message-service` ~5-10ms (POST). Khác biệt rõ với e2e ~60ms |
+| **RabbitMQ msgs ready/queue** | Phase rabbit: dao động 0-50 = consumer kịp. Tăng đều = bottleneck |
 | **Kafka consumer lag** | Tương tự cho phase kafka |
-| **JVM heap (message-service)** | Coi có GC spike không — RabbitMQ max 453ms có thể do GC pause |
+| **JVM heap (message-service)** | GC spike to lúc benchmark = ảnh hưởng OUTBOX_LAG tail |
+| **CB state** | Phải = 0. Nhảy 1 = media-service trip → số liệu lệch |
 
-> **Slide thesis tip**: screenshot panel "HTTP req rate" + "p95 latency" trong lúc full sustained run — chart 2 phase liên tiếp trên cùng trục thời gian là minh hoạ thuyết phục nhất cho "Kafka có tail latency tốt hơn".
-
-### 5.10 Phân tích JSON output
-
-```bash
-# Quick compare cả 2 file
-for f in scripts/loadtest-*-sustained.json; do
-  echo "=== $(basename $f) ==="
-  jq '{
-    requests: .metrics.iterations.values.count,
-    rps:      .metrics.iterations.values.rate,
-    err_pct:  (.metrics.http_req_failed.values.rate * 100),
-    p50_ms:   .metrics.http_req_duration.values.med,
-    p95_ms:   .metrics.http_req_duration.values["p(95)"],
-    p99_ms:   .metrics.http_req_duration.values["p(99)"],
-    max_ms:   .metrics.http_req_duration.values.max
-  }' "$f"
-done
-```
-
-Full schema xem [k6 metrics docs](https://k6.io/docs/using-k6/metrics/).
-
-### 5.11 Troubleshoot benchmark
-
-| Triệu chứng | Nguyên nhân | Fix |
-|---|---|---|
-| `curl: (22) error 502` ở bootstrap | Kong → message-service flaky lúc cold | Script đã có retry 5 lần. Nếu vẫn fail: `make logs SERVICE=message-service` |
-| `curl: (22) error 429` ở bootstrap | Hit Kong rate-limit auth route (10/phút) sau khi chạy benchmark nhiều lần | Đợi 60s rồi retry |
-| `service never came healthy` | message/chat/notification crash sau recreate | Check logs từng service, thường là RabbitMQ chưa ready hoặc DB connection fail |
-| Throughput thấp bất thường (<100/s) | k6 không bypass Kong → bị rate-limit | Verify `TARGET` env trong `loadtest.js` là `http://message-service:8083`, không phải Kong URL |
-| `permission denied` ghi JSON | k6 container chạy sai user | Wrapper đã `--user $(id -u):$(id -g)` — nếu vẫn lỗi check ownership của `scripts/` |
-| Error rate > 1% | Backend overload | Giảm RPS trong `loadtest.js` hoặc kiểm tra DB pool size, RabbitMQ memory |
+Chi tiết PromQL + screenshot strategy: xem [docs/benchmark.md §7](benchmark.md#7-quan-sát-trong-grafana-lúc-chạy).
 
 ---
 

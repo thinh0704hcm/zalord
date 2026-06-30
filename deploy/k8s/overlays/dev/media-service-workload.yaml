@@ -45,6 +45,10 @@ spec:
                 name: shared-config
             - secretRef:
                 name: media-service-secret
+
+          env:
+            - name: JAVA_OPTS
+              value: "-javaagent:/app/opentelemetry-javaagent.jar"
           readinessProbe:
             tcpSocket:
               port: http

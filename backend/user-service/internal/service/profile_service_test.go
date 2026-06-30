@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"encoding/json"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	queries "github.com/thinh0704hcm/zalord/backend/user-service/db/sqlc"
 	"github.com/thinh0704hcm/zalord/backend/user-service/internal/event"
+	"github.com/thinh0704hcm/zalord/backend/user-service/pkg/logger"
 )
 
 // MockProfileRepository is a manual mock for the ProfileRepository interface
@@ -49,6 +51,12 @@ func (m *MockProfileRepository) List(ctx context.Context, limit, offset int32) (
 
 func (m *MockProfileRepository) Count(ctx context.Context) (int64, error) {
 	return m.CountFn(ctx)
+}
+
+
+func TestMain(m *testing.M) {
+	logger.Init()
+	os.Exit(m.Run())
 }
 
 func TestProfileService_ConsumeProfileCreated(t *testing.T) {

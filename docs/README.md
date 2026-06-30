@@ -51,3 +51,4 @@ Each document covers both Stage 1 (modular monolith) and Stage 2 (microservices)
 | [infrastructure.md](./infrastructure.md) | Stage 2 deployment, resource allocation, Docker Compose layout |
 | [roadmap.md](./roadmap.md) | Stage 1 milestones + exit gate + Stage 2 sprint plan |
 | [development.md](./development.md) | Local setup, conventions, evidence collection, Stage 1 exit gate checklist |
+| [monitoring/](./monitoring/) | Observability (Prometheus + Grafana) + benchmark RabbitMQ vs Kafka. Có [README index](./monitoring/README.md). |

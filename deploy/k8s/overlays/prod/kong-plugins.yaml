@@ -1,0 +1,71 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: jwt-header-injection
+  namespace: zalord-prod
+plugin: pre-function
+config:
+  access:
+  - |
+    local function base64_decode(data)
+      local b = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+      data = string.gsub(data, "[^" .. b .. "=]", "")
+      data = string.gsub(data, "=", "")
+      local result = {}
+      for i = 1, #data, 4 do
+        local a = string.find(b, string.sub(data, i, i)) or 0
+        local c = string.find(b, string.sub(data, i+1, i+1)) or 0
+        local e = string.find(b, string.sub(data, i+2, i+2)) or 0
+        local f = string.find(b, string.sub(data, i+3, i+3)) or 0
+        local t = (a - 1) * 262144 + (c - 1) * 4096 + (e - 1) * 64 + (f - 1)
+        table.insert(result, string.char(math.floor(t / 65536) % 256))
+        if string.sub(data, i+2, i+2) ~= "=" then
+          table.insert(result, string.char(math.floor(t / 256) % 256))
+        end
+        if string.sub(data, i+3, i+3) ~= "=" then
+          table.insert(result, string.char(t % 256))
+        end
+      end
+      return table.concat(result)
+    end
+
+    local function extract_json_value(json_str, key)
+      local pattern = '"' .. key .. '"%s*:%s*"([^"]*)"'
+      local val = string.match(json_str, pattern)
+      if not val then
+        local arr_pattern = '"' .. key .. '"%s*:%s%[(.-)%]'
+        val = string.match(json_str, arr_pattern)
+        if val then
+          local roles = {}
+          for role in string.gmatch(val, '"([^"]*)"') do
+            table.insert(roles, role)
+          end
+          return table.concat(roles, ",")
+        end
+      end
+      return val
+    end
+
+    -- Extract token from Authorization header or query string (?token=...)
+    local token = nil
+    local auth_header = kong.request.get_header("Authorization")
+    if auth_header then
+      token = string.match(auth_header, "^Bearer%s+(.+)$")
+    end
+    if not token then
+      token = kong.request.get_query_arg("token")
+    end
+    if token then
+      local payload_b64 = string.match(token, "^[^%.]+%.([^%.]+)%.")
+      if payload_b64 then
+        local payload_json = base64_decode(payload_b64)
+        local sub = extract_json_value(payload_json, "sub")
+        local roles = extract_json_value(payload_json, "roles")
+        if sub then
+          kong.service.request.set_header("X-User-Id", sub)
+        end
+        if roles then
+          kong.service.request.set_header("X-User-Roles", roles)
+        end
+      end
+    end

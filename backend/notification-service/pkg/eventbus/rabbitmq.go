@@ -62,25 +62,34 @@ func (r *rabbitConsumer) Subscribe(ctx context.Context, eventName, consumerGroup
 				if !ok {
 					return
 				}
-				err := handler(ctx, msg.Body)
-				if err == nil {
-					_ = msg.Ack(false)
-					continue
-				}
-				var perm *PermanentError
-				if errors.As(err, &perm) {
-					logger.Log.Warn("permanent error, dropping", zap.Error(err))
-					_ = msg.Ack(false)
-				} else {
-					logger.Log.Warn("transient error, requeuing", zap.Error(err))
-					_ = msg.Nack(false, true)
-				}
+				r.dispatch(ctx, handler, msg, eventName)
 			}
 		}
 	}()
 	return nil
 }
 
+func (r *rabbitConsumer) dispatch(ctx context.Context, handler HandlerFunc, msg amqp.Delivery, eventName string) {
+	msgCtx, span := startConsumerSpan(ctx, msg.Headers, eventName)
+	defer span.End()
+
+	err := handler(msgCtx, msg.Body)
+	if err == nil {
+		_ = msg.Ack(false)
+		return
+	}
+	span.RecordError(err)
+	var perm *PermanentError
+	if errors.As(err, &perm) {
+		logger.Log.Warn("permanent error, dropping", zap.Error(err))
+		_ = msg.Ack(false)
+		return
+	}
+	logger.Log.Warn("transient error, requeuing", zap.Error(err))
+	_ = msg.Nack(false, true)
+}
+
+// Close method remains
 func (r *rabbitConsumer) Close() error {
 	for _, ch := range r.chs {
 		_ = ch.Close()

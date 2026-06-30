@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: zalord-staging
+spec:
+  selector:
+    app: user-service
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http
+    - name: grpc
+      port: 9082
+      targetPort: grpc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: zalord-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+        - name: user-service
+          image: docker.io/${DOCKER_NAMESPACE}/zalord-user-service:${IMAGE_TAG}
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8082
+            - name: grpc
+              containerPort: 9082
+          envFrom:
+            - configMapRef:
+                name: user-service-config
+            - configMapRef:
+                name: shared-config
+            - secretRef:
+                name: user-service-secret
+            - secretRef:
+                name: shared-secret
+          env:
+            - name: DB_URI
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+            - name: MQ_URI
+              value: "amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@$(MQ_HOST):$(MQ_PORT)/"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "user-service"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi

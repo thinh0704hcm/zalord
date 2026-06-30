@@ -6,6 +6,7 @@ data:
   GRPC_PORT: "9082"
   MQ_HOST: rabbitmq
   MQ_PORT: "5672"
+  OTEL_SERVICE_NAME: user-service
   SERVER_PORT: "8082"
 kind: ConfigMap
 metadata:

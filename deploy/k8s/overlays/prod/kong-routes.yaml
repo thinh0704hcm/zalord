@@ -1,0 +1,166 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: auth-route
+  namespace: zalord-prod
+  annotations:
+    konghq.com/plugins: jwt-header-injection
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "auth.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: auth-service
+          port: 8081
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: user-route
+  namespace: zalord-prod
+  annotations:
+    konghq.com/plugins: jwt-header-injection
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "user.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: user-service
+          port: 8082
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: message-route
+  namespace: zalord-prod
+  annotations:
+    konghq.com/plugins: jwt-header-injection
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "message.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: message-service
+          port: 8083
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: chat-route
+  namespace: zalord-prod
+  annotations:
+    konghq.com/plugins: jwt-header-injection
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/v1/chat
+        - path:
+            type: PathPrefix
+            value: /ws
+      backendRefs:
+        - name: chat-service
+          port: 8084
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: group-route
+  namespace: zalord-prod
+  annotations:
+    konghq.com/plugins: jwt-header-injection
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "group.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: group-service
+          port: 8085
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: media-route
+  namespace: zalord-prod
+  annotations:
+    konghq.com/plugins: jwt-header-injection
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "media.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: media-service
+          port: 8086
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: notification-route
+  namespace: zalord-prod
+  annotations:
+    konghq.com/plugins: jwt-header-injection
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  hostnames:
+    - "notification.zalord.vn"
+  rules:
+    - backendRefs:
+        - name: notification-service
+          port: 8087
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: frontend-route
+  namespace: zalord-prod
+spec:
+  parentRefs:
+    - name: main
+      namespace: kong
+      sectionName: http
+  rules:
+    - backendRefs:
+        - name: frontend
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-kong-to-prod
+  namespace: zalord-prod
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: kong
+  to:
+    - group: ""
+      kind: Service
