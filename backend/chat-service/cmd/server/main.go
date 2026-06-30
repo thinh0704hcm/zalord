@@ -113,20 +113,6 @@ func main() {
 		})
 	})
 
-	r.GET("/api/v1/chat/canary", func(c *gin.Context) {
-		if os.Getenv("CANARY") != "true" {
-			c.Status(http.StatusNotFound)
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"id":     1,
-			"title":  "Lorem Ipsum",
-			"body":   "Dolor sit amet, consectetur adipiscing elit.",
-			"active": true,
-		})
-	})
-
 	ws := r.Group("/ws")
 	ws.Use(middleware.Identity())
 	{

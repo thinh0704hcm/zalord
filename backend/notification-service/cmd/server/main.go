@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"github.com/gin-gonic/gin"
 	queries "github.com/thinh0704hcm/zalord/backend/notification-service/db/sqlc"
 	docs "github.com/thinh0704hcm/zalord/backend/notification-service/docs"
@@ -22,6 +21,7 @@ import (
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/metrics"
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/mq"
 	"github.com/thinh0704hcm/zalord/backend/notification-service/pkg/otelx"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/zap"
 )
 
@@ -122,12 +122,11 @@ func main() {
 		c.Data(http.StatusOK, "application/json", []byte(docs.SwaggerInfo.ReadDoc()))
 	})
 
-	// Public version endpoint (no auth) — used for canary demo
+	// Public version endpoint (no auth).
 	r.GET("/api/v1/notifications/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"version": "v1",
 			"service": "notification-service",
-			"canary":  false,
 		})
 	})
 

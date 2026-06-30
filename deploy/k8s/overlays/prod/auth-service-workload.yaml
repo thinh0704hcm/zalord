@@ -29,7 +29,7 @@ spec:
       containers:
         - name: auth-service
           image: docker.io/${DOCKER_NAMESPACE}/zalord-auth-service:${IMAGE_TAG}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8081
