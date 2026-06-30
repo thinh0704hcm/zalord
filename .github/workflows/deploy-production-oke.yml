@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Commit SHA image tag for backend services (from CI build)'
-        required: true
+        description: 'Image tag for backend services (default: prod)'
+        required: false
+        default: 'prod'
         type: string
       frontend_image_tag:
-        description: 'Image tag for frontend (defaults to backend image_tag)'
+        description: 'Image tag for frontend (defaults to image_tag)'
         required: false
         type: string
       canary:
@@ -41,13 +42,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.ref_name }}
-      FRONTEND_IMAGE_TAG: ${{ github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.ref_name }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.ref_name || 'prod' }}
+      FRONTEND_IMAGE_TAG: ${{ github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.ref_name || 'prod' }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-prod
       KUBECONFIG: /home/runner/.kube/oke.config
       CANARY: ${{ github.event.inputs.canary || 'false' }}
-      CANARY_IMAGE_TAG: ${{ github.event.inputs.canary_image_tag || github.event.inputs.image_tag || github.ref_name }}
+      CANARY_IMAGE_TAG: ${{ github.event.inputs.canary_image_tag || github.event.inputs.image_tag || github.ref_name || 'prod' }}
       CANARY_SERVICES: ${{ github.event.inputs.canary_services || '' }}
       PROMOTE: ${{ github.event.inputs.promote || 'false' }}
       SERVICE_IMAGES: >-

@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag for backend services (commit SHA or v1.0.0)'
-        required: true
+        description: 'Image tag for backend services (default: staging)'
+        required: false
+        default: 'staging'
         type: string
       frontend_image_tag:
-        description: 'Image tag for frontend (defaults to backend image_tag)'
+        description: 'Image tag for frontend (defaults to image_tag)'
         required: false
         type: string
       services:
@@ -34,8 +35,8 @@ jobs:
     # Only deploy if CI passed (for workflow_run triggers)
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     env:
-      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag || github.sha }}
-      FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.sha }}
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag || 'staging' }}
+      FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || 'staging' }}
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_USERNAME }}
       K8S_NAMESPACE: zalord-staging
       SERVICE_IMAGES: >-
@@ -384,7 +385,7 @@ jobs:
           done
 
       - name: Restart updated stable-tag services
-        if: github.event_name == 'workflow_run' && steps.filter.outputs.code_services != ''
+        if: steps.filter.outputs.code_services != '' && (github.event_name == 'workflow_run' || env.IMAGE_TAG == 'staging' || env.FRONTEND_IMAGE_TAG == 'staging')
         env:
           CODE_SERVICES: ${{ steps.filter.outputs.code_services }}
         run: |
