@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { UserPlus, Users, X, RotateCcw, Folder, Download, Reply } from 'lucide-react';
-import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon } from './ZalordIcons';
+import { UserPlus, Users, X, RotateCcw, Folder, Download } from 'lucide-react';
+import { ZalordStickerIcon, ZalordPhotoIcon, ZalordAttachIcon, ZalordNamecardIcon, ZalordScreenshotIcon, ZalordTextFormatIcon, ZalordQuickMsgIcon, ZalordBankCardIcon, ZalordMoreIcon, ZalordReplyIcon } from './ZalordIcons';
 import AddMembersModal from './AddMembersModal';
 import GroupSidebar from './GroupSidebar';
 import { Avatar } from './Avatar';
@@ -62,6 +62,8 @@ const getMessageDateKey = (date: Date) => date.toISOString().slice(0, 10);
 const TYPING_REFRESH_MS = 2500;
 const TYPING_IDLE_MS = 3000;
 const REMOTE_TYPING_TTL_MS = 5500;
+const HISTORY_PAGE_SIZE = 50;
+const HISTORY_TOP_LOAD_THRESHOLD_PX = 96;
 
 const getAvatarText = (value: string) => {
   const words = value.trim().split(/\s+/).filter(Boolean);
@@ -393,6 +395,8 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   const oldestMessageCursorRef = useRef<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const isLoadingMoreRef = useRef(false);
+  const isPrependingHistoryRef = useRef(false);
   const previousChatRef = useRef<Chat | undefined>(undefined);
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const isAutoScrollingRef = useRef(false);
@@ -600,14 +604,17 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
       setIsSidebarOpen(false);
       setIsKicked(false);
       setHasMoreMessages(true);
+      setIsLoadingMore(false);
+      isLoadingMoreRef.current = false;
+      isPrependingHistoryRef.current = false;
       oldestMessageCursorRef.current = null;
 
       if (chat && typeof chat.id === 'string' && !chat.isPending) {
         const conversationId = chat.id;
-        messageService.history(conversationId).then(async res => {
+        messageService.history(conversationId, undefined, HISTORY_PAGE_SIZE).then(async res => {
           const responseItems = (res.items || res.content || []) as MessageHistoryItem[];
           
-          if (responseItems.length < 50) {
+          if (responseItems.length < HISTORY_PAGE_SIZE) {
             setHasMoreMessages(false);
           }
           if (responseItems.length > 0) {
@@ -661,69 +668,90 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
   }, [chat, currentUserId]);
 
   const loadMoreMessages = async () => {
-    if (isLoadingMore || !hasMoreMessages || !chat || typeof chat.id !== 'string') return;
+    if (isLoadingMoreRef.current || !hasMoreMessages || !chat || typeof chat.id !== "string") return;
+
     const cursor = oldestMessageCursorRef.current;
-    if (!cursor) return;
-    
+    if (!cursor) {
+      setHasMoreMessages(false);
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    const scrollHeightBefore = container?.scrollHeight ?? 0;
+    const scrollTopBefore = container?.scrollTop ?? 0;
+    let restoreScheduled = false;
+
+    isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
+
     try {
-      const res = await messageService.history(chat.id, cursor);
+      const res = await messageService.history(chat.id, cursor, HISTORY_PAGE_SIZE);
       const responseItems = (res.items || res.content || []) as MessageHistoryItem[];
-      
-      if (responseItems.length < 50) {
+
+      if (responseItems.length < HISTORY_PAGE_SIZE) {
         setHasMoreMessages(false);
       }
-      
-      if (responseItems.length > 0) {
-        oldestMessageCursorRef.current = responseItems[responseItems.length - 1].createdAt;
-        
-        const historyMsgs: UserMessage[] = (await Promise.all(responseItems.map(async (m) => {
-          const msgDate = new Date(m.createdAt);
-          const timeStr = `${String(msgDate.getHours()).padStart(2, '0')}:${String(msgDate.getMinutes()).padStart(2, '0')}`;
-          const isSender = currentUserId === m.senderId;
-          const isRecalled = !!m.recalledAt;
-          return {
-            id: m.messageId || m.id,
-            text: isRecalled ? 'Tin nhắn đã được thu hồi' : m.content,
-            time: timeStr,
-            dateKey: getMessageDateKey(msgDate),
-            senderId: m.senderId,
-            senderName: isSender ? 'Bạn' : await resolveSenderName(m.senderId),
-            isSender,
-            replyTo: isRecalled ? null : m.replyTo,
-            isRecalled,
-            attachmentIds: isRecalled ? undefined : m.attachmentIds
-          };
-        }))).reverse();
 
-        const container = scrollContainerRef.current;
-        const scrollHeightBefore = container?.scrollHeight || 0;
-        
-        setUserMessages(prev => {
-          const merged = [...historyMsgs];
-          prev.forEach(message => {
-            if (message.id && merged.some(existing => existing.id === message.id)) return;
-            merged.push(message);
-          });
-          return merged;
+      if (responseItems.length === 0) return;
+
+      oldestMessageCursorRef.current = responseItems[responseItems.length - 1].createdAt;
+
+      const historyMsgs: UserMessage[] = (await Promise.all(responseItems.map(async (m) => {
+        const msgDate = new Date(m.createdAt);
+        const timeStr = `${String(msgDate.getHours()).padStart(2, "0")}:${String(msgDate.getMinutes()).padStart(2, "0")}`;
+        const isSender = currentUserId === m.senderId;
+        const isRecalled = !!m.recalledAt;
+        return {
+          id: m.messageId || m.id,
+          text: isRecalled ? "Tin nhắn đã được thu hồi" : m.content,
+          time: timeStr,
+          dateKey: getMessageDateKey(msgDate),
+          senderId: m.senderId,
+          senderName: isSender ? "Bạn" : await resolveSenderName(m.senderId),
+          isSender,
+          replyTo: isRecalled ? null : m.replyTo,
+          isRecalled,
+          attachmentIds: isRecalled ? undefined : m.attachmentIds
+        };
+      }))).reverse();
+
+      isPrependingHistoryRef.current = true;
+      setUserMessages(prev => {
+        const merged = [...historyMsgs];
+        prev.forEach(message => {
+          if (message.id && merged.some(existing => existing.id === message.id)) return;
+          merged.push(message);
         });
+        return merged;
+      });
 
-        setTimeout(() => {
-          if (container) {
-            container.scrollTop = container.scrollHeight - scrollHeightBefore;
-          }
-        }, 0);
+      if (container) {
+        restoreScheduled = true;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const nextScrollTop = container.scrollHeight - scrollHeightBefore + scrollTopBefore;
+            container.scrollTop = Math.max(nextScrollTop, 0);
+            lastScrollHeightRef.current = container.scrollHeight;
+            isPrependingHistoryRef.current = false;
+            isLoadingMoreRef.current = false;
+            setIsLoadingMore(false);
+          });
+        });
       }
     } catch (err) {
-      console.error('Failed to load more messages:', err);
+      console.error("Failed to load more messages:", err);
     } finally {
-      setIsLoadingMore(false);
+      if (!restoreScheduled) {
+        isPrependingHistoryRef.current = false;
+        isLoadingMoreRef.current = false;
+        setIsLoadingMore(false);
+      }
     }
   };
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (e.currentTarget.scrollTop === 0) {
-      loadMoreMessages();
+    if (e.currentTarget.scrollTop <= HISTORY_TOP_LOAD_THRESHOLD_PX) {
+      void loadMoreMessages();
     }
   };
 
@@ -743,6 +771,10 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
 
     const observer = new ResizeObserver(() => {
       const { scrollTop, scrollHeight, clientHeight } = container;
+      if (isPrependingHistoryRef.current) {
+        lastScrollHeightRef.current = scrollHeight;
+        return;
+      }
       if (lastScrollHeightRef.current && (scrollTop + clientHeight >= lastScrollHeightRef.current - 150)) {
         scrollToBottom();
       }
@@ -1053,14 +1085,17 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
         ref={scrollContainerRef}
         id="chat-scroll-container"
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-2 pb-3 flex flex-col gap-3"
+        className="relative flex-1 overflow-y-auto px-4 py-2 pb-3 flex flex-col gap-3"
       >
         <div className="flex flex-col gap-3 min-h-min">
           {isLoadingMore && (
-          <div className="text-center text-xs text-gray-400 py-2">
-            Đang tải...
-          </div>
-        )}
+            <div className="pointer-events-none sticky top-8 z-20 flex h-0 justify-center overflow-visible">
+              <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] font-medium text-[#7589A3]">
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-[#c8d2df] border-t-[#7589A3] animate-spin" />
+                <span>Đang tải tin nhắn...</span>
+              </div>
+            </div>
+          )}
         <div className="flex-1 min-h-0"></div>
         {userMessages.length > 0 && (
           <Daystamp date={new Date().toISOString()} />
@@ -1108,7 +1143,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                                <RotateCcw size={14} />
                              </button>
                              <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Bạn', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
-                               <Reply size={14} />
+                               <ZalordReplyIcon className="w-[15px] h-[15px]" />
                              </button>
                            </>
                          )}
@@ -1176,7 +1211,7 @@ export default function ChatWindow({ chat, onConversationReady }: ChatWindowProp
                     {!msg.isRecalled && (
                       <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-1">
                          <button onClick={() => msg.id && setReplyingTo({ id: msg.id, content: msg.text, senderName: msg.senderName || 'Ai đó', senderId: msg.senderId! })} className="w-[28px] h-[28px] flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#0068ff] hover:bg-gray-50 shadow-sm transition-colors" title="Trả lời">
-                           <Reply size={14} />
+                           <ZalordReplyIcon className="w-[15px] h-[15px]" />
                          </button>
                       </div>
                     )}

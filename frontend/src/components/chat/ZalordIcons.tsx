@@ -147,6 +147,13 @@ export const ZalordMoreIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const ZalordReplyIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" {...props}>
+    <path d="M7.5 5.2c-2.3 1.1-3.6 3-3.6 5.5v3.1h4.5v-4H6.2c.1-1.4.9-2.4 2.3-3.2L7.5 5.2Z" />
+    <path d="M15.1 5.2c-2.3 1.1-3.6 3-3.6 5.5v3.1H16v-4h-2.2c.1-1.4.9-2.4 2.3-3.2l-1-1.4Z" />
+  </svg>
+);
+
 export const ZalordDuoCheckIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <path d="M18 6 7 17l-5-5" />
