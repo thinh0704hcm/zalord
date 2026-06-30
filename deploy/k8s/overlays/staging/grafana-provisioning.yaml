@@ -31,7 +31,7 @@ data:
         disableDeletion: false
         editable: true
         options:
-          path: /var/lib/grafana/dashboards
+          path: /etc/grafana/provisioning/dashboards/json
 ---
 apiVersion: v1
 kind: ConfigMap

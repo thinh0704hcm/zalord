@@ -38,6 +38,10 @@ spec:
       labels:
         app: grafana
     spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        runAsGroup: 472
       containers:
         - name: grafana
           image: grafana/grafana:11.3.1
@@ -78,7 +82,7 @@ spec:
               mountPath: /etc/grafana/provisioning/dashboards/dashboard.yml
               subPath: dashboard.yml
             - name: dashboards
-              mountPath: /var/lib/grafana/dashboards
+              mountPath: /etc/grafana/provisioning/dashboards/json
       volumes:
         - name: data
           persistentVolumeClaim:
