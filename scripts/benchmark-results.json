@@ -78,5 +78,25 @@
     "outbox_lag_p95": 51.7,
     "outbox_lag_p99": 54.3,
     "outbox_samples": 5000
+  },
+  {
+    "backend": "kafka",
+    "rate": 10000,
+    "duration_s": 120,
+    "sent": 59552,
+    "delivered": 59552,
+    "delivery_rate": 100.0,
+    "throughput": 496.3,
+    "delivery_p50": 36.3,
+    "delivery_p95": 60.1,
+    "delivery_p99": 64.6,
+    "delivery_max": 306.7,
+    "post_p50": 1.5,
+    "post_p95": 4.6,
+    "post_p99": 10.0,
+    "outbox_lag_p50": 26.1,
+    "outbox_lag_p95": 52.1,
+    "outbox_lag_p99": 57.9,
+    "outbox_samples": 5000
   }
 ]
