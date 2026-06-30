@@ -144,6 +144,12 @@ jobs:
           set -euo pipefail
 
           # Normal deploy: check images for all services
+          image_exists() {
+            local img=$1 svc=$2 tag=$3
+            docker manifest inspect "$img" >/dev/null 2>&1 && return 0
+            curl -fsS "https://hub.docker.com/v2/repositories/$DOCKER_NAMESPACE/zalord-$svc/tags/$tag" >/dev/null 2>&1
+          }
+
           deployable=""
           missing=""
           for svc in $SERVICE_IMAGES; do
@@ -153,7 +159,7 @@ jobs:
               tag="$IMAGE_TAG"
             fi
             img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$tag"
-            if docker manifest inspect "$img" >/dev/null 2>&1; then
+            if image_exists "$img" "$svc" "$tag"; then
               deployable="$deployable $svc"
             else
               missing="$missing $svc"
@@ -173,7 +179,7 @@ jobs:
             canary_svc_list="${CANARY_SERVICES:-$SERVICE_IMAGES}"
             for svc in $canary_svc_list; do
               img="docker.io/$DOCKER_NAMESPACE/zalord-$svc:$CANARY_IMAGE_TAG"
-              if docker manifest inspect "$img" >/dev/null 2>&1; then
+              if image_exists "$img" "$svc" "$CANARY_IMAGE_TAG"; then
                 canary_deployable="$canary_deployable $svc"
               else
                 canary_missing="$canary_missing $svc"
