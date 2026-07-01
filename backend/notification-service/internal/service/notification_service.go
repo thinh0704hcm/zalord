@@ -99,8 +99,9 @@ func (s *notificationService) HandleMessageEvent(ctx context.Context, routingKey
 			return err
 		}
 	}
-	logger.Log.Debug("notif: NEW_MESSAGE fan-out",
+	logger.Log.Info("notification NEW_MESSAGE created",
 		zap.String("messageId", e.MessageId.String()),
+		zap.String("conversationId", e.ConversationId.String()),
 		zap.Int("recipients", len(e.RecipientIds)))
 	return nil
 }
@@ -113,6 +114,7 @@ func (s *notificationService) HandleGroupEvent(ctx context.Context, routingKey s
 			return &mq.PermanentError{Err: fmt.Errorf("unmarshal GroupCreated: %w", err)}
 		}
 		payload := mustJson(map[string]any{"groupId": e.GroupId, "groupName": e.Name})
+		notified := 0
 		for _, m := range e.MemberIds {
 			if m == e.CreatedBy {
 				continue // don't notify the creator
@@ -122,7 +124,12 @@ func (s *notificationService) HandleGroupEvent(ctx context.Context, routingKey s
 			if err := s.repo.Insert(ctx, m, "GROUP_INVITE", title, body, payload); err != nil {
 				return err
 			}
+			notified++
 		}
+		logger.Log.Info("notification GROUP_INVITE created (group.created)",
+			zap.String("groupId", e.GroupId.String()),
+			zap.String("groupName", e.Name),
+			zap.Int("notified", notified))
 	case "group.member.added":
 		var e event.GroupMemberAddedEvent
 		if err := json.Unmarshal(body, &e); err != nil {
@@ -133,6 +140,9 @@ func (s *notificationService) HandleGroupEvent(ctx context.Context, routingKey s
 			"Added to group", "You were added to a group", payload); err != nil {
 			return err
 		}
+		logger.Log.Info("notification GROUP_INVITE created (group.member.added)",
+			zap.String("groupId", e.GroupId.String()),
+			zap.String("userId", e.UserId.String()))
 	default:
 		// group.member.removed, group.updated — not notifying for now.
 		return nil

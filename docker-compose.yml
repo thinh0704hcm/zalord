@@ -15,6 +15,7 @@ volumes:
   kafkadata: null
   prometheus_data: null
   grafana_data: null
+  loki_data: null
   frontend_node_modules: null
 services:
   auth-pg:
@@ -752,6 +753,37 @@ services:
     - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
     - grafana_data:/var/lib/grafana
     mem_limit: 192m
+    networks:
+    - zalord-net
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: zalord-loki
+    restart: unless-stopped
+    command:
+    - -config.file=/etc/loki/config.yaml
+    ports:
+    - ${LOKI_HOST_PORT:-3100}:3100
+    volumes:
+    - ./infra/loki/loki-config.yaml:/etc/loki/config.yaml:ro
+    - loki_data:/loki
+    mem_limit: 384m
+    networks:
+    - zalord-net
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: zalord-promtail
+    restart: unless-stopped
+    depends_on:
+      loki:
+        condition: service_started
+    command:
+    - -config.file=/etc/promtail/config.yaml
+    volumes:
+    - ./infra/promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
+    # Read-only Docker socket — needed for docker_sd_configs to enumerate
+    # containers. Read-only + no admin access = safe enough for dev/thesis.
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    mem_limit: 128m
     networks:
     - zalord-net
   jaeger:
