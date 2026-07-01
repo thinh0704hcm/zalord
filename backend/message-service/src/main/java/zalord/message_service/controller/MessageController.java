@@ -15,7 +15,9 @@ import zalord.message_service.dto.response.PageResponse;
 import zalord.message_service.model.ApiResponse;
 import zalord.message_service.service.IMessageService;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -27,6 +29,26 @@ public class MessageController {
 
     public MessageController(IMessageService service) {
         this.service = service;
+    }
+
+    @GetMapping("/canary")
+    @Operation(summary = "Canary demo payload")
+    public ResponseEntity<Map<String, Object>> canary() {
+        Map<String, Object> supplierInfo = new LinkedHashMap<>();
+        supplierInfo.put("name", "Consectetur Logistics");
+        supplierInfo.put("country", "Vietnam");
+        supplierInfo.put("rating", 4.8);
+
+        Map<String, Object> productCatalog = new LinkedHashMap<>();
+        productCatalog.put("product_id", "prd_8849");
+        productCatalog.put("product_name", "Dolor Sit Amet Widget");
+        productCatalog.put("category", "Office Supplies");
+        productCatalog.put("price_usd", 49.99);
+        productCatalog.put("in_stock", true);
+        productCatalog.put("supplier_info", supplierInfo);
+        productCatalog.put("tags", List.of("premium", "limited", "office"));
+
+        return ResponseEntity.ok(Map.of("product_catalog", productCatalog));
     }
 
     @PostMapping

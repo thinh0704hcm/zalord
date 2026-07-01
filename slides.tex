@@ -40,20 +40,20 @@
 \column{0.5\textwidth}
 \begin{enumerate}
   \item Tổng quan hệ thống
+  \item Code Organization
   \item Domain-Driven Design
   \item Nguyên lý thiết kế Microservices
   \item Giao tiếp giữa các dịch vụ
   \item Thiết kế \& Quản lý cơ sở dữ liệu
-  \item Triển khai Docker \& Kubernetes
 \end{enumerate}
 \column{0.5\textwidth}
 \begin{enumerate}
 \setcounter{enumi}{6}
+  \item Triển khai Docker \& Kubernetes
   \item API Gateway
   \item Authentication \& Authorization
   \item Logging, Monitoring, Tracing
-  \item CI/CD \& Triển khai
-  \item Resiliency Scenarios
+  \item CI/CD \& Deployment
   \item Kết luận
 \end{enumerate}
 \end{columns}
@@ -63,14 +63,14 @@
 \section{Tổng quan hệ thống}
 % ============================================================
 
-\begin{frame}{Giới thiệu Zalord}
+\begin{frame}{1. Tổng quan hệ thống --- Giới thiệu Zalord}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Zalord là gì?}
 \begin{itemize}
   \item Ứng dụng chat real-time kiến trúc \textbf{Microservices}
   \item \textbf{7 services} độc lập, polyglot Java / Go
-  \item Hỗ trợ: nhắn tin 1-1, nhóm, file đính kèm, real-time presence
+  \item Hỗ trợ: nhắn tin 1-1, nhóm, file đính kèm, real-time presence,...
   \item Frontend: React 19 + TypeScript + Vite + WebSocket
 \end{itemize}
 \end{block}
@@ -78,18 +78,18 @@
 \column{0.48\textwidth}
 \begin{block}{Tech stack tổng quan}
 \begin{itemize}
-  \item \textbf{Gateway}: Kong 3.7 (DB-less declarative)
+  \item \textbf{Gateway}: Kong 3.7
   \item \textbf{Messaging}: RabbitMQ / Kafka (switchable)
   \item \textbf{Storage}: PostgreSQL $\times$6, Redis, MinIO (S3)
   \item \textbf{Observability}: Prometheus + Grafana
-  \item \textbf{Deploy}: Docker Compose (local) / k3s VPS (dev) / GKE (prod)
+  \item \textbf{Deploy}: Docker Compose (local) / k3s VPS (stag) / GKE (prod)
   \item \textbf{CI/CD}: GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ GKE / k3s
 \end{itemize}
 \end{block}
 \end{columns}
 \end{frame}
 
-\begin{frame}{Danh sách Microservices}
+\begin{frame}{1. Tổng quan hệ thống --- Danh sách Microservices}
 \begin{table}[h]
 \centering
 \begin{tabular}{|l|l|r|}
@@ -114,7 +114,7 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \end{alertblock}
 \end{frame}
 
-\begin{frame}{Kiến trúc tổng quan}
+\begin{frame}{1. Tổng quan hệ thống --- Kiến trúc tổng quan}
 \begin{center}
 \begin{tikzpicture}[
   svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\tiny,
@@ -185,10 +185,39 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \end{frame}
 
 % ============================================================
+\section{Code Organization}
+% ============================================================
+
+\begin{frame}{2. Code Organization --- Why Layered Architecture?}
+\begin{block}{Tại sao chọn Layered Architecture thay vì Clean Architecture hay Vertical Slice Architecture?}
+\scriptsize
+\begin{tabular}{|p{0.18\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}|}
+\hline
+\textbf{Tiêu chí} & \textbf{Layered (Đang dùng)} & \textbf{Clean / Hexagonal} & \textbf{Vertical Slice (VSA)} \\
+\hline
+\textbf{Số file / tính năng} & \textbf{3 file} (Controller, Service, Repo) & \textbf{5-7 file} (Port, Adapter, Usecase, Entity, DTO) & \textbf{3-4 file} (Request, Response, Handler inline) \\
+\hline
+\textbf{Share Dependencies} (VD: Config, Repo) & Dễ dàng tiêm 1 lần vào chung class Service & Dễ dàng tiêm vào chung Use case class & \textcolor{orange}{Khó} --- mỗi slice bị cô lập, phải tự tiêm lại từ đầu \\
+\hline
+\textbf{Độ tương thích với Framework} & \textcolor{green!60!black}{\textbf{Tuyệt đối}} (Hưởng lợi từ Spring annotations) & \textcolor{red}{\textbf{Xung đột}} (Domain không được chứa thư viện Spring/JPA) & \textcolor{orange}{Kém} (Spring không hỗ trợ MediatR built-in như .NET) \\
+\hline
+\textbf{Độ phức tạp \& Duplication} & Thấp, code base đơn giản, tập trung & Boilerplate quá cao so với quy mô dự án 3 tháng & Trùng lặp code nhiều (VD: Outbox pattern phải copy) \\
+\hline
+\end{tabular}
+\end{block}
+
+\begin{alertblock}{Kết luận cho bài toán thực tế của Zalord}
+Team 3 người, thời hạn 3 tháng, service nhỏ ($\sim$8-10 endpoints).\\
+$\rightarrow$ \textbf{Layered Architecture} mang lại tốc độ code nhanh nhất, tận dụng tối đa tiện ích của Spring Boot, không bị "over-engineering".
+\end{alertblock}
+\end{frame}
+
+% ============================================================
 \section{Domain-Driven Design}
 % ============================================================
 
-\begin{frame}{Tại sao không dùng Modulithic? (Req 1)}
+
+\begin{frame}{3. Domain-Driven Design --- Tại sao không dùng Modulithic?}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Lý do chọn Microservices}
@@ -213,7 +242,7 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \end{columns}
 \end{frame}
 
-\begin{frame}{Phân chia theo DDD --- Bounded Contexts (Req 2)}
+\begin{frame}{3. Domain-Driven Design --- Phân chia theo DDD - Bounded Contexts}
 \begin{columns}[T]
 \column{0.52\textwidth}
 \begin{table}[h]
@@ -256,7 +285,7 @@ notification-service & Notification & Notification \\
 \end{columns}
 \end{frame}
 
-\begin{frame}{DB per Bounded Context (Req 2)}
+\begin{frame}{3. Domain-Driven Design --- DB per Bounded Context}
 \begin{block}{Nguyên tắc phân chia}
 \begin{itemize}
   \item Mỗi service có \textbf{1 bounded context} độc lập
@@ -323,7 +352,7 @@ notification-service & Notification & Notification \\
 \section{Nguyên lý thiết kế Microservices}
 % ============================================================
 
-\begin{frame}{Single Responsibility Principle (Req 3)}
+\begin{frame}{4. Nguyên lý thiết kế Microservices --- Single Responsibility Principle}
 \begin{block}{SRP --- Mỗi service 1 trách nhiệm rõ ràng}
 \begin{itemize}
   \item \textbf{chat-service}: CHỈ quản lý WebSocket connections + fan-out messages $\rightarrow$ không write business DB, không có business logic
@@ -332,12 +361,9 @@ notification-service & Notification & Notification \\
   \item \textbf{auth-service}: CHỈ authentication (issue/validate token, session management)
 \end{itemize}
 \end{block}
-\begin{alertblock}{Điểm tranh luận}
-message-service đảm nhận 2 vai trò: (1) write model cho messages, (2) project inbox read-model (CQRS). Có thể tách thành inbox-service nếu scale lên.
-\end{alertblock}
 \end{frame}
 
-\begin{frame}{High Cohesion \& Low Coupling (Req 3)}
+\begin{frame}{4. Nguyên lý thiết kế Microservices --- High Cohesion \& Low Coupling}
 \begin{block}{High Cohesion --- Low Coupling}
 \begin{itemize}
   \item \textbf{High Cohesion}: dữ liệu và logic cùng domain nằm trong 1 service, không scatter
@@ -360,7 +386,7 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \section{Giao tiếp giữa các dịch vụ}
 % ============================================================
 
-\begin{frame}{Sync vs Async --- Khi nào dùng gì? (Req 4)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Sync vs Async - Khi nào dùng gì?}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Synchronous --- gRPC (2 trường hợp)}
@@ -394,7 +420,7 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{columns}
 \end{frame}
 
-\begin{frame}{Event-Driven Architecture --- Message Flow (Req 4)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Event-Driven Architecture - Message Flow}
 \begin{center}
 \begin{tikzpicture}[
   svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\scriptsize,
@@ -437,7 +463,80 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{center}
 \end{frame}
 
-\begin{frame}{Thiết kế Endpoint \& Swagger (Req 5)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Benchmark: Kafka vs RabbitMQ}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{Kết quả Benchmark}
+\begin{itemize}
+  \item \textbf{Kafka}: Throughput cao hơn (hàng trăm ngàn msg/s), phù hợp cho log aggregation và event sourcing.
+  \item \textbf{RabbitMQ}: Độ trễ (latency) thấp hơn ở mức tải trung bình, hỗ trợ routing linh hoạt (topic exchange, dead-letter queue).
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{alertblock}{[PLACEHOLDER --- biểu đồ benchmark]}
+\centering
+\textit{Biểu đồ so sánh Throughput \& Latency}\\
+\textit{giữa Kafka và RabbitMQ}
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Scaling cho luồng gửi Message}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{Chiến lược Scaling}
+\begin{itemize}
+  \item \textbf{Producer (message-service)}: Scale theo CPU/Memory (HPA) vì việc lưu DB và publish event đòi hỏi xử lý nhanh.
+  \item \textbf{Consumer (chat-service)}: Scale theo số lượng kết nối WebSocket đang mở, giới hạn số lượng connection per pod.
+  \item \textbf{Broker}: Tăng số lượng Partition (Kafka) hoặc chia nhỏ Queue (RabbitMQ) để scale việc tiêu thụ event.
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{center}
+\begin{tikzpicture}[
+  pod/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\tiny, align=center, minimum width=1.4cm, minimum height=0.4cm},
+  broker/.style={rectangle, draw, rounded corners=2pt, fill=yellow!30, font=\tiny, minimum width=4cm, minimum height=0.6cm, align=center},
+  hpa/.style={rectangle, draw, rounded corners=3pt, fill=green!15, font=\tiny, align=center, dashed, minimum width=1.5cm},
+  arr/.style={->, >=Stealth, thick},
+  scale=0.9, transform shape
+]
+
+% HPA and message-service
+\node[hpa] (hpa_msg) at (0, 3.6) {HPA (CPU/Mem)};
+\node[pod] (m1) at (-1, 2.7) {msg pod1};
+\node[pod] (m2) at (1, 2.7) {msg pod2};
+\draw[->, dashed, gray] (hpa_msg) -- (m1.north);
+\draw[->, dashed, gray] (hpa_msg) -- (m2.north);
+
+% Broker
+\node[broker] (mq) at (0, 1.4) {Broker (Partitions/Queues)};
+
+% Publish
+\draw[arr, orange] (m1) -- (m1 |- mq.north);
+\draw[arr, orange] (m2) -- (m2 |- mq.north);
+
+% chat-service
+\node[pod] (c1) at (-1.5, 0) {chat pod1};
+\node[pod] (c2) at (0, 0) {chat pod2};
+\node[pod] (c3) at (1.5, 0) {chat pod3};
+\node[hpa] (hpa_chat) at (0, -0.9) {HPA (WS Conn)};
+\draw[->, dashed, gray] (hpa_chat) -- (c1.south);
+\draw[->, dashed, gray] (hpa_chat) -- (c2.south);
+\draw[->, dashed, gray] (hpa_chat) -- (c3.south);
+
+% Consume
+\draw[arr, blue] (c1 |- mq.south) -- (c1);
+\draw[arr, blue] (c2 |- mq.south) -- (c2);
+\draw[arr, blue] (c3 |- mq.south) -- (c3);
+
+\end{tikzpicture}
+\end{center}
+\end{columns}
+\end{frame}
+
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Thiết kế Endpoint}
 \begin{columns}[T]
 \column{0.65\textwidth}
 \begin{block}{REST API --- Naming Convention}
@@ -463,7 +562,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{columns}
 \end{frame}
 
-\begin{frame}{Swagger / OpenAPI Aggregation (Req 5)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Swagger / OpenAPI Aggregation}
 \begin{block}{Swagger / OpenAPI Aggregation}
 \begin{itemize}
   \item Java services: \textbf{springdoc-openapi} $\rightarrow$ \texttt{/v3/api-docs}
@@ -472,19 +571,19 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
   \item \textbf{Swagger UI} container tại \texttt{/docs} aggregate tất cả
 \end{itemize}
 \end{block}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
-\textit{Chụp màn hình Swagger UI tại}\\
-\textit{http://localhost:8080/docs}\\
-\textit{hiển thị API docs từ tất cả 7 services}
-\end{alertblock}
+\end{frame}
+
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Swagger / OpenAPI Aggregation}
+\begin{center}
+\includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/swagger.jpg}
+\end{center}
 \end{frame}
 
 % ============================================================
 \section{Thiết kế \& Quản lý cơ sở dữ liệu}
 % ============================================================
 
-\begin{frame}{DB per Service \& Consistency (Req 6)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- DB per Service \& Consistency}
 \begin{block}{DB per Service}
 \begin{itemize}
   \item 6 PostgreSQL instances độc lập + Redis + MinIO
@@ -505,7 +604,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{block}
 \end{frame}
 
-\begin{frame}{CAP Theorem \& Saga Pattern (Req 6)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- CAP Theorem}
 \begin{block}{CAP Theorem}
 \begin{itemize}
   \item PostgreSQL: \textbf{CP} (Consistency + Partition Tolerance)
@@ -513,12 +612,9 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
   \item Redis: \textbf{AP} --- eventual consistency cho presence data
 \end{itemize}
 \end{block}
-\begin{alertblock}{Vì sao không dùng Saga Pattern?}
-Message persist là local transaction (ghi vào 1 DB của message-service). Distributed transaction duy nhất là Registration (auth $\rightarrow$ user) --- chỉ gồm 2 bước nên dùng gRPC + Circuit Breaker (Resilience4j) là đủ an toàn, không cần độ phức tạp của Saga.
-\end{alertblock}
 \end{frame}
 
-\begin{frame}{Transactional Outbox Pattern (Req 7)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- Transactional Outbox Pattern}
 \begin{center}
 \begin{tikzpicture}[
   box/.style={rectangle, draw, rounded corners=3pt, font=\small,
@@ -566,7 +662,7 @@ Message persist là local transaction (ghi vào 1 DB của message-service). Dis
 \end{center}
 \end{frame}
 
-\begin{frame}{CQRS trong message-service (Req 7)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- CQRS trong message-service}
 \begin{block}{CQRS trong message-service}
 \begin{center}
 \begin{tikzpicture}[
@@ -594,7 +690,7 @@ Message persist là local transaction (ghi vào 1 DB của message-service). Dis
 \end{block}
 \end{frame}
 
-\begin{frame}{Polyglot Persistence (Req 7)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- Polyglot Persistence}
 \begin{block}{Polyglot Persistence}
 {\small
 \begin{tabular}{|l|l|}
@@ -607,19 +703,16 @@ MinIO (S3) & Avatars, attachments \\
 \hline
 \end{tabular}}
 \end{block}
-\begin{alertblock}{[PLACEHOLDER]}
-\centering
-\textit{Polyglot: PostgreSQL +}\\
-\textit{Redis + MinIO đang chạy}\\
-\textit{trong Docker Compose}
-\end{alertblock}
+\begin{center}
+\includegraphics[width=\textwidth,height=4.5cm,keepaspectratio]{images/polyglot_persistence.jpg}
+\end{center}
 \end{frame}
 
 % ============================================================
 \section{Triển khai Docker \& Kubernetes}
 % ============================================================
 
-\begin{frame}[fragile]{Dockerfile \& Docker Compose (Req 8)}
+\begin{frame}[fragile]{7. Triển khai Docker \& Kubernetes --- Dockerfile}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Multi-Stage Dockerfile --- Java (auth-service)}
@@ -667,7 +760,7 @@ CMD ["./server"]
 \end{columns}
 \end{frame}
 
-\begin{frame}{Docker Compose (Req 8)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Docker Compose}
 \begin{block}{Docker Compose}
 \begin{itemize}
   \item 20+ containers, 1 network \texttt{zalord-net}
@@ -677,7 +770,7 @@ CMD ["./server"]
 \end{block}
 \end{frame}
 
-\begin{frame}{Kubernetes / k3s (Req 8)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Kubernetes / k3s}
 \begin{columns}[T]
 \column{0.5\textwidth}
 \begin{block}{Kustomize Overlays}
@@ -694,23 +787,31 @@ CMD ["./server"]
 \end{block}
 
 \column{0.48\textwidth}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering\footnotesize
-\texttt{kubectl get pods -n zalord-dev}\\[0.1cm]
-\textit{Chụp màn hình tất cả pods}\\
-\textit{ở trạng thái Running}
-\end{alertblock}
-\vspace{0.2cm}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering\footnotesize
-\textit{Lens / K9s IDE hoặc}\\
-\texttt{kubectl get all -n zalord-dev}\\
-\textit{hiển thị cluster overview}
-\end{alertblock}
+\begin{center}
+\includegraphics[width=\textwidth,height=6.5cm,keepaspectratio]{images/kube_pods.jpg}
+\end{center}
 \end{columns}
 \end{frame}
 
-\begin{frame}{Service Discovery (Req 9)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Kubernetes Lens}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{K8s Lens / OpenLens}
+\begin{itemize}
+  \item Sử dụng \textbf{K8s Lens} làm công cụ quản lý cluster trực quan (GUI).
+  \item Dễ dàng theo dõi trạng thái Pods, Nodes, Deployments, và StatefulSets.
+  \item Hỗ trợ xem logs, exec vào container, và chỉnh sửa YAML trực tiếp không cần thao tác dòng lệnh.
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{center}
+\includegraphics[width=\textwidth,height=5.5cm,keepaspectratio]{images/kube_lens.jpg}
+\end{center}
+\end{columns}
+\end{frame}
+
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Service Discovery}
 \begin{block}{Service Discovery --- K8s DNS}
 \begin{itemize}
   \item K8s tự tạo DNS entry cho mỗi ClusterIP Service
@@ -729,7 +830,7 @@ CMD ["./server"]
 \end{block}
 \end{frame}
 
-\begin{frame}{Load Balancing (Req 9)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Load Balancing}
 \begin{block}{Load Balancing --- Server-side}
 \begin{center}
 \begin{tikzpicture}[
@@ -760,7 +861,7 @@ CMD ["./server"]
 \section{API Gateway}
 % ============================================================
 
-\begin{frame}{Kong API Gateway --- Filter Chain (Req 10)}
+\begin{frame}{8. API Gateway --- Kong - Filter Chain}
 \begin{columns}[T]
 \column{0.45\textwidth}
 \begin{center}
@@ -814,7 +915,7 @@ CMD ["./server"]
 \end{columns}
 \end{frame}
 
-\begin{frame}{Kong --- DB-less Mode \& Route Table (Req 10)}
+\begin{frame}{8. API Gateway --- Kong - Route Table}
 
 \begin{block}{Declarative Config (DB-less)}
 \footnotesize
@@ -825,8 +926,6 @@ CMD ["./server"]
 \end{itemize}
 \end{block}
 
-\begin{columns}[T]
-\column{0.57\textwidth}
 \begin{block}{Route Table}
 \centering\scriptsize
 \begin{tabular}{|l|l|c|}
@@ -844,25 +943,19 @@ CMD ["./server"]
 \hline
 \end{tabular}
 \end{block}
+\end{frame}
 
-\column{0.41\textwidth}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering\footnotesize
-\textit{Kong Admin API:}\\
-\texttt{curl localhost:8001/routes}\\
-\vspace{0.2cm}
-\textit{hoặc Kong Manager UI}\\
-\textit{hiển thị danh sách routes/plugins}
-\end{alertblock}
-
-\end{columns}
+\begin{frame}{8. API Gateway --- Kong - Manager UI}
+\begin{center}
+\includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/kong.jpg}
+\end{center}
 \end{frame}
 
 % ============================================================
 \section{Authentication \& Authorization}
 % ============================================================
 
-\begin{frame}{JWT Authentication Flow (Req 11)}
+\begin{frame}{9. Authentication \& Authorization --- JWT Authentication Flow}
 \begin{center}
 \begin{tikzpicture}[
   box/.style={rectangle, draw, rounded corners=2pt, font=\small,
@@ -914,7 +1007,7 @@ CMD ["./server"]
 \end{center}
 \end{frame}
 
-\begin{frame}{ConfigMap --- Non-sensitive config (Req 12)}
+\begin{frame}{9. Authentication \& Authorization --- ConfigMap - Non-sensitive config}
 \begin{block}{ConfigMap --- Non-sensitive config}
 \begin{itemize}
   \item \textbf{Shared}: \texttt{shared-config.yaml}
@@ -937,7 +1030,7 @@ CMD ["./server"]
 \end{block}
 \end{frame}
 
-\begin{frame}{Secret --- Sensitive data (Req 12)}
+\begin{frame}{9. Authentication \& Authorization --- Secret - Sensitive data}
 \begin{block}{Secret --- Sensitive data (SOPS encrypted)}
 \begin{itemize}
   \item \textbf{Shared}: DB passwords, JWT\_SECRET, MQ credentials
@@ -957,7 +1050,7 @@ CMD ["./server"]
 \section{Logging, Monitoring, Tracing}
 % ============================================================
 
-\begin{frame}{Prometheus \& Grafana --- Observability (Req 13)}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Prometheus \& Grafana - Observability}
 \begin{columns}[T]
 \column{0.55\textwidth}
 \begin{block}{Prometheus Scrape Config}
@@ -977,6 +1070,8 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{tabular}
 \end{table}
 \end{block}
+
+\column{0.43\textwidth}
 \begin{block}{Metrics được track}
 \footnotesize
 \begin{itemize}
@@ -986,48 +1081,54 @@ Kafka & \texttt{kafka-exporter:9308} \\
   \item JVM heap, GC, Pod resource
 \end{itemize}
 \end{block}
-
-\column{0.43\textwidth}
-\begin{alertblock}{[PLACEHOLDER --- chụp Grafana]}
-\centering\footnotesize
-Dashboard: \texttt{zalord-overview.json}\\
-\texttt{http://localhost:3000}\\[0.1cm]
-\textit{Chụp panels:}\\
-\textit{--- HTTP request rate/latency}\\
-\textit{--- Active WS connections}\\
-\textit{--- Message throughput}
-\end{alertblock}
-\vspace{0.3cm}
-\begin{alertblock}{[PLACEHOLDER --- chụp Prom]}
-\centering\footnotesize
-\textit{Prometheus targets page}\\
-\texttt{localhost:9090/targets}\\
-\textit{all targets: State=UP}
-\end{alertblock}
 \end{columns}
 \end{frame}
 
-\begin{frame}{OpenTelemetry \& Monitoring --- Chưa triển khai (Req 13)}
-\begin{alertblock}{OpenTelemetry --- Chưa triển khai}
-\textbf{[PLACEHOLDER]}\\[0.2cm]
-OpenTelemetry distributed tracing sẽ cho phép:
+\begin{frame}{10. Logging, Monitoring, Tracing --- Prometheus \& Grafana - Dashboard}
+\begin{center}
+\includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/grafana_dashboard.jpg}
+\end{center}
+\end{frame}
+
+\begin{frame}{10. Logging, Monitoring, Tracing --- Prometheus \& Grafana - Graph}
+\begin{center}
+\includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/grafana_graph.jpg}
+\end{center}
+\end{frame}
+
+\begin{frame}{10. Logging, Monitoring, Tracing --- Centralized Logging}
+\begin{block}{Grafana Loki}
 \begin{itemize}
-  \item \small Trace 1 request qua nhiều hops: Kong $\rightarrow$ message-service $\rightarrow$ media gRPC $\rightarrow$ outbox $\rightarrow$ event bus $\rightarrow$ chat
-  \item \small Xác định latency ở từng hop
-  \item \small Tích hợp với Jaeger / Tempo (Grafana)
+  \item Thay vì dùng stack ELK nặng nề, hệ thống dùng \textbf{Loki} + \textbf{Promtail} nhẹ hơn nhiều, tối ưu cho K8s.
+  \item Promtail tự động thu thập \texttt{stdout} của tất cả pods và đẩy lên Loki.
+  \item Truy vấn log tập trung thông qua \textbf{Grafana} (LogQL). Không cần login vào từng pod bằng \texttt{kubectl logs}.
 \end{itemize}
-\vspace{0.2cm}
-\textit{[Diagram: trace flow từ Kong request đến consumer cuối cùng]}
-\end{alertblock}
-\begin{block}{K8s Cluster Monitoring}
-\begin{itemize}
-  \item Dùng \textbf{Lens IDE} hoặc \textbf{k9s} CLI để giám sát cluster k3s
-\end{itemize}
-{\centering\tiny\textit{[PLACEHOLDER: chụp Lens/k9s với zalord-dev namespace]}\\}
 \end{block}
 \end{frame}
 
-\begin{frame}{Circuit Breaker Diagram (Req 14)}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Centralized Logging}
+\begin{center}
+\includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/loki.jpg}
+\end{center}
+\end{frame}
+
+\begin{frame}{10. Logging, Monitoring, Tracing --- Distributed Tracing Flow}
+\begin{block}{OpenTelemetry \& Jaeger}
+\begin{itemize}
+  \item Sử dụng \textbf{OpenTelemetry (OTel)} để inject trace-id qua các HTTP header và gRPC metadata.
+  \item \textbf{Luồng:} API Gateway $\rightarrow$ Microservice A $\rightarrow$ gRPC $\rightarrow$ Microservice B $\rightarrow$ RabbitMQ/Kafka $\rightarrow$ Consumer C.
+  \item Dữ liệu được đẩy về \textbf{Jaeger} UI để trực quan hóa toàn bộ chuỗi request.
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{10. Logging, Monitoring, Tracing --- Distributed Tracing Flow - Jaeger UI}
+\begin{center}
+\includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/jaeger.jpg}
+\end{center}
+\end{frame}
+
+\begin{frame}{10. Logging, Monitoring, Tracing --- Circuit Breaker Diagram}
 \begin{center}
 \begin{tikzpicture}[
   state/.style={rectangle, draw, rounded corners=4pt, font=\small\bfseries,
@@ -1053,7 +1154,7 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \end{center}
 \end{frame}
 
-\begin{frame}{Timeout, Circuit Breaker \& Recovery (Req 14)}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Timeout, Circuit Breaker \& Recovery}
 \begin{block}{Implementation}
 \begin{itemize}
   \item \textbf{auth-service} $\rightarrow$ user-service gRPC:
@@ -1080,10 +1181,10 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \end{frame}
 
 % ============================================================
-\section{CI/CD \& Triển khai}
+\section{CI/CD \& Deployment}
 % ============================================================
 
-\begin{frame}{GitHub Actions Pipeline (Req 15)}
+\begin{frame}{11. CI/CD \& Deployment --- GitHub Actions Pipeline}
 \begin{center}
 \begin{tikzpicture}[
   pipebox/.style={rectangle, draw, rounded corners=3pt, font=\small,
@@ -1127,7 +1228,7 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \node[prodbox] (roll_prod)  at (8.5, -6.8)  {rollout status\\{\tiny 180s timeout}};
 
 %--- Branch arrows ---
-\draw[arr] (split) -| node[pos=0.75, fill=white, font=\footnotesize\bfseries, text=blue!70!black, inner sep=2pt] {DEV --- k3s VPS} (ssh.north);
+\draw[arr] (split) -| node[pos=0.75, fill=white, font=\footnotesize\bfseries, text=blue!70!black, inner sep=2pt] {STAG --- k3s VPS} (ssh.north);
 \draw[arr] (split) -| node[pos=0.75, fill=white, font=\footnotesize\bfseries, text=green!60!black, inner sep=2pt] {PROD --- GCP GKE} (gke.north);
 
 %--- Dev path ---
@@ -1147,16 +1248,15 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \end{center}
 \end{frame}
 
-\begin{frame}{GitHub Actions Pipeline (Req 15) --- Screenshot}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
-\textit{GitHub Actions $\rightarrow$ tab Actions $\rightarrow$ chọn workflow run thành công $\rightarrow$ chụp màn hình các steps}
-\end{alertblock}
+\begin{frame}{11. CI/CD \& Deployment --- GitHub Actions Pipeline}
+\begin{center}
+  \includegraphics[width=\linewidth,height=7cm,keepaspectratio]{images/github_actions_pipeline.jpg}
+\end{center}
 \end{frame}
 
-\begin{frame}{Versioning \& Rollback Strategy (Req 15) --- Part 1}
+\begin{frame}{11. CI/CD \& Deployment --- Versioning \& Rollback Strategy}
 \begin{columns}[T]
-\column{0.48\textwidth}
+\column{0.55\textwidth}
 \begin{block}{Image Versioning}
 \begin{itemize}
   \item Mỗi image tagged với \textbf{Git SHA}:
@@ -1171,142 +1271,80 @@ OpenTelemetry distributed tracing sẽ cho phép:
 \end{itemize}
 \end{block}
 
-\column{0.48\textwidth}
-\begin{alertblock}{Testing trong CI --- Chưa có}
-\textbf{[PLACEHOLDER]}\\[0.2cm]
-CI/CD pipeline hiện tại: build + deploy. Chưa có bước automated testing.\\[0.2cm]
-Nên bổ sung:
-\begin{itemize}
-  \item \small Unit tests (JUnit 5 cho Java, Go test cho Go)
-  \item \small Integration tests (Testcontainers)
-  \item \small Contract tests giữa services
-\end{itemize}
-\end{alertblock}
-\end{columns}
-\end{frame}
-
-\begin{frame}{Versioning \& Rollback Strategy (Req 15) --- Part 2}
-\begin{columns}[T]
-\column{0.48\textwidth}
+\column{0.43\textwidth}
 \begin{block}{Rollback}
 \begin{itemize}
   \item K8s giữ revision history của Deployment
-  \item \texttt{kubectl rollout undo deployment/auth-service -n zalord-dev} $\rightarrow$ về image SHA của commit trước
+  \item \texttt{kubectl rollout undo ...} $\rightarrow$ về image SHA của commit trước
   \item \texttt{kubectl rollout status} trong pipeline $\rightarrow$ fail fast (180s) nếu pods không healthy
 \end{itemize}
 \end{block}
-
-\column{0.48\textwidth}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
-\textit{Docker Hub repository}\\
-\textit{hiển thị tags theo SHA:}\\
-\texttt{zalord-auth:abc1234}\\
-\texttt{zalord-chat:abc1234}\\
-\textit{...}
-\end{alertblock}
 \end{columns}
 \end{frame}
 
-% ============================================================
-\section{Resiliency Scenarios}
-% ============================================================
+\begin{frame}{11. CI/CD \& Deployment --- Versioning \& Rollback Strategy}
+\begin{center}
+\includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/docker_hub.jpg}
+\end{center}
+\end{frame}
 
-\begin{frame}{Scenario 1: Circuit Breaker Activation (Req 16) --- Scenario}
+\begin{frame}{11. CI/CD \& Deployment --- Canary Deployment}
 \begin{columns}[T]
 \column{0.48\textwidth}
-\begin{block}{Scenario: media-service xuống $\rightarrow$ CB open}
-\begin{enumerate}
-  \item Kill media-service pod:\\
-    \texttt{kubectl delete pod media-service-xxx}
-  \item Gửi message có attachment qua API
-  \item Observe: \textbf{circuit breaker OPEN} sau $>$50\% failures trong 10 calls (Resilience4j)
-  \item Response: fallback method trả về error (không hang)
-  \item Restart media-service pod (K8s tự restart)
-  \item Observe: CB $\rightarrow$ HALF-OPEN $\rightarrow$ 3 probe requests $\rightarrow$ CLOSED
-\end{enumerate}
-\end{block}
-
-\column{0.48\textwidth}
-\begin{block}{Kết quả kỳ vọng}
+\begin{block}{Chiến lược Canary}
 \begin{itemize}
-  \item Hệ thống không crash khi media-service lỗi
-  \item Fallback response trả về ngay (không chờ timeout)
-  \item Tự recover khi media-service lên lại
+  \item Khi có tính năng rủi ro cao, ta có thể triển khai \textbf{Canary release}.
+  \item Chạy song song 2 bản Deployment (stable và canary) chia sẻ chung cùng 1 Label Selector.
+  \item K8s Service sẽ phân bổ traffic \textbf{round-robin} đều cho tất cả các Pod.
+  \item Tỷ lệ chia traffic phụ thuộc vào tỷ lệ số lượng Pod (VD: 3 Stable Pods + 1 Canary Pod $\approx$ 75\%/25\%).
 \end{itemize}
 \end{block}
+
+\column{0.48\textwidth}
+\begin{center}
+\begin{tikzpicture}[
+  pod/.style={rectangle, draw, rounded corners=2pt, font=\tiny, align=center, minimum width=1.3cm, minimum height=0.5cm},
+  svc/.style={rectangle, draw, rounded corners=3pt, fill=yellow!20, font=\scriptsize\bfseries, minimum width=3cm, minimum height=0.6cm, align=center},
+  arr/.style={->, >=Stealth, thick},
+  scale=0.9, transform shape
+]
+
+% Users/Ingress
+\node[font=\footnotesize\bfseries] (users) at (0, 3.5) {Traffic (100\%)};
+
+% Service
+\node[svc] (gw) at (0, 2.5) {K8s Service (Round Robin)};
+\draw[arr] (users) -- (gw);
+
+% Pods
+\node[pod, fill=blue!15] (s1) at (-2, 0.5) {Stable v1};
+\node[pod, fill=blue!15] (s2) at (-0.66, 0.5) {Stable v1};
+\node[pod, fill=blue!15] (s3) at (0.66, 0.5) {Stable v1};
+\node[pod, fill=green!20, draw=green!50!black, thick] (c1) at (2, 0.5) {Canary v2};
+
+\node[font=\tiny\bfseries, color=blue!70!black] at (-0.66, -0.2) {Stable (75\% - 3 Pods)};
+\node[font=\tiny\bfseries, color=green!60!black] at (2, -0.2) {Canary (25\%)};
+
+% Traffic routing
+\draw[color=gray, thick] (gw.south) -- (0, 1.5);
+\draw[color=gray, thick] (-2, 1.5) -- (2, 1.5);
+\draw[arr, color=blue] (-2, 1.5) -- (s1.north);
+\draw[arr, color=blue] (-0.66, 1.5) -- (s2.north);
+\draw[arr, color=blue] (0.66, 1.5) -- (s3.north);
+\draw[arr, color=green!60!black, dashed] (2, 1.5) -- (c1.north);
+
+\end{tikzpicture}
+\end{center}
 \end{columns}
 \end{frame}
 
-\begin{frame}{Scenario 1: Circuit Breaker Activation (Req 16) --- Logs}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình/log]}
-\centering
-\textit{Logs của message-service:}\\
-\textit{--- CB state: CLOSED $\rightarrow$ OPEN}\\
-\textit{--- Fallback called}\\
-\textit{--- CB state: OPEN $\rightarrow$ HALF-OPEN}\\
-\textit{--- CB state: HALF-OPEN $\rightarrow$ CLOSED}\\[0.3cm]
-\textit{Hoặc Grafana metric panel cho}\\
-\textit{Resilience4j state transitions}
-\end{alertblock}
-\end{frame}
 
-\begin{frame}{Scenario 2: Pod Crash \& Self-Healing (Req 16)}
-\begin{columns}[T]
-\column{0.48\textwidth}
-\begin{block}{Scenario: chat-service pod crash}
-\begin{enumerate}
-  \item Client A và B đang chat real-time
-  \item \texttt{kubectl delete pod chat-service-xxx -n zalord-dev}
-  \item K8s phát hiện pod gone $\rightarrow$ tạo pod mới (Deployment replicas=1)
-  \item Frontend WebSocket: \textbf{exponential backoff reconnect} (cap 15s, logic trong \texttt{websocket.ts})
-  \item Pod mới Ready $\rightarrow$ clients reconnect thành công
-\end{enumerate}
-\end{block}
-
-\column{0.48\textwidth}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
-\texttt{kubectl get pods -n zalord-dev}\\[0.2cm]
-\textit{Chụp: chat-service pod}\\
-\textit{RESTARTS count = 1, Running}\\[0.3cm]
-\textit{Frontend console log:}\\
-\textit{--- WS disconnected}\\
-\textit{--- Reconnecting in 1s...}\\
-\textit{--- Reconnecting in 2s...}\\
-\textit{--- WS connected}
-\end{alertblock}
-\end{columns}
-\end{frame}
-
-\begin{frame}{Scenario 3: Outbox resiliency (Req 16)}
-\begin{columns}[T]
-\column{0.48\textwidth}
-\begin{block}{Scenario 3: Outbox resiliency}
-\begin{enumerate}
-  \item Tắt RabbitMQ tạm thời
-  \item Gửi messages $\rightarrow$ lưu vào \texttt{outbox\_events} table (atomic với message)
-  \item Bật lại RabbitMQ
-  \item \textbf{OutboxScheduler} (poll 3s) phát hiện unpublished events $\rightarrow$ publish
-  \item Không mất message nào
-\end{enumerate}
-\end{block}
-
-\column{0.48\textwidth}
-\begin{alertblock}{[PLACEHOLDER]}
-\centering
-\textit{Grafana: HTTP request rate}\\
-\textit{dip khi pod đang restart,}\\
-\textit{recover sau reconnect}
-\end{alertblock}
-\end{columns}
-\end{frame}
 
 % ============================================================
 \section{Kết luận}
 % ============================================================
 
-\begin{frame}{Tổng kết (1/2) --- Đã triển khai}
+\begin{frame}{12. Kết luận --- Tổng kết (1/2) - Đã triển khai}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Kiến trúc \& Backend}
@@ -1328,29 +1366,30 @@ Nên bổ sung:
   \item[\checkmark] Multi-stage Dockerfile, Docker Compose
   \item[\checkmark] Kubernetes (k3s, Kustomize)
   \item[\checkmark] CI/CD GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ GKE / k3s
-  \item[\checkmark] Prometheus + Grafana monitoring
+  \item[\checkmark] Prometheus, Grafana, Loki (Logging)
+  \item[\checkmark] OpenTelemetry + Jaeger (Tracing)
   \item[\checkmark] Swagger/OpenAPI aggregation
 \end{itemize}
 \end{block}
 \end{columns}
 \end{frame}
 
-\begin{frame}{Tổng kết (2/2) --- Hạn chế \& Tương lai}
+\begin{frame}{12. Kết luận --- Tổng kết (2/2) - Hạn chế \& Tương lai}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{alertblock}{Chưa triển khai / Không phù hợp}
 \begin{itemize}
-  \item \textcolor{orange}{OpenTelemetry} distributed tracing (chưa implement)
-  \item \textcolor{orange}{Automated testing} trong CI (chưa implement)
-  \item \textcolor{gray}{ELK Stack} --- resource constraint; stdout logging đủ
   \item \textcolor{gray}{Saga Pattern} --- không có distributed transaction phức tạp
   \item \textcolor{gray}{OAuth2/Keycloak} --- không phù hợp: closed system
 \end{itemize}
 \end{alertblock}
 
 \column{0.48\textwidth}
-\begin{block}{Xem chi tiết}
-\texttt{EXPLANATION.md} --- giải thích kỹ lý do các requirement không áp dụng hoặc có thay đổi so với yêu cầu ban đầu.
+\begin{block}{Hướng phát triển tương lai}
+\begin{itemize}
+  \item Mở rộng tính năng gọi thoại (Voice Call) / gọi video (Video Call).
+  \item Triển khai Service Mesh (Istio) khi số lượng service tăng lên.
+\end{itemize}
 \end{block}
 \end{columns}
 \end{frame}
