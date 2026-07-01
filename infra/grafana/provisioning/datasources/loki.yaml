@@ -1,0 +1,20 @@
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: true
+    jsonData:
+      maxLines: 5000
+      # Correlate log line's `trace_id` field to a Jaeger trace so a click in
+      # Explore jumps straight to the trace. Requires log lines to include
+      # `trace_id=<hex>` as a labeled field (see promtail pipeline_stages).
+      derivedFields:
+        - name: TraceID
+          matcherRegex: 'trace_id[":\s=]+([a-f0-9]{32})'
+          url: '$${__value.raw}'
+          datasourceUid: jaeger

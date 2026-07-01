@@ -50,12 +50,15 @@ public class OutboxScheduler {
                 eventBus.publish(e.getRoutingKey(), e.getPayload().getBytes(StandardCharsets.UTF_8));
                 e.setPublishedAt(now);
                 published++;
+                log.debug("Outbox published id={} event={}", e.getId(), e.getRoutingKey());
             } catch (Exception ex) {
                 failed++;
                 log.error("Outbox publish failed id={} eventName={}: {}",
                         e.getId(), e.getRoutingKey(), ex.getMessage());
             }
         }
+        // Only log batch summary when something actually happened — avoid
+        // flooding logs every 50ms during idle periods (benchmark mode).
         log.info("Outbox: batch done published={} failed={}", published, failed);
     }
 }

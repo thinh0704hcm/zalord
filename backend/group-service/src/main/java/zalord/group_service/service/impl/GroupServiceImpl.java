@@ -194,6 +194,7 @@ public class GroupServiceImpl implements IGroupService {
     public void leave(UUID caller, UUID groupId) {
         // Note: calls removeMember inline (self-invocation bypasses Spring's
         // @Transactional proxy), so leave() must declare its own @Transactional.
+        log.info("Group leave: user={} group={}", caller, groupId);
         removeMember(caller, groupId, caller);
     }
 
