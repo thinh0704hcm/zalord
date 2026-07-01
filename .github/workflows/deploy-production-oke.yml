@@ -34,9 +34,6 @@ on:
         description: 'CI run ID with ci-image-manifest artifact (rollback/exact deploy)'
         required: false
         type: string
-  workflow_run:
-    workflows: ["CI — Dev"]
-    types: [completed]
 
 concurrency:
   group: deploy-production-oke
@@ -49,16 +46,9 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       startsWith(github.event.workflow_run.head_branch, 'v') &&
-       !contains(github.event.workflow_run.head_branch, '-beta'))
     env:
-      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag || github.ref_name || 'prod' }}
-      FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.ref_name || 'prod' }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.ref_name || 'prod' }}
+      FRONTEND_IMAGE_TAG: ${{ github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.ref_name || 'prod' }}
       INPUT_SERVICES: ${{ github.event.inputs.services || '' }}
       IMAGE_REFS: ${{ github.event.inputs.image_refs || '' }}
       CANARY_ENABLED: ${{ github.event.inputs.canary_enabled || false }}
@@ -81,7 +71,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Validate required secrets
         env:

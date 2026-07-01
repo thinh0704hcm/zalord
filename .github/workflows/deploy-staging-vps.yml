@@ -36,8 +36,12 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Only deploy if CI passed (for workflow_run triggers)
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'staging')
     env:
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag || 'staging' }}
       FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || 'staging' }}
