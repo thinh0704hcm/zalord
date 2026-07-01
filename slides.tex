@@ -213,6 +213,30 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \end{columns}
 \end{frame}
 
+\begin{frame}{Tổ chức Code}
+\begin{block}{Tại sao chọn Layered thay vì Clean Architecture hay Vertical Slice?}
+\scriptsize
+\begin{tabular}{|p{0.18\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}|}
+\hline
+\textbf{Tiêu chí} & \textbf{Layered (Đang dùng)} & \textbf{Clean / Hexagonal} & \textbf{Vertical Slice (VSA)} \\
+\hline
+\textbf{Số file / tính năng} & \textbf{3 file} (Controller, Service, Repo) & \textbf{5-7 file} (Port, Adapter, Usecase, Entity, DTO) & \textbf{3-4 file} (Request, Response, Handler inline) \\
+\hline
+\textbf{Share Dependencies} (VD: Config, Repo) & Dễ dàng tiêm 1 lần vào chung class Service & Dễ dàng tiêm vào chung Use case class & \textcolor{orange}{Khó} --- mỗi slice bị cô lập, phải tự tiêm lại từ đầu \\
+\hline
+\textbf{Độ tương thích với Framework} & \textcolor{green!60!black}{\textbf{Tuyệt đối}} (Hưởng lợi từ Spring annotations) & \textcolor{red}{\textbf{Xung đột}} (Domain không được chứa thư viện Spring/JPA) & \textcolor{orange}{Kém} (Spring không hỗ trợ MediatR built-in như .NET) \\
+\hline
+\textbf{Độ phức tạp \& Duplication} & Thấp, code base đơn giản, tập trung & Boilerplate quá cao so với quy mô dự án 3 tháng & Trùng lặp code nhiều (VD: Outbox pattern phải copy) \\
+\hline
+\end{tabular}
+\end{block}
+
+\begin{alertblock}{Kết luận cho bài toán thực tế của Zalord}
+Team 3 người, thời hạn 3 tháng, service nhỏ ($\sim$8-10 endpoints) và không có nhu cầu đổi Database.\\
+$\rightarrow$ \textbf{Layered Architecture} mang lại tốc độ code nhanh nhất, tận dụng tối đa tiện ích của Spring Boot, không bị "over-engineering".
+\end{alertblock}
+\end{frame}
+
 \begin{frame}{Phân chia theo DDD --- Bounded Contexts (Req 2)}
 \begin{columns}[T]
 \column{0.52\textwidth}
@@ -434,6 +458,76 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{center}
 \end{frame}
 
+\begin{frame}{Benchmark: Kafka vs RabbitMQ}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{Kết quả Benchmark}
+\begin{itemize}
+  \item \textbf{Kafka}: Throughput cao hơn (hàng trăm ngàn msg/s), phù hợp cho log aggregation và event sourcing.
+  \item \textbf{RabbitMQ}: Độ trễ (latency) thấp hơn ở mức tải trung bình, hỗ trợ routing linh hoạt (topic exchange, dead-letter queue).
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{alertblock}{[PLACEHOLDER --- biểu đồ benchmark]}
+\centering
+\textit{Biểu đồ so sánh Throughput \& Latency}\\
+\textit{giữa Kafka và RabbitMQ}
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Scaling cho luồng gửi Message}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{Chiến lược Scaling}
+\begin{itemize}
+  \item \textbf{Producer (message-service)}: Scale theo CPU/Memory (HPA) vì việc lưu DB và publish event đòi hỏi xử lý nhanh.
+  \item \textbf{Consumer (chat-service)}: Scale theo số lượng kết nối WebSocket đang mở, giới hạn số lượng connection per pod.
+  \item \textbf{Broker}: Tăng số lượng Partition (Kafka) hoặc chia nhỏ Queue (RabbitMQ) để scale việc tiêu thụ event.
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{center}
+\begin{tikzpicture}[
+  pod/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\tiny, align=center, minimum width=1.4cm, minimum height=0.4cm},
+  broker/.style={rectangle, draw, rounded corners=2pt, fill=yellow!30, font=\tiny, minimum width=4cm, minimum height=0.6cm, align=center},
+  hpa/.style={rectangle, draw, rounded corners=3pt, fill=green!15, font=\tiny, align=center, dashed, minimum width=1.5cm},
+  arr/.style={->, >=Stealth, thick},
+  scale=0.9, transform shape
+]
+
+% HPA and message-service
+\node[hpa] (hpa_msg) at (0, 3.6) {HPA (CPU/Mem)};
+\node[pod] (m1) at (-1, 2.7) {msg pod1};
+\node[pod] (m2) at (1, 2.7) {msg pod2};
+\draw[->, dashed, gray] (hpa_msg) -- (0, 3.0);
+
+% Broker
+\node[broker] (mq) at (0, 1.4) {Broker (Partitions/Queues)};
+
+% Publish
+\draw[arr, orange] (m1) -- (m1 |- mq.north);
+\draw[arr, orange] (m2) -- (m2 |- mq.north);
+
+% chat-service
+\node[pod] (c1) at (-1.5, 0) {chat pod1};
+\node[pod] (c2) at (0, 0) {chat pod2};
+\node[pod] (c3) at (1.5, 0) {chat pod3};
+\node[hpa] (hpa_chat) at (0, -0.9) {HPA (WS Conn)};
+\draw[->, dashed, gray] (hpa_chat) -- (0, -0.3);
+
+% Consume
+\draw[arr, blue] (c1 |- mq.south) -- (c1);
+\draw[arr, blue] (c2 |- mq.south) -- (c2);
+\draw[arr, blue] (c3 |- mq.south) -- (c3);
+
+\end{tikzpicture}
+\end{center}
+\end{columns}
+\end{frame}
+
 \begin{frame}{Thiết kế Endpoint \& Swagger (Req 5)}
 \begin{columns}[T]
 \column{0.65\textwidth}
@@ -469,12 +563,9 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
   \item \textbf{Swagger UI} container tại \texttt{/docs} aggregate tất cả
 \end{itemize}
 \end{block}
-\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
-\centering
-\textit{Chụp màn hình Swagger UI tại}\\
-\textit{http://localhost:8080/docs}\\
-\textit{hiển thị API docs từ tất cả 7 services}
-\end{alertblock}
+\begin{center}
+\includegraphics[width=\textwidth,height=4cm,keepaspectratio]{images/swagger.jpg}
+\end{center}
 \end{frame}
 
 % ============================================================
@@ -604,12 +695,9 @@ MinIO (S3) & Avatars, attachments \\
 \hline
 \end{tabular}}
 \end{block}
-\begin{alertblock}{[PLACEHOLDER]}
-\centering
-\textit{Polyglot: PostgreSQL +}\\
-\textit{Redis + MinIO đang chạy}\\
-\textit{trong Docker Compose}
-\end{alertblock}
+\begin{center}
+\includegraphics[width=\textwidth,height=4.5cm,keepaspectratio]{images/polyglot_persistence.jpg}
+\end{center}
 \end{frame}
 
 % ============================================================
@@ -703,6 +791,26 @@ CMD ["./server"]
 \textit{Lens / K9s IDE hoặc}\\
 \texttt{kubectl get all -n zalord-dev}\\
 \textit{hiển thị cluster overview}
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Quản lý Cluster với K8s Lens}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{K8s Lens / OpenLens}
+\begin{itemize}
+  \item Sử dụng \textbf{K8s Lens} làm công cụ quản lý cluster trực quan (GUI).
+  \item Dễ dàng theo dõi trạng thái Pods, Nodes, Deployments, và StatefulSets.
+  \item Hỗ trợ xem logs, exec vào container, và chỉnh sửa YAML trực tiếp không cần thao tác dòng lệnh.
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{alertblock}{[PLACEHOLDER --- chụp hình]}
+\centering
+\textit{Chụp màn hình K8s Lens}\\
+\textit{đang quản lý cluster zalord-dev}
 \end{alertblock}
 \end{columns}
 \end{frame}
@@ -1004,24 +1112,47 @@ Dashboard: \texttt{zalord-overview.json}\\
 \end{columns}
 \end{frame}
 
-\begin{frame}{OpenTelemetry \& Monitoring --- Chưa triển khai (Req 13)}
-\begin{alertblock}{OpenTelemetry --- Chưa triển khai}
-\textbf{[PLACEHOLDER]}\\[0.2cm]
-OpenTelemetry distributed tracing sẽ cho phép:
+\begin{frame}{Logging Tập Trung với Loki}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{Grafana Loki}
 \begin{itemize}
-  \item \small Trace 1 request qua nhiều hops: Kong $\rightarrow$ message-service $\rightarrow$ media gRPC $\rightarrow$ outbox $\rightarrow$ event bus $\rightarrow$ chat
-  \item \small Xác định latency ở từng hop
-  \item \small Tích hợp với Jaeger / Tempo (Grafana)
+  \item Thay vì dùng stack ELK nặng nề, hệ thống dùng \textbf{Loki} + \textbf{Promtail} nhẹ hơn nhiều, tối ưu cho K8s.
+  \item Promtail tự động thu thập \texttt{stdout} của tất cả pods và đẩy lên Loki.
+  \item Truy vấn log tập trung thông qua \textbf{Grafana} (LogQL). Không cần login vào từng pod bằng \texttt{kubectl logs}.
 \end{itemize}
-\vspace{0.2cm}
-\textit{[Diagram: trace flow từ Kong request đến consumer cuối cùng]}
-\end{alertblock}
-\begin{block}{K8s Cluster Monitoring}
-\begin{itemize}
-  \item Dùng \textbf{Lens IDE} hoặc \textbf{k9s} CLI để giám sát cluster k3s
-\end{itemize}
-{\centering\tiny\textit{[PLACEHOLDER: chụp Lens/k9s với zalord-dev namespace]}\\}
 \end{block}
+
+\column{0.48\textwidth}
+\begin{alertblock}{[PLACEHOLDER --- chụp hình Grafana/Loki]}
+\centering
+\textit{Chụp màn hình Grafana Explore}\\
+\textit{đang query log của một service}\\
+\textit{sử dụng Loki LogQL}
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Distributed Tracing Flow}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{OpenTelemetry \& Jaeger}
+\begin{itemize}
+  \item Sử dụng \textbf{OpenTelemetry (OTel)} để inject trace-id qua các HTTP header và gRPC metadata.
+  \item \textbf{Luồng:} API Gateway $\rightarrow$ Microservice A $\rightarrow$ gRPC $\rightarrow$ Microservice B $\rightarrow$ RabbitMQ/Kafka $\rightarrow$ Consumer C.
+  \item Trace-id được xuyên suốt qua cả giao tiếp đồng bộ (REST/gRPC) và bất đồng bộ (Event Bus).
+  \item Dữ liệu được đẩy về \textbf{Jaeger} UI để trực quan hóa toàn bộ chuỗi request.
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{alertblock}{[PLACEHOLDER --- sơ đồ \& chụp hình]}
+\centering
+\textit{Sơ đồ luồng OTel tracing}\\
+\textit{và chụp màn hình Jaeger UI}\\
+\textit{hiển thị một span hoàn chỉnh}
+\end{alertblock}
+\end{columns}
 \end{frame}
 
 \begin{frame}{Circuit Breaker Diagram (Req 14)}
@@ -1205,6 +1336,26 @@ Nên bổ sung:
 \end{columns}
 \end{frame}
 
+\begin{frame}{Canary Deployment}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\begin{block}{Chiến lược Canary}
+\begin{itemize}
+  \item Khi có tính năng rủi ro cao, ta có thể triển khai \textbf{Canary release}.
+  \item K8s cho phép chạy song song 2 bản Deployment (stable và canary) phía sau cùng 1 Service.
+  \item Có thể dùng Kong API Gateway để chia traffic (ví dụ 90\% stable, 10\% canary) thay vì chia đều.
+\end{itemize}
+\end{block}
+
+\column{0.48\textwidth}
+\begin{alertblock}{[PLACEHOLDER --- sơ đồ canary]}
+\centering
+\textit{Minh họa Service chia traffic}\\
+\textit{vào bản v1 (90\%) và v2-canary (10\%)}
+\end{alertblock}
+\end{columns}
+\end{frame}
+
 % ============================================================
 \section{Resiliency Scenarios}
 % ============================================================
@@ -1325,7 +1476,8 @@ Nên bổ sung:
   \item[\checkmark] Multi-stage Dockerfile, Docker Compose
   \item[\checkmark] Kubernetes (k3s, Kustomize)
   \item[\checkmark] CI/CD GitHub Actions $\rightarrow$ Docker Hub $\rightarrow$ GKE / k3s
-  \item[\checkmark] Prometheus + Grafana monitoring
+  \item[\checkmark] Prometheus, Grafana, Loki (Logging)
+  \item[\checkmark] OpenTelemetry + Jaeger (Tracing)
   \item[\checkmark] Swagger/OpenAPI aggregation
 \end{itemize}
 \end{block}
@@ -1337,9 +1489,8 @@ Nên bổ sung:
 \column{0.48\textwidth}
 \begin{alertblock}{Chưa triển khai / Không phù hợp}
 \begin{itemize}
-  \item \textcolor{orange}{OpenTelemetry} distributed tracing (chưa implement)
   \item \textcolor{orange}{Automated testing} trong CI (chưa implement)
-  \item \textcolor{gray}{ELK Stack} --- resource constraint; stdout logging đủ
+  \item \textcolor{gray}{ELK Stack} --- Thay bằng Loki nhẹ hơn cho K8s
   \item \textcolor{gray}{Saga Pattern} --- không có distributed transaction phức tạp
   \item \textcolor{gray}{OAuth2/Keycloak} --- không phù hợp: closed system
 \end{itemize}
