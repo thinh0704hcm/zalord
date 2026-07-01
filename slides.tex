@@ -40,19 +40,20 @@
 \column{0.5\textwidth}
 \begin{enumerate}
   \item Tổng quan hệ thống
+  \item Code Organization
   \item Domain-Driven Design
   \item Nguyên lý thiết kế Microservices
   \item Giao tiếp giữa các dịch vụ
   \item Thiết kế \& Quản lý cơ sở dữ liệu
-  \item Triển khai Docker \& Kubernetes
 \end{enumerate}
 \column{0.5\textwidth}
 \begin{enumerate}
 \setcounter{enumi}{6}
+  \item Triển khai Docker \& Kubernetes
   \item API Gateway
   \item Authentication \& Authorization
   \item Logging, Monitoring, Tracing
-  \item CI/CD \& Triển khai
+  \item CI/CD \& Deployment
   \item Kết luận
 \end{enumerate}
 \end{columns}
@@ -62,7 +63,7 @@
 \section{Tổng quan hệ thống}
 % ============================================================
 
-\begin{frame}{Giới thiệu Zalord}
+\begin{frame}{1. Tổng quan hệ thống --- Giới thiệu Zalord}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Zalord là gì?}
@@ -88,7 +89,7 @@
 \end{columns}
 \end{frame}
 
-\begin{frame}{Danh sách Microservices}
+\begin{frame}{1. Tổng quan hệ thống --- Danh sách Microservices}
 \begin{table}[h]
 \centering
 \begin{tabular}{|l|l|r|}
@@ -113,7 +114,7 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \end{alertblock}
 \end{frame}
 
-\begin{frame}{Kiến trúc tổng quan}
+\begin{frame}{1. Tổng quan hệ thống --- Kiến trúc tổng quan}
 \begin{center}
 \begin{tikzpicture}[
   svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\tiny,
@@ -184,11 +185,11 @@ message $\rightarrow$ media (ValidateAttachments :9086)
 \end{frame}
 
 % ============================================================
-\section{Domain-Driven Design}
+\section{Code Organization}
 % ============================================================
 
-\begin{frame}{Code Organization}
-\begin{block}{Tại sao chọn Layered thay vì Clean Architecture hay Vertical Slice?}
+\begin{frame}{2. Code Organization --- Why Layered Architecture?}
+\begin{block}{Tại sao chọn Layered Architecture thay vì Clean Architecture hay Vertical Slice Architecture?}
 \scriptsize
 \begin{tabular}{|p{0.18\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}|}
 \hline
@@ -211,7 +212,12 @@ $\rightarrow$ \textbf{Layered Architecture} mang lại tốc độ code nhanh nh
 \end{alertblock}
 \end{frame}
 
-\begin{frame}{Tại sao không dùng Modulithic? (Req 1)}
+% ============================================================
+\section{Domain-Driven Design}
+% ============================================================
+
+
+\begin{frame}{3. Domain-Driven Design --- Tại sao không dùng Modulithic?}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Lý do chọn Microservices}
@@ -236,7 +242,7 @@ $\rightarrow$ \textbf{Layered Architecture} mang lại tốc độ code nhanh nh
 \end{columns}
 \end{frame}
 
-\begin{frame}{Phân chia theo DDD --- Bounded Contexts (Req 2)}
+\begin{frame}{3. Domain-Driven Design --- Phân chia theo DDD - Bounded Contexts}
 \begin{columns}[T]
 \column{0.52\textwidth}
 \begin{table}[h]
@@ -279,7 +285,7 @@ notification-service & Notification & Notification \\
 \end{columns}
 \end{frame}
 
-\begin{frame}{DB per Bounded Context (Req 2)}
+\begin{frame}{3. Domain-Driven Design --- DB per Bounded Context}
 \begin{block}{Nguyên tắc phân chia}
 \begin{itemize}
   \item Mỗi service có \textbf{1 bounded context} độc lập
@@ -346,7 +352,7 @@ notification-service & Notification & Notification \\
 \section{Nguyên lý thiết kế Microservices}
 % ============================================================
 
-\begin{frame}{Single Responsibility Principle (Req 3)}
+\begin{frame}{4. Nguyên lý thiết kế Microservices --- Single Responsibility Principle}
 \begin{block}{SRP --- Mỗi service 1 trách nhiệm rõ ràng}
 \begin{itemize}
   \item \textbf{chat-service}: CHỈ quản lý WebSocket connections + fan-out messages $\rightarrow$ không write business DB, không có business logic
@@ -357,7 +363,7 @@ notification-service & Notification & Notification \\
 \end{block}
 \end{frame}
 
-\begin{frame}{High Cohesion \& Low Coupling (Req 3)}
+\begin{frame}{4. Nguyên lý thiết kế Microservices --- High Cohesion \& Low Coupling}
 \begin{block}{High Cohesion --- Low Coupling}
 \begin{itemize}
   \item \textbf{High Cohesion}: dữ liệu và logic cùng domain nằm trong 1 service, không scatter
@@ -380,7 +386,7 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \section{Giao tiếp giữa các dịch vụ}
 % ============================================================
 
-\begin{frame}{Sync vs Async --- Khi nào dùng gì? (Req 4)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Sync vs Async - Khi nào dùng gì?}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Synchronous --- gRPC (2 trường hợp)}
@@ -414,7 +420,7 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{columns}
 \end{frame}
 
-\begin{frame}{Event-Driven Architecture --- Message Flow (Req 4)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Event-Driven Architecture - Message Flow}
 \begin{center}
 \begin{tikzpicture}[
   svc/.style={rectangle, draw, rounded corners=2pt, fill=blue!15, font=\scriptsize,
@@ -457,7 +463,7 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{center}
 \end{frame}
 
-\begin{frame}{Benchmark: Kafka vs RabbitMQ}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Benchmark: Kafka vs RabbitMQ}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Kết quả Benchmark}
@@ -476,7 +482,7 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{columns}
 \end{frame}
 
-\begin{frame}{Scaling cho luồng gửi Message}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Scaling cho luồng gửi Message}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Chiến lược Scaling}
@@ -530,7 +536,7 @@ Không có cross-service synchronous chain dài hơn 2 hops
 \end{columns}
 \end{frame}
 
-\begin{frame}{Thiết kế Endpoint \& Swagger (Req 5)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Thiết kế Endpoint}
 \begin{columns}[T]
 \column{0.65\textwidth}
 \begin{block}{REST API --- Naming Convention}
@@ -556,7 +562,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{columns}
 \end{frame}
 
-\begin{frame}{Swagger / OpenAPI Aggregation (Req 5)}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Swagger / OpenAPI Aggregation}
 \begin{block}{Swagger / OpenAPI Aggregation}
 \begin{itemize}
   \item Java services: \textbf{springdoc-openapi} $\rightarrow$ \texttt{/v3/api-docs}
@@ -567,7 +573,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{block}
 \end{frame}
 
-\begin{frame}{Swagger / OpenAPI Aggregation}
+\begin{frame}{5. Giao tiếp giữa các dịch vụ --- Swagger / OpenAPI Aggregation}
 \begin{center}
 \includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/swagger.jpg}
 \end{center}
@@ -577,7 +583,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \section{Thiết kế \& Quản lý cơ sở dữ liệu}
 % ============================================================
 
-\begin{frame}{DB per Service \& Consistency (Req 6)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- DB per Service \& Consistency}
 \begin{block}{DB per Service}
 \begin{itemize}
   \item 6 PostgreSQL instances độc lập + Redis + MinIO
@@ -598,7 +604,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{block}
 \end{frame}
 
-\begin{frame}{CAP Theorem(Req 6)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- CAP Theorem}
 \begin{block}{CAP Theorem}
 \begin{itemize}
   \item PostgreSQL: \textbf{CP} (Consistency + Partition Tolerance)
@@ -608,7 +614,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{block}
 \end{frame}
 
-\begin{frame}{Transactional Outbox Pattern (Req 7)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- Transactional Outbox Pattern}
 \begin{center}
 \begin{tikzpicture}[
   box/.style={rectangle, draw, rounded corners=3pt, font=\small,
@@ -656,7 +662,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{center}
 \end{frame}
 
-\begin{frame}{CQRS trong message-service (Req 7)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- CQRS trong message-service}
 \begin{block}{CQRS trong message-service}
 \begin{center}
 \begin{tikzpicture}[
@@ -684,7 +690,7 @@ Chuẩn \textbf{RFC 7807} (Platform-agnostic):\\
 \end{block}
 \end{frame}
 
-\begin{frame}{Polyglot Persistence (Req 7)}
+\begin{frame}{6. Thiết kế \& Quản lý cơ sở dữ liệu --- Polyglot Persistence}
 \begin{block}{Polyglot Persistence}
 {\small
 \begin{tabular}{|l|l|}
@@ -706,7 +712,7 @@ MinIO (S3) & Avatars, attachments \\
 \section{Triển khai Docker \& Kubernetes}
 % ============================================================
 
-\begin{frame}[fragile]{Docker(Req 8)}
+\begin{frame}[fragile]{7. Triển khai Docker \& Kubernetes --- Dockerfile}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Multi-Stage Dockerfile --- Java (auth-service)}
@@ -754,7 +760,7 @@ CMD ["./server"]
 \end{columns}
 \end{frame}
 
-\begin{frame}{Docker(Req 8)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Docker Compose}
 \begin{block}{Docker Compose}
 \begin{itemize}
   \item 20+ containers, 1 network \texttt{zalord-net}
@@ -764,7 +770,7 @@ CMD ["./server"]
 \end{block}
 \end{frame}
 
-\begin{frame}{Kubernetes / k3s (Req 8)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Kubernetes / k3s}
 \begin{columns}[T]
 \column{0.5\textwidth}
 \begin{block}{Kustomize Overlays}
@@ -787,7 +793,7 @@ CMD ["./server"]
 \end{columns}
 \end{frame}
 
-\begin{frame}{Kubernetes / k3s}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Kubernetes Lens}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{K8s Lens / OpenLens}
@@ -805,7 +811,7 @@ CMD ["./server"]
 \end{columns}
 \end{frame}
 
-\begin{frame}{Service Discovery (Req 9)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Service Discovery}
 \begin{block}{Service Discovery --- K8s DNS}
 \begin{itemize}
   \item K8s tự tạo DNS entry cho mỗi ClusterIP Service
@@ -824,7 +830,7 @@ CMD ["./server"]
 \end{block}
 \end{frame}
 
-\begin{frame}{Load Balancing (Req 9)}
+\begin{frame}{7. Triển khai Docker \& Kubernetes --- Load Balancing}
 \begin{block}{Load Balancing --- Server-side}
 \begin{center}
 \begin{tikzpicture}[
@@ -855,7 +861,7 @@ CMD ["./server"]
 \section{API Gateway}
 % ============================================================
 
-\begin{frame}{Kong API Gateway --- Filter Chain (Req 10)}
+\begin{frame}{8. API Gateway --- Kong - Filter Chain}
 \begin{columns}[T]
 \column{0.45\textwidth}
 \begin{center}
@@ -909,7 +915,7 @@ CMD ["./server"]
 \end{columns}
 \end{frame}
 
-\begin{frame}{Kong --- Route Table (Req 10)}
+\begin{frame}{8. API Gateway --- Kong - Route Table}
 
 \begin{block}{Declarative Config (DB-less)}
 \footnotesize
@@ -939,7 +945,7 @@ CMD ["./server"]
 \end{block}
 \end{frame}
 
-\begin{frame}{Kong API Gateway --- Manager UI}
+\begin{frame}{8. API Gateway --- Kong - Manager UI}
 \begin{center}
 \includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/kong.jpg}
 \end{center}
@@ -949,7 +955,7 @@ CMD ["./server"]
 \section{Authentication \& Authorization}
 % ============================================================
 
-\begin{frame}{JWT Authentication Flow (Req 11)}
+\begin{frame}{9. Authentication \& Authorization --- JWT Authentication Flow}
 \begin{center}
 \begin{tikzpicture}[
   box/.style={rectangle, draw, rounded corners=2pt, font=\small,
@@ -1001,7 +1007,7 @@ CMD ["./server"]
 \end{center}
 \end{frame}
 
-\begin{frame}{ConfigMap --- Non-sensitive config (Req 12)}
+\begin{frame}{9. Authentication \& Authorization --- ConfigMap - Non-sensitive config}
 \begin{block}{ConfigMap --- Non-sensitive config}
 \begin{itemize}
   \item \textbf{Shared}: \texttt{shared-config.yaml}
@@ -1024,7 +1030,7 @@ CMD ["./server"]
 \end{block}
 \end{frame}
 
-\begin{frame}{Secret --- Sensitive data (Req 12)}
+\begin{frame}{9. Authentication \& Authorization --- Secret - Sensitive data}
 \begin{block}{Secret --- Sensitive data (SOPS encrypted)}
 \begin{itemize}
   \item \textbf{Shared}: DB passwords, JWT\_SECRET, MQ credentials
@@ -1044,7 +1050,7 @@ CMD ["./server"]
 \section{Logging, Monitoring, Tracing}
 % ============================================================
 
-\begin{frame}{Prometheus \& Grafana --- Observability (Req 13)}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Prometheus \& Grafana - Observability}
 \begin{columns}[T]
 \column{0.55\textwidth}
 \begin{block}{Prometheus Scrape Config}
@@ -1078,19 +1084,19 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{columns}
 \end{frame}
 
-\begin{frame}{Prometheus \& Grafana --- Dashboard}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Prometheus \& Grafana - Dashboard}
 \begin{center}
 \includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/grafana_dashboard.jpg}
 \end{center}
 \end{frame}
 
-\begin{frame}{Prometheus \& Grafana --- Graph}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Prometheus \& Grafana - Graph}
 \begin{center}
 \includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/grafana_graph.jpg}
 \end{center}
 \end{frame}
 
-\begin{frame}{Centralized Logging}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Centralized Logging}
 \begin{block}{Grafana Loki}
 \begin{itemize}
   \item Thay vì dùng stack ELK nặng nề, hệ thống dùng \textbf{Loki} + \textbf{Promtail} nhẹ hơn nhiều, tối ưu cho K8s.
@@ -1100,13 +1106,13 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{block}
 \end{frame}
 
-\begin{frame}{Centralized Logging}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Centralized Logging}
 \begin{center}
 \includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/loki.jpg}
 \end{center}
 \end{frame}
 
-\begin{frame}{Distributed Tracing Flow}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Distributed Tracing Flow}
 \begin{block}{OpenTelemetry \& Jaeger}
 \begin{itemize}
   \item Sử dụng \textbf{OpenTelemetry (OTel)} để inject trace-id qua các HTTP header và gRPC metadata.
@@ -1116,13 +1122,13 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{block}
 \end{frame}
 
-\begin{frame}{Distributed Tracing Flow --- Jaeger UI}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Distributed Tracing Flow - Jaeger UI}
 \begin{center}
 \includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/jaeger.jpg}
 \end{center}
 \end{frame}
 
-\begin{frame}{Circuit Breaker Diagram (Req 14)}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Circuit Breaker Diagram}
 \begin{center}
 \begin{tikzpicture}[
   state/.style={rectangle, draw, rounded corners=4pt, font=\small\bfseries,
@@ -1148,7 +1154,7 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{center}
 \end{frame}
 
-\begin{frame}{Timeout, Circuit Breaker \& Recovery (Req 14)}
+\begin{frame}{10. Logging, Monitoring, Tracing --- Timeout, Circuit Breaker \& Recovery}
 \begin{block}{Implementation}
 \begin{itemize}
   \item \textbf{auth-service} $\rightarrow$ user-service gRPC:
@@ -1175,10 +1181,10 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{frame}
 
 % ============================================================
-\section{CI/CD \& Triển khai}
+\section{CI/CD \& Deployment}
 % ============================================================
 
-\begin{frame}{GitHub Actions Pipeline (Req 15)}
+\begin{frame}{11. CI/CD \& Deployment --- GitHub Actions Pipeline}
 \begin{center}
 \begin{tikzpicture}[
   pipebox/.style={rectangle, draw, rounded corners=3pt, font=\small,
@@ -1242,13 +1248,13 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{center}
 \end{frame}
 
-\begin{frame}{GitHub Actions Pipeline (Req 15)}
+\begin{frame}{11. CI/CD \& Deployment --- GitHub Actions Pipeline}
 \begin{center}
   \includegraphics[width=\linewidth,height=7cm,keepaspectratio]{images/github_actions_pipeline.jpg}
 \end{center}
 \end{frame}
 
-\begin{frame}{Versioning \& Rollback Strategy (Req 15)}
+\begin{frame}{11. CI/CD \& Deployment --- Versioning \& Rollback Strategy}
 \begin{columns}[T]
 \column{0.55\textwidth}
 \begin{block}{Image Versioning}
@@ -1276,13 +1282,13 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{columns}
 \end{frame}
 
-\begin{frame}{Versioning \& Rollback Strategy (Req 15)}
+\begin{frame}{11. CI/CD \& Deployment --- Versioning \& Rollback Strategy}
 \begin{center}
 \includegraphics[width=\linewidth,height=7.5cm,keepaspectratio]{images/docker_hub.jpg}
 \end{center}
 \end{frame}
 
-\begin{frame}{Canary Deployment}
+\begin{frame}{11. CI/CD \& Deployment --- Canary Deployment}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Chiến lược Canary}
@@ -1338,7 +1344,7 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \section{Kết luận}
 % ============================================================
 
-\begin{frame}{Tổng kết (1/2) --- Đã triển khai}
+\begin{frame}{12. Kết luận --- Tổng kết (1/2) - Đã triển khai}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{block}{Kiến trúc \& Backend}
@@ -1368,7 +1374,7 @@ Kafka & \texttt{kafka-exporter:9308} \\
 \end{columns}
 \end{frame}
 
-\begin{frame}{Tổng kết (2/2) --- Hạn chế \& Tương lai}
+\begin{frame}{12. Kết luận --- Tổng kết (2/2) - Hạn chế \& Tương lai}
 \begin{columns}[T]
 \column{0.48\textwidth}
 \begin{alertblock}{Chưa triển khai / Không phù hợp}
