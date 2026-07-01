@@ -54,7 +54,8 @@ jobs:
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       startsWith(github.event.workflow_run.head_branch, 'v'))
+       startsWith(github.event.workflow_run.head_branch, 'v') &&
+       !endsWith(github.event.workflow_run.head_branch, '-beta'))
     env:
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag || github.ref_name || 'prod' }}
       FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.frontend_image_tag || github.event.inputs.image_tag || github.ref_name || 'prod' }}
