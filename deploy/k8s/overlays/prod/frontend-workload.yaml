@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: frontend
   namespace: zalord-prod
+  annotations:
+    konghq.com/upstream-policy: frontend-cookie-affinity
 spec:
   selector:
     app: frontend

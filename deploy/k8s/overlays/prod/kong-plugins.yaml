@@ -69,3 +69,14 @@ config:
         end
       end
     end
+---
+apiVersion: configuration.konghq.com/v1beta1
+kind: KongUpstreamPolicy
+metadata:
+  name: frontend-cookie-affinity
+  namespace: zalord-prod
+spec:
+  algorithm: consistent-hashing
+  hashOn:
+    cookie: zalord_frontend_affinity
+    cookiePath: /
