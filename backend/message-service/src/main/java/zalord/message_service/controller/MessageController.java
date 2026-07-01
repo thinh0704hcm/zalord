@@ -15,7 +15,9 @@ import zalord.message_service.dto.response.PageResponse;
 import zalord.message_service.model.ApiResponse;
 import zalord.message_service.service.IMessageService;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -27,6 +29,30 @@ public class MessageController {
 
     public MessageController(IMessageService service) {
         this.service = service;
+    }
+
+    @GetMapping("/canary")
+    @Operation(summary = "Canary demo payload")
+    public ResponseEntity<Map<String, Object>> canary() {
+        Map<String, Object> preferences = new LinkedHashMap<>();
+        preferences.put("theme", "dark");
+        preferences.put("notifications_enabled", true);
+        preferences.put("language", "vi");
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("created_at", "2026-06-25T14:30:00Z");
+        metadata.put("last_login", "2026-07-01T11:15:22Z");
+        metadata.put("session_token", "abc-123-xyz-789");
+
+        Map<String, Object> userProfile = new LinkedHashMap<>();
+        userProfile.put("id", "usr_749302");
+        userProfile.put("username", "lorem_dev");
+        userProfile.put("email", "lorem@example.com");
+        userProfile.put("status", "active");
+        userProfile.put("preferences", preferences);
+        userProfile.put("metadata", metadata);
+
+        return ResponseEntity.ok(Map.of("user_profile", userProfile));
     }
 
     @PostMapping
