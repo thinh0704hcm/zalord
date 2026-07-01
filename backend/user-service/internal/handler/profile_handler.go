@@ -202,6 +202,9 @@ func (h *ProfileHandler) UpdateMe(c *gin.Context) {
 		return
 	}
 
+	logger.Log.Info("profile updated",
+		zap.String("userId", userID.String()),
+		zap.String("displayName", displayName))
 	c.JSON(http.StatusOK, toResponse(prof))
 }
 

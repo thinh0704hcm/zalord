@@ -1,0 +1,50 @@
+# Promtail scrapes every Docker container's stdout/stderr via the docker
+# service_discovery, then pushes to Loki. Labels come from container metadata
+# so Grafana Explore can filter by container/service/compose-project.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+positions:
+  filename: /tmp/positions.yaml
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      # Discover every running container on the host Docker daemon.
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+    relabel_configs:
+      # container_name (drop leading "/")
+      - source_labels: [__meta_docker_container_name]
+        regex: '/(.*)'
+        target_label: container
+      # zalord service name from compose (e.g. "message-service")
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      # compose project — filter out non-zalord containers if you run others
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        target_label: compose_project
+      # image name (helps debug when comparing versions)
+      - source_labels: [__meta_docker_container_log_stream]
+        target_label: stream
+    # Only ship our project's containers — avoids scraping unrelated Docker
+    # workloads on the same machine (e.g. Postgres for a different app).
+    pipeline_stages:
+      - match:
+          selector: '{compose_project!="zalord"}'
+          action: drop
+      # Try to extract JSON log fields (structured Spring Boot / zap logs).
+      # Falls through gracefully if the line isn't JSON.
+      - json:
+          expressions:
+            level: level
+            trace_id: trace_id
+            span_id: span_id
+      - labels:
+          level:
